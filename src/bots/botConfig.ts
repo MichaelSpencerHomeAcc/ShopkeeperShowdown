@@ -1,4 +1,5 @@
 import type { BotDifficulty, ClassId, Player } from '../types'
+import { CLASSES } from '../data/classes'
 
 export const BOT_DIFFICULTIES: BotDifficulty[] = ['easy', 'medium', 'hard']
 
@@ -40,19 +41,23 @@ export function saveBotSpeed(speed: BotSpeed) {
   try { localStorage.setItem(SPEED_KEY, speed) } catch { /* storage unavailable — keep in memory only */ }
 }
 
-const BOT_NAMES = [
-  'Grimble', 'Mossbeard', 'Tilda Quill', 'Old Varro', 'Pip Copperpot', 'Hesketh',
-  'Brannoc', 'Wren Ashdown', 'Magda Fenn', 'Corvin', 'Ysolde', 'Barnaby Thorne',
-]
-
-/** Pick a bot name that doesn't collide with any name already used at the table. */
-export function botName(taken: string[]): string {
+/**
+ * A bot is named after the hero of the class it plays (e.g. Ronan Ellisbane for the Barbarian).
+ * Falls back to a suffixed name if a human at the table already took that name.
+ */
+export function botName(classId: ClassId, taken: string[]): string {
   const lower = new Set(taken.map(n => n.trim().toLowerCase()))
-  const free = BOT_NAMES.filter(n => !lower.has(n.toLowerCase()))
-  if (free.length > 0) return free[Math.floor(Math.random() * free.length)]
-  let i = 1
-  while (lower.has(`bot ${i}`)) i++
-  return `Bot ${i}`
+  const hero = CLASSES.find(c => c.id === classId)?.heroName ?? 'Bot'
+  if (!lower.has(hero.toLowerCase())) return hero
+  let i = 2
+  while (lower.has(`${hero} ${i}`.toLowerCase())) i++
+  return `${hero} ${i}`
+}
+
+/** True when `name` is one of the auto-generated hero names (so it should follow class changes). */
+export function isHeroName(name: string): boolean {
+  const n = name.trim().toLowerCase()
+  return CLASSES.some(c => n === c.heroName.toLowerCase() || n.startsWith(`${c.heroName.toLowerCase()} `))
 }
 
 /** Classes whose abilities bots can actually play (WIP classes have no ability UI yet). */

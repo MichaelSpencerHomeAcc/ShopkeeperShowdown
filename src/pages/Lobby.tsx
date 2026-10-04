@@ -3,7 +3,7 @@ import type { BotDifficulty, ClassId, ClassCard, ClassStatus, PlayerSetup } from
 import { CLASSES } from '../data/classes'
 import { useGameStore } from '../store/gameStore'
 import { CardImage } from '../components/CardImage'
-import { BOT_DIFFICULTIES, BOT_DIFFICULTY_BLURB, BOT_DIFFICULTY_LABEL, BOT_FRIENDLY_CLASSES, botName } from '../bots/botConfig'
+import { BOT_DIFFICULTIES, BOT_DIFFICULTY_BLURB, BOT_DIFFICULTY_LABEL, BOT_FRIENDLY_CLASSES, botName, isHeroName } from '../bots/botConfig'
 
 const STATUS_STYLES: Record<ClassStatus, { label: string; bg: string; text: string }> = {
   WIP:  { label: 'WIP',  bg: 'bg-red-900/80',    text: 'text-red-300' },
@@ -96,9 +96,24 @@ function initialSeats(preset: LobbyPreset): Seat[] {
   const taken: string[] = ['Player 1']
   return DEFAULT_CLASSES.map((classId, i) => {
     if (i === 0 || preset === 'pass-and-play') return { name: `Player ${i + 1}`, classId, controller: 'human' as const }
-    const name = botName(taken)
+    const name = botName(classId, taken)
     taken.push(name)
     return { name, classId, controller: 'medium' as const }
+  })
+}
+
+/** Names used by the other seats in play (hidden seats beyond the player count don't count). */
+function otherNames(seats: Seat[], index: number, activeCount: number) {
+  return seats.slice(0, activeCount).filter((_, j) => j !== index).map(p => p.name)
+}
+
+/** Bot seats keep their hero's name in step with their class, unless the name was edited by hand. */
+function withClass(seats: Seat[], index: number, classId: ClassId, activeCount: number): Seat[] {
+  return seats.map((s, i) => {
+    if (i !== index) return s
+    const rename = s.controller !== 'human' && isHeroName(s.name)
+    const name = rename ? botName(classId, otherNames(seats, i, activeCount)) : s.name
+    return { ...s, classId, name }
   })
 }
 
@@ -126,7 +141,7 @@ export function Lobby({ onBack, preset = 'solo' }: { onBack?: () => void; preset
       const isBotNow = controller !== 'human'
       // Swap in a sensible default name when a seat flips between human and bot
       let name = s.name
-      if (isBotNow && !wasBot) name = botName(prev.filter((_, j) => j !== i).map(p => p.name))
+      if (isBotNow && !wasBot) name = botName(s.classId, otherNames(prev, i, playerCount))
       if (!isBotNow && wasBot) name = `Player ${i + 1}`
       return { ...s, controller, name }
     }))
@@ -136,7 +151,7 @@ export function Lobby({ onBack, preset = 'solo' }: { onBack?: () => void; preset
     const taken = new Set(activeSeats.filter((_, i) => i !== index).map(s => s.classId))
     const pool = (seats[index].controller === 'human' ? CLASSES.map(c => c.id) : BOT_FRIENDLY_CLASSES)
       .filter(id => !taken.has(id))
-    if (pool.length > 0) updateSeat(index, { classId: pool[Math.floor(Math.random() * pool.length)] })
+    if (pool.length > 0) setSeats(prev => withClass(prev, index, pool[Math.floor(Math.random() * pool.length)], playerCount))
   }
 
   const names = activeSeats.map(s => s.name.trim().toLowerCase())
@@ -217,7 +232,7 @@ export function Lobby({ onBack, preset = 'solo' }: { onBack?: () => void; preset
               />
               <select
                 value={seat.classId}
-                onChange={e => updateSeat(i, { classId: e.target.value as ClassId })}
+                onChange={e => setSeats(prev => withClass(prev, i, e.target.value as ClassId, playerCount))}
                 className="bg-ink-900/60 border border-parchment-800/40 rounded-lg px-2 py-2 text-sm text-parchment-200 focus:outline-none focus:border-gold-500/60"
               >
                 {CLASSES.map(cls => (

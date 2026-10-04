@@ -84,6 +84,8 @@ export interface PlayerSetup {
 export interface ClassCard {
   id: ClassId
   name: string
+  /** The adventurer who plays this class (from characters.md) — also used as the bot seat name */
+  heroName: string
   tagline: string
   imageFile: string
   status: ClassStatus
