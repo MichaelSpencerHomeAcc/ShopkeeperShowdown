@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react'
-import type { Location, RepType, Player, ResourceCard, ResourceType } from '../types'
+import type { Location, RepType, Player, ResourceCard } from '../types'
 import { useGameStore } from '../store/gameStore'
 import { Keyword } from './Keyword'
 import { ResourceCardMini } from './ResourceCardMini'
@@ -68,7 +68,7 @@ function getActionDisplay(action: ActionOption, player?: Player): ActionOption {
       }
 }
 
-export const LOCATION_ACTIONS: Record<Location, ActionOption[]> = {
+const LOCATION_ACTIONS: Record<Location, ActionOption[]> = {
   guildhall: [
     { id: 'hire',      label: 'Hire a Professional', icon: '🏛️', description: 'Use a Guild professional for a special ability.' },
     { id: 'consult',   label: 'Consultation',         icon: '💰', description: 'Pay 3 coins for +1 Reputation token.' },
@@ -97,7 +97,7 @@ export const LOCATION_ACTIONS: Record<Location, ActionOption[]> = {
   'thieves-guild': [
     { id: 'steal-or-break', label: 'Steal 1 or Break 1', icon: '🗡️', description: "Target another player's window or resources." },
     { id: 'fence',          label: 'Fence',               icon: '💎', description: 'Secretly sell a stolen resource.' },
-    { id: 'launder',        label: 'Launder 3',           icon: '🌀', description: 'Draw 3 cards and markt hem as stolen.' },
+    { id: 'launder',        label: 'Launder 3',           icon: '🌀', description: 'Draw 3 cards and mark them as stolen.' },
   ],
 }
 
@@ -226,7 +226,7 @@ export function LocationActionPanel({ location, onClose, onAction, onConsumeActi
         <ActionPickerView location={location} onPick={setSelectedAction} />
       ) : (
         <div>
-          {location === 'guildhall'     && <GuildhallActions    actionId={selectedAction} onAction={onAction} onBack={() => setSelectedAction(null)} onClose={onClose} />}
+          {location === 'guildhall'     && <GuildhallActions    actionId={selectedAction} onAction={onAction} onBack={() => setSelectedAction(null)} />}
           {location === 'tavern'        && <TavernActions       actionId={selectedAction} onAction={onAction} onBack={() => setSelectedAction(null)} />}
           {location === 'wilderness'    && <WildernessActions   actionId={selectedAction} onAction={onAction} onBack={() => setSelectedAction(null)} onConsumeAction={onConsumeAction} onClose={onClose} />}
           {location === 'barracks'      && <BarracksActions     actionId={selectedAction} onAction={onAction} onBack={() => setSelectedAction(null)} />}
@@ -240,7 +240,7 @@ export function LocationActionPanel({ location, onClose, onAction, onConsumeActi
 
 // ---- Draw animation toast ----
 
-export function DrawnCardsToast({ localPlayerId }: { localPlayerId?: string | null }) {
+export function DrawnCardsToast({ localPlayerId, suppress = false }: { localPlayerId?: string | null; suppress?: boolean }) {
   const { lastDrawnCards, clearDrawnCards, currentTurnPlayerId } = useGameStore()
   // null = nothing to show; [] = passive fired but drew 0 cards; non-empty = cards to display
   const [cards, setCards] = useState<ResourceCard[] | null>(null)
@@ -251,8 +251,10 @@ export function DrawnCardsToast({ localPlayerId }: { localPlayerId?: string | nu
     // The active player's LocationActionPanel already handles its own display; this
     // toast is the fallback for passive/bonus draws.  Other clients should never see it.
     if (localPlayerId && currentTurnPlayerId !== localPlayerId) return
+    // Bots' draws are private to them — don't pop a "cards added to your hoard" modal
+    if (suppress) return
     setCards(lastDrawnCards)
-  }, [lastDrawnCards, localPlayerId, currentTurnPlayerId])
+  }, [lastDrawnCards, localPlayerId, currentTurnPlayerId, suppress])
 
   if (cards === null) return null
 
@@ -346,20 +348,12 @@ function SectionTitle({ children }: { children: React.ReactNode }) {
   )
 }
 
-function ActionBlock({ children }: { children: React.ReactNode }) {
-  return (
-    <div className="bg-ink-800/60 rounded-lg border border-parchment-800/20 p-2 space-y-1.5">
-      {children}
-    </div>
-  )
-}
-
 // ---- Guildhall ----
 
-function GuildhallActions({ actionId, onAction, onBack, onClose }: { actionId: string; onAction: () => void; onBack: () => void; onClose: () => void }) {
+function GuildhallActions({ actionId, onAction, onBack }: { actionId: string; onAction: () => void; onBack: () => void }) {
   const {
     activePlayerId, players, professionalSlots, consultation,
-    proposeNegotiate, resolveNegotiate, negotiatePending, negotiatesCompletedThisTurn,
+    proposeNegotiate, declineNegotiate, negotiatePending, negotiatesCompletedThisTurn,
   } = useGameStore()
   const player = players.find(p => p.id === activePlayerId) ?? players[0]
   const [consultRep, setConsultRep] = useState<RepType>('ARM')
@@ -466,7 +460,7 @@ function GuildhallActions({ actionId, onAction, onBack, onClose }: { actionId: s
       <div className="space-y-2">
         <BackButton onBack={onBack} />
         <p className="text-xs text-parchment-400">
-          Offer a card swap with another player. Action is only used if they accept.
+          Offer a card swap with another player. Uses this action (and any Clan toll) — refunded if the trade is declined.
           {player.classId === 'paladin' && <span className="text-blue-300"> Honourable Trade: gain Rep on success.</span>}
         </p>
 
@@ -478,7 +472,7 @@ function GuildhallActions({ actionId, onAction, onBack, onClose }: { actionId: s
             </span>
             <button
               type="button"
-              onClick={() => resolveNegotiate(false)}
+              onClick={declineNegotiate}
               className="text-[9px] text-parchment-500 hover:text-red-300 transition-colors"
             >
               Cancel

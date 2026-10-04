@@ -35,11 +35,11 @@ export function PlayerArea({ player, playerIndex, isOwn = true, isMyTurn = true 
   /** Can the player move cards around their shop right now? */
   const canMove = isOwn && isMyTurn
   const {
-    adjustCoins, adjustRep, spendActiveToken, refreshActiveTokens,
+    adjustCoins,
     placeInWindow, moveFromWindowToHoard, discardResource,
-    setWindowStatus, setWindowStolen, drawWorkOrders, chooseWorkOrder,
-    adjustDebt, adjustMomentum, transferNightWatcher, reorderHoard, swapWindows,
-    players, currentTurnPlayerId,
+    setWindowStatus, setWindowStolen, chooseWorkOrder,
+    adjustDebt, adjustMomentum, reorderHoard, swapWindows,
+    currentTurnPlayerId,
     endTurn, turnActionsUsed, bonusActionsThisTurn,
   } = useGameStore()
 
@@ -76,10 +76,6 @@ export function PlayerArea({ player, playerIndex, isOwn = true, isMyTurn = true 
     if (player.coins < 3) return
     adjustCoins(player.id, -3)
     setWindowStatus(player.id, windowIdx, 'normal')
-  }
-
-  function handleDrawWorkOrders() {
-    drawWorkOrders(player.id)
   }
 
   return (
@@ -450,7 +446,6 @@ interface WindowSlotProps {
 
 function WindowSlotDisplay({
   slot, index, isOwn, canMove, isTarget, onClick, onDrop,
-  onMoveToHoard, onDiscard, onSetStatus, onToggleStolen,
   onRepairForCoins, canRepair,
 }: WindowSlotProps) {
   const statusOverlay: Record<WindowStatus, string> = {

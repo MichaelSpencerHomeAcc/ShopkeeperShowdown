@@ -2,6 +2,10 @@ import { useEffect, useRef } from 'react'
 import { supabase } from '../lib/supabase'
 import { useGameStore } from '../store/gameStore'
 import { pushState, pullState } from '../lib/gameSync'
+import type { GameState, LogEntry } from '../types'
+
+/** A (possibly partial) game-state snapshot received from another client or the DB. */
+type SyncedState = Partial<GameState>
 
 const DEBOUNCE_MS = 300
 
@@ -28,6 +32,7 @@ export function useGameSync(roomId: string | null, userId: string | null) {
 
   useEffect(() => {
     if (!roomId || !userId) return
+    const room: string = roomId
 
     // ── 1. Create the Realtime channel ──────────────────────────────────────
     const channel = supabase.channel(`game-${roomId}`, {
@@ -57,23 +62,23 @@ export function useGameSync(roomId: string | null, userId: string | null) {
     // sync" — only the latter should set pendingLocalPushRef.
     let isApplyingBase = false
 
-    function draftProgress(state: any): number {
+    function draftProgress(state: SyncedState): number {
       const draft = state?.startingDraft
       if (!draft) return Number.POSITIVE_INFINITY
       return typeof draft.pickIndex === 'number' ? draft.pickIndex : -1
     }
 
-    function incomingAdvancesDraft(incoming: any, local: any): boolean {
+    function incomingAdvancesDraft(incoming: SyncedState, local: SyncedState): boolean {
       if (!local?.startingDraft) return false
       return draftProgress(incoming) > draftProgress(local)
     }
 
-    function applyRemoteState(incoming: object) {
+    function applyRemoteState(incoming: SyncedState) {
       isSyncingRef.current = true
       pendingLocalPushRef.current = false
 
       const local = useGameStore.getState()
-      let safe: object = incoming
+      let safe: SyncedState = incoming
 
       // ── Guard 1 ──────────────────────────────────────────────────────────
       // Prevent a stale/delayed broadcast from re-opening a sell phase the
@@ -82,9 +87,9 @@ export function useGameSync(roomId: string | null, userId: string | null) {
       // sellPhaseDone:false is the legitimate _advanceTurn() reset and must
       // be accepted (otherwise the next player loses their sell phase).
       if (
-        (local as any).sellPhaseDone &&
-        !(incoming as any).sellPhaseDone &&
-        (local as any).currentTurnPlayerId === (incoming as any).currentTurnPlayerId
+        local.sellPhaseDone &&
+        !incoming.sellPhaseDone &&
+        local.currentTurnPlayerId === incoming.currentTurnPlayerId
       ) {
         safe = { ...safe, sellPhaseDone: true }
       }
@@ -92,13 +97,13 @@ export function useGameSync(roomId: string | null, userId: string | null) {
       // ── Guard 2 ──────────────────────────────────────────────────────────
       if (userId) {
         const myLastEntry: { id: string } | undefined =
-          (local as any).actionLog?.find((e: any) => e.playerId === userId)
+          local.actionLog?.find((e) => e.playerId === userId)
 
         if (myLastEntry) {
-          const incomingLog: any[] = Array.isArray((incoming as any).actionLog)
-            ? (incoming as any).actionLog
+          const incomingLog: LogEntry[] = Array.isArray(incoming.actionLog)
+            ? incoming.actionLog
             : []
-          const incomingHasMyAction = incomingLog.some((e: any) => e.id === myLastEntry.id)
+          const incomingHasMyAction = incomingLog.some((e) => e.id === myLastEntry.id)
 
           if (!incomingHasMyAction) {
             // Remote hasn't seen our latest action yet.  Preserve:
@@ -108,20 +113,20 @@ export function useGameSync(roomId: string | null, userId: string | null) {
             //     responsible for resolving.  A stale remote snapshot may carry old
             //     values (e.g. trickShotBonusPending still set after we chose Launder)
             //     and must not re-open modals the local player already dismissed.
-            const localMe = (local as any).players?.find((p: any) => p.id === userId)
-            if (localMe && Array.isArray((incoming as any).players)) {
-              const localOnlyEntries: any[] = ((local as any).actionLog ?? []).filter(
-                (e: any) => !incomingLog.some((ie: any) => ie.id === e.id)
+            const localMe = local.players?.find((p) => p.id === userId)
+            if (localMe && Array.isArray(incoming.players)) {
+              const localOnlyEntries: LogEntry[] = (local.actionLog ?? []).filter(
+                (e) => !incomingLog.some((ie) => ie.id === e.id)
               )
               safe = {
                 ...safe,
                 // Own player object
-                players: (incoming as any).players.map((p: any) =>
+                players: incoming.players.map((p) =>
                   p.id === userId ? localMe : p
                 ),
                 // Merged action log, newest-first
                 actionLog: [...localOnlyEntries, ...incomingLog]
-                  .sort((a: any, b: any) => (b.timestamp ?? 0) - (a.timestamp ?? 0))
+                  .sort((a, b) => (b.timestamp ?? 0) - (a.timestamp ?? 0))
                   .slice(0, 50),
                 // trickShotBonusPending is the only resolution-state field to preserve
                 // from local.  It is set exclusively by the local player's useTrickShot()
@@ -132,7 +137,7 @@ export function useGameSync(roomId: string | null, userId: string | null) {
                 // diceResult are all *first set by the remote player* (via useTurnAction /
                 // gather / etc.) so we must NOT override them here — doing so would block
                 // their initial arrival at this client.
-                trickShotBonusPending: (local as any).trickShotBonusPending,
+                trickShotBonusPending: local.trickShotBonusPending,
               }
             }
           }
@@ -152,7 +157,7 @@ export function useGameSync(roomId: string | null, userId: string | null) {
         if (pendingLocalPushRef.current) {
           pendingLocalPushRef.current = false
           if (timerRef.current) clearTimeout(timerRef.current)
-          timerRef.current = setTimeout(() => pushState(roomId, channel), DEBOUNCE_MS)
+          timerRef.current = setTimeout(() => pushState(room, channel), DEBOUNCE_MS)
         }
       }, 0)
     }
@@ -170,7 +175,7 @@ export function useGameSync(roomId: string | null, userId: string | null) {
     // `self: false` on the channel already prevents our own echoes.
     channel.on('broadcast', { event: 'state' }, ({ payload }) => {
       if (!payload?.state) return
-      const incomingLog = (payload.state as any).actionLog
+      const incomingLog = (payload.state as SyncedState).actionLog
       const incomingTopTime: number | undefined = Array.isArray(incomingLog) ? incomingLog[0]?.timestamp : undefined
       const localState = useGameStore.getState()
       const localTopTime: number | undefined = localState.actionLog[0]?.timestamp
@@ -190,9 +195,10 @@ export function useGameSync(roomId: string | null, userId: string | null) {
       'postgres_changes',
       // '*' covers both the initial INSERT and every subsequent UPDATE
       { event: '*', schema: 'public', table: 'game_state', filter: `room_id=eq.${roomId}` },
-      ({ new: row }) => {
+      ({ new: newRow }) => {
+        const row = newRow as { state?: Record<string, unknown> }
         if (!row?.state) return
-        const incomingLog = (row.state as any).actionLog
+        const incomingLog = (row.state as SyncedState).actionLog
         const incomingTopId: string | undefined = Array.isArray(incomingLog) ? incomingLog[0]?.id : undefined
         const localState = useGameStore.getState()
         const localTopId: string | undefined = localState.actionLog[0]?.id
@@ -248,7 +254,7 @@ export function useGameSync(roomId: string | null, userId: string | null) {
         .eq('room_id', roomId)
         .single()
       if (!data?.state) return
-      const incomingLog = (data.state as any).actionLog
+      const incomingLog = (data.state as SyncedState).actionLog
       const incomingTopId: string | undefined = incomingLog?.[0]?.id
       const localState = useGameStore.getState()
       const localTopId: string | undefined = localState.actionLog[0]?.id

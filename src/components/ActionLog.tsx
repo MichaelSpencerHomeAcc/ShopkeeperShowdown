@@ -128,7 +128,7 @@ export function ActionLog({ players, localPlayerName }: { players?: Player[]; lo
       ...cardNames.map(name => ({ value: name, kind: 'card' as const })),
     ].filter(t => t.value.length > 0)
 
-    const parts: JSX.Element[] = []
+    const parts: React.ReactElement[] = []
     let cursor = 0
     let key = 0
 

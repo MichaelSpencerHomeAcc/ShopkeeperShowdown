@@ -2,6 +2,7 @@ import { create } from 'zustand'
 import type {
   GameState, Player, ResourceCard, WorkOrderCard, VisitorCard, CounterfeitCard,
   ClassId, Location, WindowStatus, LogEntry, RepType, ShamanPatienceEffects, AmbushCard,
+  DemandMap, PlayerSetup, BotDifficulty,
 } from '../types'
 import { parseRequirements } from '../utils/requirements'
 import { RESOURCE_CARDS } from '../data/resources'
@@ -46,7 +47,7 @@ function startingDraftOrder(players: Player[]) {
   return [...ids, ...ids.slice().reverse()]
 }
 
-function makePlayer(id: string, name: string, classId: ClassId): Player {
+function makePlayer(id: string, name: string, classId: ClassId, bot?: BotDifficulty): Player {
   const windows = Array.from({ length: 5 }, (_, i) => ({
     id: `${id}-w${i}`,
     card: null,
@@ -70,6 +71,7 @@ function makePlayer(id: string, name: string, classId: ClassId): Player {
     id,
     name,
     classId,
+    ...(bot ? { bot } : {}),
     coins: 3,
     rep: { ARM: 0, CON: 0, TRI: 0, TRG: 0 },
     activeTokens: classId === 'monk' ? 0 : 2,
@@ -169,7 +171,7 @@ function buildInitialGameState(players: Player[]): GameState {
   // most recently stolen from or had a window broken — protecting them from the
   // next attempt.  Nobody holds it at game start.
 
-  const visitorDemandRemaining: Record<string, { ARM: number; CON: number; TRI: number; TRG: number }> = {}
+  const visitorDemandRemaining: Record<string, DemandMap> = {}
   for (const v of activeVisitors) {
     if (v) visitorDemandRemaining[v.id] = parseRequirements(v.demand)
   }
@@ -199,6 +201,9 @@ function buildInitialGameState(players: Player[]): GameState {
     lastGuildFenceType: null,
     diceResult: null,
     townCrierPeek: null,
+    appraisePeek: null,
+    foragePeek: null,
+    lastDrawnCards: null,
     visitorDemandRemaining,
     currentTurnPlayerId: draftOrder[0] ?? players[0]?.id ?? '',
     turnActionsUsed: 0,
@@ -232,9 +237,9 @@ function buildInitialGameState(players: Player[]): GameState {
   }
 }
 
-interface GameStore extends GameState {
+export interface GameStore extends GameState {
   // Lobby actions
-  startGame: (players: Array<{ name: string; classId: ClassId }>) => void
+  startGame: (players: PlayerSetup[]) => void
   completeStartingDraftPick: (playerId: string, cardId: string) => void
   resetGame: () => void
 
@@ -361,6 +366,8 @@ interface GameStore extends GameState {
   counterNegotiate: (counterCardId: string) => void
   /** Proposer accepts or declines after reviewing target's counter-card */
   resolveNegotiate: (accept: boolean) => void
+  /** Target declines (or proposer cancels) before a counter-card is chosen */
+  declineNegotiate: () => void
   /** Paladin chooses their own stake and issues the challenge */
   initiateRighteousDuel: (challengerId: string, targetId: string, challengerStake: import('../types').DuelStake) => void
   /** Target accepts (passing their own stake) or declines (passing card ID to discard, or undefined = pay 2 coins) */
@@ -455,7 +462,11 @@ const INITIAL: GameState = {
   clashResult: null,
   barbarianClashOptOut: null,
   classAbilitiesUsedThisTurn: [],
+  righteousDuelPending: null,
   righteousDuelResult: null,
+  negotiatePending: null,
+  negotiateReview: null,
+  negotiatesCompletedThisTurn: 0,
   shamanCallLightning: null,
   bonusActionsThisTurn: 0,
   politePromoterResetUsed: false,
@@ -471,12 +482,40 @@ const INITIAL: GameState = {
   rn04ForcedRoll: null,
 }
 
+/**
+ * Undoes the Guildhall visit for a Negotiate proposal that was turned down: the action comes
+ * back and, if a Barbarian's Clan toll was paid to get in, so do the 2 coins.
+ */
+function refundNegotiateAction(
+  s: GameState,
+  deal: { proposerId: string; actionCharged?: boolean; clanTollPaidTo?: string },
+): Partial<GameState> {
+  if (!deal.actionCharged) return {}
+  const tollTo = deal.clanTollPaidTo
+  return {
+    turnActionsUsed: Math.max(0, s.turnActionsUsed - 1),
+    locationsUsedThisTurn: s.locationsUsedThisTurn.filter(l => l !== 'guildhall'),
+    ...(tollTo ? {
+      players: s.players.map(p =>
+        p.id === deal.proposerId ? { ...p, coins: p.coins + 2 }
+        : p.id === tollTo ? { ...p, coins: Math.max(0, p.coins - 2) }
+        : p
+      ),
+    } : {}),
+  }
+}
+
+function negotiateRefundNote(s: GameState, deal: { actionCharged?: boolean; clanTollPaidTo?: string }) {
+  if (!deal.actionCharged) return ''
+  const barb = deal.clanTollPaidTo ? s.players.find(p => p.id === deal.clanTollPaidTo) : null
+  return barb ? ` Guildhall action and ${barb.name}'s 2-coin Clan toll refunded.` : ' Guildhall action refunded.'
+}
+
 // Shared helper: execute the underlying action (gather/auction/mascot) with a given final roll.
 // Called by both useTrickShot and passTrickShot after the Trick Shot decision is made.
-// eslint-disable-next-line @typescript-eslint/no-explicit-any
 function _applyTrickShotRoll(
   get: () => GameStore,
-  set: (partial: any) => void,
+  set: (partial: Partial<GameStore>) => void,
   rollType: 'gather' | 'auction' | 'mascot',
   playerId: string,
   finalRoll: number,
@@ -533,7 +572,8 @@ function _applyTrickShotRoll(
 
   if (rollType === 'mascot') {
     const drawCount = Math.max(1, Math.floor(finalRoll / 2))
-    let deck = resourceDeck.length > 0 ? [...resourceDeck] : shuffle([...resourceDiscard])
+    const reshuffled = resourceDeck.length === 0 // discard becomes the new deck
+    let deck = reshuffled ? shuffle([...resourceDiscard]) : [...resourceDeck]
     const drawn: ResourceCard[] = []
     for (let i = 0; i < drawCount && deck.length > 0; i++) {
       const [card, ...rest] = deck; drawn.push(card); deck = rest
@@ -541,6 +581,7 @@ function _applyTrickShotRoll(
     const distinctTypes = [...new Set(drawn.map(c => c.type))]
     set({
       resourceDeck: deck,
+      ...(reshuffled ? { resourceDiscard: [] } : {}),
       lastDrawnCards: drawn,
       players: players.map(p => {
         if (p.id !== playerId) return p
@@ -569,7 +610,7 @@ function applyFirstTurnStartBonuses(get: () => GameStore, set: (partial: Partial
       ),
       actionLog: [
         logEntry(
-          `${firstPlayer.name}'s Fearsome Champion â€” gained ${coins} coin${coins > 1 ? 's' : ''} (${brokenCount} broken window${brokenCount !== 1 ? 's' : ''} on board).`,
+          `${firstPlayer.name}'s Fearsome Champion — gained ${coins} coin${coins > 1 ? 's' : ''} (${brokenCount} broken window${brokenCount !== 1 ? 's' : ''} on board).`,
           firstPlayer.id
         ),
         ...s.actionLog.slice(0, 49),
@@ -594,8 +635,8 @@ function applyFirstTurnStartBonuses(get: () => GameStore, set: (partial: Partial
         : s.players,
       actionLog: [logEntry(
         drawn.length > 0
-          ? `${firstPlayer.name}'s Master of the Wilderness â€” rolled ${roll}, drew ${drawn.length} resource${drawn.length !== 1 ? 's' : ''} free.`
-          : `${firstPlayer.name}'s Master of the Wilderness â€” rolled ${roll} (0 free resources).`,
+          ? `${firstPlayer.name}'s Master of the Wilderness — rolled ${roll}, drew ${drawn.length} resource${drawn.length !== 1 ? 's' : ''} free.`
+          : `${firstPlayer.name}'s Master of the Wilderness — rolled ${roll} (0 free resources).`,
         firstPlayer.id
       ), ...s.actionLog.slice(0, 49)],
     }))
@@ -607,7 +648,7 @@ export const useGameStore = create<GameStore>((set, get) => ({
 
   startGame(playerDefs) {
     const players = playerDefs.map((p, i) =>
-      makePlayer(`player-${i}`, p.name, p.classId)
+      makePlayer(`player-${i}`, p.name, p.classId, p.bot)
     )
     // Roll d6 to determine first player; rotate order clockwise from winner
     const rolls = players.map(p => ({ id: p.id, roll: Math.ceil(Math.random() * 6) }))
@@ -852,7 +893,6 @@ export const useGameStore = create<GameStore>((set, get) => ({
     const existingCard = player.windows[windowIdx]?.card
     const existingStolen = player.windows[windowIdx]?.stolen ?? false
     const displacedCounterfeitCard = isCounterfeitCard(existingCard) ? existingCard : null
-    const rogueId = players.find(p => p.classId === 'rogue')?.id
 
     set(s => ({
       players: s.players.map(p => {
@@ -1333,7 +1373,8 @@ export const useGameStore = create<GameStore>((set, get) => ({
 
     if (rollType === 'mascot') {
       const drawCount = Math.max(1, Math.floor(finalRoll / 2))
-      let deck = resourceDeck.length > 0 ? [...resourceDeck] : shuffle([...resourceDiscard])
+      const reshuffled = resourceDeck.length === 0 // discard becomes the new deck
+      let deck = reshuffled ? shuffle([...resourceDiscard]) : [...resourceDeck]
       const drawn: ResourceCard[] = []
       for (let i = 0; i < drawCount && deck.length > 0; i++) {
         const [card, ...rest] = deck; drawn.push(card); deck = rest
@@ -1341,6 +1382,7 @@ export const useGameStore = create<GameStore>((set, get) => ({
       const distinctTypes = [...new Set(drawn.map(c => c.type))]
       set(s => ({
         resourceDeck: deck,
+        ...(reshuffled ? { resourceDiscard: [] } : {}),
         diceResult: finalRoll,
         rn04ForcedRoll: useIt ? { roll: finalRoll, playerId } : null,
         rn04RerollPending: null,
@@ -1503,7 +1545,7 @@ export const useGameStore = create<GameStore>((set, get) => ({
     const repGain = card.repTokens > 0 ? card.repTokens : 0
 
     set(s => {
-      let updatedPlayers = s.players.map(p => {
+      const updatedPlayers = s.players.map(p => {
         if (p.id !== playerId) return p
         if (fromZone === 'hoard') {
           return {
@@ -1883,12 +1925,8 @@ export const useGameStore = create<GameStore>((set, get) => ({
           players: s.players.map(p => p.id === rogueId ? { ...p, activeTokens: Math.min(2, p.activeTokens + effect.amount) } : p),
           actionLog: [logEntry(`${rogue.name}'s ${card.name} returned — refreshed ${effect.amount} active token${effect.amount !== 1 ? 's' : ''}.`, rogueId), ...s.actionLog.slice(0, 49)],
         }))
-      } else if (
-        effect.kind === 'steal' ||
-        effect.kind === 'trade' ||
-        effect.kind === 'auction' ||
-        effect.kind === 'break'
-      ) {
+      } else {
+        // steal / trade / auction / break need a player choice — queue them for the Rogue
         get().queueRogueCounterfeitEffect({
           rogueId,
           cardName: card.name,
@@ -1905,10 +1943,6 @@ export const useGameStore = create<GameStore>((set, get) => ({
             ),
             ...s.actionLog.slice(0, 49),
           ],
-        }))
-      } else {
-        set(s => ({
-          actionLog: [logEntry(`${rogue.name}'s ${card.name} returned — ${effect.kind} ${effect.amount} is ready to resolve.`, rogueId), ...s.actionLog.slice(0, 49)],
         }))
       }
     }
@@ -2038,7 +2072,7 @@ export const useGameStore = create<GameStore>((set, get) => ({
     const player = players.find(p => p.id === playerId)
     if (!player) return
 
-    // Draw 3 cards from deck, mark both stolen
+    // Draw 3 cards from deck, mark them all stolen
     const { resourceDeck, resourceDiscard } = get()
     let deck = resourceDeck
     let discard = resourceDiscard
@@ -2310,7 +2344,7 @@ export const useGameStore = create<GameStore>((set, get) => ({
 
     // Remove peeked cards from deck
     let deck = visitorDeck.filter(c => !peeked.some(pc => pc.id === c.id))
-    let discard = visitorDiscard.filter(c => !peeked.some(pc => pc.id === c.id))
+    const discard = visitorDiscard.filter(c => !peeked.some(pc => pc.id === c.id))
 
     // Return non-placed cards to bottom of visitor deck
     deck = [...deck, ...returnCards]
@@ -2426,8 +2460,9 @@ export const useGameStore = create<GameStore>((set, get) => ({
 
     const drawCount = Math.max(1, Math.floor(roll / 2))
 
-    let { resourceDeck, resourceDiscard } = get()
-    let deck = resourceDeck.length > 0 ? [...resourceDeck] : shuffle([...resourceDiscard])
+    const { resourceDeck, resourceDiscard } = get()
+    const reshuffled = resourceDeck.length === 0 // discard becomes the new deck
+    let deck = reshuffled ? shuffle([...resourceDiscard]) : [...resourceDeck]
     const drawn: ResourceCard[] = []
     for (let i = 0; i < drawCount && deck.length > 0; i++) {
       const [card, ...rest] = deck
@@ -2439,6 +2474,7 @@ export const useGameStore = create<GameStore>((set, get) => ({
 
     set(s => ({
       resourceDeck: deck,
+      ...(reshuffled ? { resourceDiscard: [] } : {}),
       diceResult: roll,
       lastDrawnCards: drawn,
       players: s.players.map(p => {
@@ -2461,8 +2497,9 @@ export const useGameStore = create<GameStore>((set, get) => ({
       set(s => ({ actionLog: [logEntry(`${player.name} used Resourceful Recruiter — no spent tokens.`, playerId), ...s.actionLog.slice(0, 49)] }))
       return
     }
-    let { resourceDeck, resourceDiscard } = get()
-    let deck = resourceDeck.length > 0 ? [...resourceDeck] : shuffle([...resourceDiscard])
+    const { resourceDeck, resourceDiscard } = get()
+    const reshuffled = resourceDeck.length === 0 // discard becomes the new deck
+    let deck = reshuffled ? shuffle([...resourceDiscard]) : [...resourceDeck]
     const drawn: ResourceCard[] = []
     for (let i = 0; i < count && deck.length > 0; i++) {
       const [card, ...rest] = deck
@@ -2471,6 +2508,7 @@ export const useGameStore = create<GameStore>((set, get) => ({
     }
     set(s => ({
       resourceDeck: deck,
+      ...(reshuffled ? { resourceDiscard: [] } : {}),
       lastDrawnCards: drawn,
       players: s.players.map(p =>
         p.id === playerId
@@ -2514,8 +2552,9 @@ export const useGameStore = create<GameStore>((set, get) => ({
     const { players } = get()
     const player = players.find(p => p.id === playerId)
     if (!player) return
-    let { resourceDeck, resourceDiscard } = get()
-    let deck = resourceDeck.length > 0 ? [...resourceDeck] : shuffle([...resourceDiscard])
+    const { resourceDeck, resourceDiscard } = get()
+    const reshuffled = resourceDeck.length === 0 // discard becomes the new deck
+    let deck = reshuffled ? shuffle([...resourceDiscard]) : [...resourceDeck]
     const drawn: ResourceCard[] = []
     while (deck.length > 0) {
       const [card, ...rest] = deck
@@ -2526,6 +2565,7 @@ export const useGameStore = create<GameStore>((set, get) => ({
     const foundRep = drawn.length > 0 && drawn[drawn.length - 1].repTokens > 0
     set(s => ({
       resourceDeck: deck,
+      ...(reshuffled ? { resourceDiscard: [] } : {}),
       lastDrawnCards: drawn,
       players: s.players.map(p =>
         p.id === playerId ? { ...p, hoard: [...p.hoard, ...drawn] } : p
@@ -2717,7 +2757,9 @@ export const useGameStore = create<GameStore>((set, get) => ({
   },
 
   endTurn() {
-    const { players, pawns, currentTurnPlayerId } = get()
+    const { players, pawns, currentTurnPlayerId, clashResult, barbarianClashOptOut } = get()
+    // A Clash for this turn is already resolving — don't roll it again
+    if (clashResult || barbarianClashOptOut) return
 
     // --- Clash check ---
     const myPawn = pawns.find(pw => pw.playerId === currentTurnPlayerId)
@@ -3030,7 +3072,7 @@ export const useGameStore = create<GameStore>((set, get) => ({
   },
 
   raidingParty(playerId, clanLoc) {
-    const { players, resourceDeck, resourceDiscard } = get()
+    const { players } = get()
     const player = players.find(p => p.id === playerId)
     if (!player || player.activeTokens < 1) return
 
@@ -3045,7 +3087,7 @@ export const useGameStore = create<GameStore>((set, get) => ({
       actionLog: [logEntry(`${player.name} used Raiding Party — Clan marker placed at ${clanLoc}.`, playerId), ...s.actionLog.slice(0, 49)],
     }))
 
-    // Trigger Appraise 2 (look at top 4 cards, keep 1)
+    // Trigger Appraise 2 (look at top 4 cards, keep 2)
     const deck = get().resourceDeck
     const cards = deck.slice(0, 4)
     if (cards.length > 0) {
@@ -3282,7 +3324,15 @@ export const useGameStore = create<GameStore>((set, get) => ({
   // ---- Paladin class abilities ----
 
   proposeNegotiate(proposerId, targetId, offeredCardId, paladinRepType) {
-    set({ negotiatePending: { proposerId, targetId, offeredCardId, paladinRepType } })
+    // The first proposal of a turn is paid for with the Guildhall action (the location panel
+    // consumes it); a Council of Seven second Negotiate is free. Remember which, for refunds.
+    const { negotiatesCompletedThisTurn, players } = get()
+    const actionCharged = negotiatesCompletedThisTurn === 0
+    // Entering a Barbarian's Clan location costs a 2-coin toll, charged with that action
+    const clanTollPaidTo = actionCharged
+      ? players.find(p => p.classId === 'barbarian' && p.clanLocation === 'guildhall' && p.id !== proposerId)?.id
+      : undefined
+    set({ negotiatePending: { proposerId, targetId, offeredCardId, paladinRepType, actionCharged, clanTollPaidTo } })
   },
 
   counterNegotiate(counterCardId) {
@@ -3296,26 +3346,42 @@ export const useGameStore = create<GameStore>((set, get) => ({
         offeredCardId: negotiatePending.offeredCardId,
         counterCardId,
         paladinRepType: negotiatePending.paladinRepType,
+        actionCharged: negotiatePending.actionCharged,
+        clanTollPaidTo: negotiatePending.clanTollPaidTo,
       },
     })
   },
 
+  declineNegotiate() {
+    const { negotiatePending, players } = get()
+    if (!negotiatePending) return
+    const target = players.find(p => p.id === negotiatePending.targetId)
+    set(s => ({
+      negotiatePending: null,
+      ...refundNegotiateAction(s, negotiatePending),
+      actionLog: [logEntry(`${target?.name ?? 'The target'} declined the trade proposal.${negotiateRefundNote(s, negotiatePending)}`, negotiatePending.targetId), ...s.actionLog.slice(0, 49)],
+    }))
+  },
+
   resolveNegotiate(accept) {
-    const { negotiateReview, players, negotiatesCompletedThisTurn } = get()
+    const { negotiateReview, players } = get()
     if (!negotiateReview) return
 
-    if (!accept) {
-      set({ negotiateReview: null })
-      return
-    }
+    // A trade that doesn't happen hands the proposer's Guildhall action back
+    const deny = (message: string) => set(s => ({
+      negotiateReview: null,
+      ...refundNegotiateAction(s, negotiateReview),
+      actionLog: [logEntry(message + negotiateRefundNote(s, negotiateReview), negotiateReview.proposerId), ...s.actionLog.slice(0, 49)],
+    }))
 
     const proposer = players.find(p => p.id === negotiateReview.proposerId)
     const target = players.find(p => p.id === negotiateReview.targetId)
-    if (!proposer || !target) { set({ negotiateReview: null }); return }
+    if (!accept) { deny(`${proposer?.name ?? 'The proposer'} declined the counter-offer.`); return }
+    if (!proposer || !target) { deny('The trade fell through.'); return }
 
     const offeredCard = proposer.hoard.find(c => c.id === negotiateReview.offeredCardId)
     const counterCard = target.hoard.find(c => c.id === negotiateReview.counterCardId)
-    if (!offeredCard || !counterCard) { set({ negotiateReview: null }); return }
+    if (!offeredCard || !counterCard) { deny('The trade fell through — a card is no longer available.'); return }
 
     // Paladin Honourable Trade: rep bonus on successful negotiate
     // rn08 Merchant of Saltholm doubles the Paladin's own rep gain only — target always gets +1
@@ -3327,13 +3393,6 @@ export const useGameStore = create<GameStore>((set, get) => ({
       ? (proposer.renownCards.some(c => c.id === 'rn08') ? 2 : 1)
       : 0
     const targetRepGain = isPaladin && prt ? 1 : 0
-
-    // First negotiate consumes action + marks guildhall; second (rn01 passive) is free
-    const isFirstNegotiate = negotiatesCompletedThisTurn === 0
-
-    if (isFirstNegotiate) {
-      get().movePawn(negotiateReview.proposerId, 'guildhall')
-    }
 
     const logMsg =
       `${proposer.name} and ${target.name} negotiated — swapped ${offeredCard.name} for ${counterCard.name}. Both gain 2 coins.` +
@@ -3356,13 +3415,8 @@ export const useGameStore = create<GameStore>((set, get) => ({
         return p
       }),
       negotiateReview: null,
+      // The Guildhall action was already spent when the trade was proposed
       negotiatesCompletedThisTurn: s.negotiatesCompletedThisTurn + 1,
-      ...(isFirstNegotiate ? {
-        turnActionsUsed: s.turnActionsUsed + 1,
-        locationsUsedThisTurn: s.locationsUsedThisTurn.includes('guildhall')
-          ? s.locationsUsedThisTurn
-          : [...s.locationsUsedThisTurn, 'guildhall'],
-      } : {}),
       actionLog: [logEntry(logMsg, proposer.id), ...s.actionLog.slice(0, 49)],
     }))
   },
@@ -3418,7 +3472,8 @@ export const useGameStore = create<GameStore>((set, get) => ({
 
       // Paladin appraises: peek top 4 cards
       if (deck.length === 0 && discard.length > 0) { deck = shuffle(discard); discard = [] }
-      const appraise4 = deck.splice(0, Math.min(4, deck.length))
+      // Peek only — completeAppraise removes the peeked cards from the top of the deck
+      const appraise4 = deck.slice(0, 4)
 
       const emptyStake: import('../types').DuelStake = { repType: null, cardIds: [] }
 
@@ -3525,7 +3580,7 @@ export const useGameStore = create<GameStore>((set, get) => ({
         challengerBonus: bonus,
         targetRoll: targetTotal,
         winnerId,
-        declineDraws: [],
+        declineTargetCard: null,
       },
       resourceDeck: deck,
       resourceDiscard: discard,
@@ -3546,7 +3601,7 @@ export const useGameStore = create<GameStore>((set, get) => ({
   },
 
   talesOfOld(playerId, cardId, options) {
-    const { players, resourceDeck, resourceDiscard } = get()
+    const { players } = get()
     const player = players.find(p => p.id === playerId)
     if (!player || player.classId !== 'paladin') return
     if (player.activeTokens < 1) return
@@ -3941,7 +3996,6 @@ export const useGameStore = create<GameStore>((set, get) => ({
       players,
       rogueCounterfeitEffectPending,
       rogueCounterfeitEffectQueue,
-      diceResult,
       rn04RerollPending,
       trickShotPending,
     } = get()
@@ -4260,7 +4314,7 @@ export const useGameStore = create<GameStore>((set, get) => ({
   },
 
   useTrickShot() {
-    const { trickShotPending, players, resourceDeck, resourceDiscard } = get()
+    const { trickShotPending, players } = get()
     if (!trickShotPending) return
     const { rangerId, targetPlayerId, originalRoll, rollType, auctionCardId, auctionFromZone, auctionWindowIdx } = trickShotPending
     const ranger = players.find(p => p.id === rangerId)

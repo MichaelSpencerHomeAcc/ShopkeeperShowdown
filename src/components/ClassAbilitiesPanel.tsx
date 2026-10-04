@@ -1,6 +1,6 @@
 import { useState } from 'react'
-import type { Player, RepType, ShamanPatienceEffects, DuelStake, AmbushCard } from '../types'
-import { LOCATIONS } from './SharedBoard'
+import type { Player, RepType, ShamanPatienceEffects, DuelStake } from '../types'
+import { LOCATIONS } from '../data/locations'
 import { useGameStore } from '../store/gameStore'
 import { ResourceCardMini } from './ResourceCardMini'
 import { CardPickerGrid } from './CardPickerGrid'
@@ -531,7 +531,7 @@ function ShamanAbilities({ player, isActiveTurn }: { player: Player; isActiveTur
         : firstBrokenWindowIdx
       built.repair1 = { windowIdx }
     }
-    const tradeableCards = [...player.hoard, ...player.windows.flatMap((w, wi) => w.card && w.status !== 'broken' ? [w.card] : [])]
+    const tradeableCards = [...player.hoard, ...player.windows.flatMap(w => w.card && w.status !== 'broken' ? [w.card] : [])]
     if (patienceEffects.trade1 !== undefined) built.trade1 = { playerCardId: patienceTradeCardId || tradeableCards[0]?.id || '', fleaSlotIdx: patienceTradeFleaIdx }
     if (patienceEffects.forage2 && canPatienceForage) built.forage2 = true
     patienceOfStone(player.id, built)
@@ -859,7 +859,7 @@ function ShamanAbilities({ player, isActiveTurn }: { player: Player; isActiveTur
                 <span className="text-xs text-parchment-300 font-semibold">Trade 1</span>
               </label>
               {patienceEffects.trade1 !== undefined && (() => {
-                const patienceTradeCards = [...player.hoard, ...player.windows.flatMap((w, wi) => w.card && w.status !== 'broken' ? [w.card] : [])]
+                const patienceTradeCards = [...player.hoard, ...player.windows.flatMap(w => w.card && w.status !== 'broken' ? [w.card] : [])]
                 const patienceWindowBadges = Object.fromEntries(player.windows.flatMap((w, wi) => w.card && w.status !== 'broken' ? [[w.card.id, `🪟 W${wi+1}`]] : []))
                 return (
                 <div className="mt-1 pl-6 space-y-1">
@@ -928,8 +928,6 @@ function ShamanAbilities({ player, isActiveTurn }: { player: Player; isActiveTur
 
 // ---- Paladin ----
 
-const REP_TYPES_ALL: RepType[] = ['ARM', 'CON', 'TRI', 'TRG']
-
 const REP_BTN_SEL: Record<RepType, string> = {
   ARM: 'bg-orange-700/70 border-orange-400 text-orange-100',
   CON: 'bg-blue-700/70   border-blue-400   text-blue-100',
@@ -985,7 +983,6 @@ function PaladinAbilities({ player, isActiveTurn }: { player: Player; isActiveTu
   // rn01 passive: show second negotiate form when first is complete and no pending trade
   const hasRn01 = player.renownCards.some(c => c.id === 'rn01')
   const canSecondNegotiate = isActiveTurn && hasRn01 && negotiatesCompletedThisTurn === 1 && !negotiatePending
-  const neg2TargetPlayer = players.find(p => p.id === (neg2Target || otherPlayers[0]?.id))
   const neg2OfferCard = player.hoard.find(c => c.id === (neg2CardId || player.hoard[0]?.id))
 
   function clearTalesState() {

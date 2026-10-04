@@ -13,7 +13,7 @@ Resolve one of the 3 face-up Professionals at the Guildhall.
 Pay 3 coins. Gain 1 Reputation token of your choice.
 
 **Negotiate**
-Trade 1 resource directly with a willing player. Both players must agree. No Stolen marker is applied to either resource as a result of this trade.
+Trade 1 resource directly with a willing player. Both players must agree. No Stolen marker is applied to either resource as a result of this trade. Proposing uses the action; if the trade is declined, the action (and any Clan toll paid to enter the Guildhall) is refunded.
 
 ---
 
@@ -25,8 +25,8 @@ Ready all your expended Active tokens (flip them face-up).
 **Auction 1**
 Choose 1 resource. Roll d6. Sell the resource to the discard pile for that coin value. If the resource has a Reputation icon, gain the matching Rep token.
 
-**Trade 2**
-Swap 2 of your resources (from windows or hoard) with 2 resources from the Flea Market.
+**Trade 3**
+Swap up to 3 of your resources (from windows or hoard) with the same number of resources from the Flea Market.
 
 ---
 
@@ -84,5 +84,5 @@ Note: The Night Watcher badge holder cannot be targeted by this action.
 **Fence**
 Sell 1 Stolen resource from your Hoard to the discard pile. The resource type must be DIFFERENT from the resource currently on top of the Flea Market. Gain the coin value of the sold resource. Ignore any Reputation icon. The Stolen marker is removed on sale.
 
-**Launder 2**
-Draw 2 resources from the top of the resource deck. Mark them both as Stolen.
+**Launder 3**
+Draw 3 resources from the top of the resource deck. Mark them all as Stolen.

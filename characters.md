@@ -25,7 +25,7 @@ Recommended starter classes for first-time play: **Barbarian, Ranger, Monk, Sorc
 Break 1 of another player's windows. If that player has more Reputation tokens than you, Break 2 of their windows instead.
 
 ### Active — Raiding Party
-Place your Clan marker on any location. Draw 2 resources, keep 1, discard the other.
+Place your Clan marker on any location. Appraise 2 (look at the top 4 resources, keep 2, the rest go to the bottom of the deck).
 
 ### Class Feature — Clan
 - Any player who uses a location occupied by your Clan must give you 2 coins before resolving their action.

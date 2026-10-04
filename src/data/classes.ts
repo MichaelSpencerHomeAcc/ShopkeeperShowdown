@@ -10,7 +10,7 @@ export const CLASSES: ClassCard[] = [
     passive: 'Fearsome Champion — Add 2 to all Clash rolls. Other players may give you 2 resources from their Hoard to make you retreat from a Clash (you forfeit; they skip the roll). At the start of your turn, gain 1 coin for each Broken window currently on the board (minimum 1).',
     actives: [
       'Reckless Swing — Break 1 of another player\'s windows. If that player has more Reputation tokens than you, Break 2 of their windows instead.',
-      'Raiding Party — Place your Clan marker on any location. Then Appraise 1 (look at the top 4 resource cards; keep 1, discard the rest).',
+      'Raiding Party — Place your Clan marker on any location. Then Appraise 2 (look at the top 4 resource cards; keep 2, the rest go to the bottom of the deck).',
     ],
     playstyle: 'The Antagonist. Difficulty 1/5. Dominates through Clashes and board control. Your Clan marker forces opponents to pay a toll just to use a location — passive coin income adds up fast. Reckless Swing is devastating against leading players. The broken-window passive means chaos on the board pays you directly. Straightforward and brutal; great for new players who want to apply pressure.',
   },

@@ -1,9 +1,10 @@
 import { useState } from 'react'
 import { useAuth } from '../hooks/useAuth'
 import { createRoom, joinRoom as joinRoomFn } from '../lib/rooms'
+import type { OnlineSession } from '../App'
 
 interface Props {
-  onRoomJoined: (roomId: string, roomCode: string, isHost: boolean, playerName: string) => void
+  onRoomJoined: (session: OnlineSession) => void
   onBack: () => void
 }
 
@@ -27,7 +28,7 @@ export function MultiplayerLobby({ onRoomJoined, onBack }: Props) {
     }
     // Also add self as first player
     await joinRoomFn(room.code, user.id, name.trim())
-    onRoomJoined(room.id, room.code, true, name.trim())
+    onRoomJoined({ roomId: room.id, roomCode: room.code, isHost: true, playerName: name.trim(), userId: user.id })
   }
 
   async function handleJoin() {
@@ -40,7 +41,7 @@ export function MultiplayerLobby({ onRoomJoined, onBack }: Props) {
       setBusy(false)
       return
     }
-    onRoomJoined(room.id, room.code, room.host_id === user.id, name.trim())
+    onRoomJoined({ roomId: room.id, roomCode: room.code, isHost: room.host_id === user.id, playerName: name.trim(), userId: user.id })
   }
 
   if (loading) {
@@ -80,7 +81,7 @@ export function MultiplayerLobby({ onRoomJoined, onBack }: Props) {
               onClick={onBack}
               className="w-full text-base text-parchment-500 hover:text-parchment-300 transition-colors"
             >
-              Back to local play
+              Back to menu
             </button>
           </>
         )}
