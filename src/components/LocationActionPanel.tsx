@@ -1,5 +1,6 @@
 import { useState, useEffect } from 'react'
-import type { Location, RepType, Player, ResourceCard } from '../types'
+import type { Location, RepType, Player, ResourceCard, WorkOrderCard } from '../types'
+import { canPlayerCraft } from '../utils/crafting'
 import { useGameStore } from '../store/gameStore'
 import { Keyword } from './Keyword'
 import { ResourceCardMini } from './ResourceCardMini'
@@ -53,19 +54,9 @@ interface ActionOption {
   description: string
 }
 
-function getActionDisplay(action: ActionOption, player?: Player): ActionOption {
-  if (action.id !== 'craft') return action
-  return player?.workOrder
-    ? {
-        ...action,
-        label: 'Complete a Work Order',
-        description: 'Spend matching resources to complete your Work Order and earn coins.',
-      }
-    : {
-        ...action,
-        label: 'Draw 2 Work Orders and Pick One',
-        description: 'Draw 2 Work Orders and pick one to keep.',
-      }
+
+function getActionDisplay(action: ActionOption, _player?: Player): ActionOption {
+  return action
 }
 
 const LOCATION_ACTIONS: Record<Location, ActionOption[]> = {
@@ -91,7 +82,7 @@ const LOCATION_ACTIONS: Record<Location, ActionOption[]> = {
   ],
   workshop: [
     { id: 'take-2',   label: 'Take 2',     icon: '🛒', description: 'Take up to 2 cards from the Flea Market.' },
-    { id: 'craft',    label: 'Craft',      icon: '⚒️', description: 'Complete your Work Order to earn coins.' },
+    { id: 'craft',    label: 'Craft',      icon: '⚒️', description: 'Complete one of the public Work Orders on the board for its reward.' },
     { id: 'appraise', label: 'Appraise 2', icon: '🔍', description: 'Peek at 4 resource cards, keep up to 2.' },
   ],
   'thieves-guild': [
@@ -1676,12 +1667,12 @@ function AppraiseActionStep({ player, onAction, onBack }: { player: Player; onAc
 }
 
 function WorkshopActions({ actionId, onAction, onBack }: { actionId: string; onAction: () => void; onBack: () => void }) {
-  const { activePlayerId, players, fleaMarket, takeManyFromFleaMarket, drawWorkOrders, chooseWorkOrder } = useGameStore()
+  const { activePlayerId, players, fleaMarket, takeManyFromFleaMarket, activeWorkOrders } = useGameStore()
   const player = players.find(p => p.id === activePlayerId) ?? players[0]
   const [takeSelected, setTakeSelected] = useState<number[]>([])
+  const [craftOrderIdx, setCraftOrderIdx] = useState<number | null>(null)
   if (!player) return null
 
-  const pendingWorkOrders = (player as Player & { _pendingWorkOrders?: import('../types').WorkOrderCard[] })._pendingWorkOrders
   const fleaAvailable = fleaMarket.filter(c => c).length
 
   if (actionId === 'take-2') {
@@ -1720,55 +1711,54 @@ function WorkshopActions({ actionId, onAction, onBack }: { actionId: string; onA
   }
 
   if (actionId === 'craft') {
-    // Has a work order → complete it
-    if (player.workOrder) {
-      return <CraftCardPicker player={player} onDone={onAction} onBack={onBack} />
+    const chosen = craftOrderIdx !== null ? activeWorkOrders[craftOrderIdx] : null
+    if (chosen && craftOrderIdx !== null) {
+      return (
+        <CraftCardPicker
+          key={chosen.id}
+          player={player}
+          order={chosen}
+          orderIdx={craftOrderIdx}
+          onDone={() => { setCraftOrderIdx(null); onAction() }}
+          onBack={() => setCraftOrderIdx(null)}
+        />
+      )
     }
 
-    // Pending choices drawn — pick one (spending the action)
-    if (pendingWorkOrders) {
-      return (
-        <div className="space-y-2">
-          <BackButton onBack={onBack} />
-          <div className="text-xs text-parchment-300 font-semibold">Choose a Work Order:</div>
-          <div className="flex gap-3 flex-wrap">
-            {pendingWorkOrders.map(wo => (
+    // Step 1: pick one of the public Work Orders
+    return (
+      <div className="space-y-2">
+        <BackButton onBack={onBack} />
+        <div className="text-xs text-parchment-300 font-semibold">Choose a public Work Order to complete:</div>
+        <div className="grid grid-cols-3 gap-2">
+          {activeWorkOrders.map((wo, i) => {
+            if (!wo) return <div key={i} className="zone flex items-center justify-center text-xs text-parchment-700">—</div>
+            const ready = canPlayerCraft(player, wo)
+            return (
               <button
                 key={wo.id}
                 type="button"
-                onClick={() => { chooseWorkOrder(player.id, wo.id); onAction() }}
-                className="flex flex-col rounded-lg overflow-hidden border-2 border-parchment-700/40 hover:border-gold-400 active:scale-[.98] transition-all flex-shrink-0 w-[200px] text-left"
+                onClick={() => setCraftOrderIdx(i)}
+                className={`flex flex-col rounded-lg overflow-hidden border-2 transition-all text-left active:scale-[.98] ${
+                  ready ? 'border-green-500/70 hover:border-green-300' : 'border-parchment-700/40 hover:border-gold-400'
+                }`}
               >
                 <img src={wo.imageFile} alt={wo.name} className="w-full h-auto block" />
                 <div className="bg-ink-800/95 px-2 py-1.5 space-y-0.5">
                   <div className="text-[10px] font-semibold text-parchment-100 truncate">{wo.name}</div>
-                  <div className="flex items-center justify-between gap-1">
-                    <RecipeDisplay recipe={wo.recipe} />
-                    <span className="text-[10px] font-bold text-gold-400 flex-shrink-0">+${wo.price}</span>
+                  <RecipeDisplay recipe={wo.recipe} />
+                  <div className="flex items-center justify-between">
+                    <span className="text-[10px] font-bold text-gold-400">+${wo.price}</span>
+                    <span className={`text-[9px] font-bold ${ready ? 'text-green-400' : 'text-parchment-500'}`}>
+                      {ready ? '✓ can craft' : 'missing cards'}
+                    </span>
                   </div>
                 </div>
               </button>
-            ))}
-          </div>
+            )
+          })}
         </div>
-      )
-    }
-
-    // No work order yet — draw button
-    return (
-      <div className="space-y-3">
-        <BackButton onBack={onBack} />
-        <p className="text-sm text-parchment-300 leading-relaxed">
-          Draw 2 Work Orders and pick one. The unchosen card returns to the deck.
-        </p>
-        <button
-          type="button"
-          onClick={() => drawWorkOrders(player.id)}
-          disabled={false}
-          className="btn-primary text-xs px-4 py-1.5"
-        >
-          Draw 2 Work Orders and Pick One →
-        </button>
+        <p className="text-[10px] text-parchment-500">The completed order is replaced from the Work Order deck.</p>
       </div>
     )
   }
@@ -1780,9 +1770,15 @@ function WorkshopActions({ actionId, onAction, onBack }: { actionId: string; onA
   return null
 }
 
-function CraftCardPicker({ player, onDone, onBack }: { player: Player; onDone: () => void; onBack: () => void }) {
+function CraftCardPicker({ player, order, orderIdx, onDone, onBack }: {
+  player: Player
+  order: WorkOrderCard
+  orderIdx: number
+  onDone: () => void
+  onBack: () => void
+}) {
   const { completeCraft } = useGameStore()
-  const wo = player.workOrder!
+  const wo = order
   const req = parseRequirements(wo.recipe)
   const discount = player.craftDiscount ?? 0
   const [selected, setSelected] = useState<string[]>([])
@@ -1890,7 +1886,7 @@ function CraftCardPicker({ player, onDone, onBack }: { player: Player; onDone: (
         </div>
         <button
           type="button"
-          onClick={() => { completeCraft(player.id, selected); setSelected([]); onDone() }}
+          onClick={() => { completeCraft(player.id, orderIdx, selected); setSelected([]); onDone() }}
           disabled={!canCraft}
           className="btn-primary text-xs px-3 py-1 disabled:opacity-50 disabled:cursor-not-allowed"
         >

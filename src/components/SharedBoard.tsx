@@ -4,12 +4,13 @@ import type { Location, Player, GameState, DuelStake, ResourceCard } from '../ty
 import { LocationActionPanel, DrawnCardsToast } from './LocationActionPanel'
 import { SellPhase } from './SellPhase'
 import { ResourceCardMini } from './ResourceCardMini'
-import { RecipeDisplay, ResourceCardTile } from './ResourceCardTile'
+import { ResourceCardTile } from './ResourceCardTile'
 import { CardImage } from './CardImage'
 import { parseRequirements } from '../utils/requirements'
 import { scorePlayer } from '../utils/scoring'
 import { LOCATIONS } from '../data/locations'
 import { DiceRollModal } from './DiceRollModal'
+import { PublicWorkOrdersRow, PublicWorkOrdersReference } from './PublicWorkOrders'
 
 const DEMAND_COLORS: Record<string, string> = {
   ARM: 'bg-orange-600 text-orange-100',
@@ -157,7 +158,6 @@ export function SharedBoard({ canAct = true, localPlayerName }: SharedBoardProps
     fleaMarket,
     auction, tradeWithFleaMarket, breakWindow,
     resourceDeck, resourceDiscard,
-    workOrderDeck,
     townCrierPeek, completeTownCrier, activeVisitors, visitorDemandRemaining,
     professionalSlots,
     actionLog, lastGuildFencedCard,
@@ -1215,16 +1215,8 @@ export function SharedBoard({ canAct = true, localPlayerName }: SharedBoardProps
           <h4 className="text-base font-bold text-parchment-300 uppercase tracking-widest text-center mt-1">Flea Market</h4>
         </div>
 
-        {/* Right — Work Orders */}
-        <div className="flex flex-col items-center gap-3 flex-shrink-0">
-          <div className="card w-[80px] h-[112px]">
-            <CardImage src="/cards/workorders/Card Back.png" alt="Work Order deck" className="w-full h-full" fallbackText="Work Orders" />
-          </div>
-          <div className="text-center">
-            <div className="text-xs font-bold text-parchment-400 uppercase tracking-widest">Work Orders</div>
-            <div className="text-xs text-parchment-500">{workOrderDeck.length} remaining</div>
-          </div>
-        </div>
+        {/* Right — public Work Orders (anyone may Craft these at the Workshop) */}
+        <PublicWorkOrdersRow player={localPlayerId ? players.find(p => p.id === localPlayerId) : currentPlayer} />
 
       </div>
 
@@ -2669,7 +2661,6 @@ function HoardOverflowModal({
   reorderCounterfeitHand: (playerId: string, fromIdx: number, toIdx: number) => void
 }) {
   const [placingCardId, setPlacingCardId] = useState<string | null>(null)
-  const [showWorkOrder, setShowWorkOrder] = useState(false)
   const over = player.hoard.length - 8
 
   const WINDOW_TYPE_BG: Record<string, string> = {
@@ -2691,29 +2682,9 @@ function HoardOverflowModal({
           </div>
         </div>
 
-        {player.workOrder && (
-          <div className="mb-4">
-            <button
-              type="button"
-              onClick={() => setShowWorkOrder(v => !v)}
-              className="w-full flex items-center justify-between px-3 py-2 bg-amber-950/40 border border-amber-700/30 rounded-lg text-sm text-amber-300 font-semibold hover:bg-amber-900/40 transition-colors"
-            >
-              <span>📋 Work Order: {player.workOrder.name}</span>
-              <span>{showWorkOrder ? '▲' : '▼'}</span>
-            </button>
-
-            {showWorkOrder && (
-              <div className="px-3 py-2 bg-amber-950/20 border-x border-b border-amber-700/30 rounded-b-lg space-y-0.5">
-                <div className="text-sm text-parchment-400">
-                  Recipe: <RecipeDisplay recipe={player.workOrder.recipe} />
-                </div>
-                <div className="text-sm text-parchment-400">
-                  Reward: {player.workOrder.price} coins
-                </div>
-              </div>
-            )}
-          </div>
-        )}
+        <div className="mb-4">
+          <PublicWorkOrdersReference player={player} />
+        </div>
 
         {/* Windows section */}
         <div className="mb-5">

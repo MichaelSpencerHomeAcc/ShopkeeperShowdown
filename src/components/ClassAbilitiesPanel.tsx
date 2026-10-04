@@ -1326,7 +1326,7 @@ function PaladinAbilities({ player, isActiveTurn }: { player: Player; isActiveTu
                       )}
                       {card.id === 'rn02' && (
                         <div className="text-xs text-amber-300">
-                          Your next Work Order completion requires 1 fewer resource. Head to the Workshop to craft.
+                          Your next Craft needs 1 fewer resource. Head to the Workshop to complete a public Work Order.
                         </div>
                       )}
                       {/* rn03: choose up to 2 of your own windows to close */}

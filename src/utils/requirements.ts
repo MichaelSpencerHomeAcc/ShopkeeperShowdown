@@ -33,3 +33,19 @@ export function meetsRequirements(selected: { type: ResourceType }[], req: Requi
 export function totalRequired(req: Requirements): number {
   return req.ARM + req.CON + req.TRI + req.TRG + req.ANY
 }
+
+const REQUIREMENT_KEYS = ['ARM', 'CON', 'TRI', 'TRG', 'ANY'] as const
+
+function meetsWithWaivers(selected: { type: ResourceType }[], req: Requirements, waivers: number): boolean {
+  if (meetsRequirements(selected, req)) return true
+  if (waivers <= 0) return false
+  return REQUIREMENT_KEYS.some(k => req[k] > 0 && meetsWithWaivers(selected, { ...req, [k]: req[k] - 1 }, waivers - 1))
+}
+
+/**
+ * True when `selected` cards satisfy a Work Order `recipe`. `waivers` lets that many required
+ * cards be skipped (Paladin's Forge of Ironpeak discount).
+ */
+export function canCraft(selected: { type: ResourceType }[], recipe: string, waivers = 0): boolean {
+  return meetsWithWaivers(selected, parseRequirements(recipe), waivers)
+}

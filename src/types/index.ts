@@ -125,7 +125,6 @@ export interface Player {
   activeTokens: number
   windows: WindowSlot[]
   hoard: ResourceCard[]
-  workOrder: WorkOrderCard | null
   renownCards: RenownCard[]
   /** Rogue only — draw pile for Counterfeit cards */
   counterfeitCards: CounterfeitCard[]
@@ -137,7 +136,7 @@ export interface Player {
   hasNightWatcher: boolean
   stolenHoardCardIds: string[]
   pitchCampPending: boolean
-  /** Forge of Ironpeak (rn02) spend: reduces next Work Order completion by this many cards */
+  /** Forge of Ironpeak (rn02) spend: the next Craft may skip this many required cards */
   craftDiscount: number
   /** Last Stand at Greyveil (rn04) passive: once per round, may re-roll any single die */
   rn04RerollUsed: boolean
@@ -197,6 +196,8 @@ export interface GameState {
   professionalSlots: (ProfessionalCard | null)[]
 
   workOrderDeck: WorkOrderCard[]
+  /** Face-up Work Orders anyone may complete at the Workshop with Craft */
+  activeWorkOrders: (WorkOrderCard | null)[]
 
   actionLog: LogEntry[]
   /** Last card fenced at the Thieves' Guild; kept visible there instead of discarded. */

@@ -48,6 +48,7 @@ export function ActionLog({ players, localPlayerName }: { players?: Player[]; lo
     visitorDiscard,
     professionalSlots,
     workOrderDeck,
+    activeWorkOrders,
   } = useGameStore()
 
   const allPlayers = players ?? useGameStore.getState().players
@@ -85,6 +86,7 @@ export function ActionLog({ players, localPlayerName }: { players?: Player[]; lo
     visitorDiscard.forEach(c => add(c.name))
     professionalSlots.forEach(c => add(c?.name))
     workOrderDeck.forEach(c => add(c.name))
+    activeWorkOrders.forEach(c => add(c?.name))
     allPlayers.forEach(p => {
       p.hoard.forEach(c => add(c.name))
       p.windows.forEach(w => add(w.card?.name))
@@ -93,10 +95,9 @@ export function ActionLog({ players, localPlayerName }: { players?: Player[]; lo
       p.renownCards.forEach(c => add(c.name))
       p.ambushHand.forEach(c => add(c.location))
       p.ambushesPlaced.forEach(c => add(c.location))
-      add(p.workOrder?.name)
     })
     return [...names].sort((a, b) => b.length - a.length)
-  }, [resourceDeck, resourceDiscard, fleaMarket, activeVisitors, visitorDeck, visitorDiscard, professionalSlots, workOrderDeck, allPlayers])
+  }, [resourceDeck, resourceDiscard, fleaMarket, activeVisitors, visitorDeck, visitorDiscard, professionalSlots, workOrderDeck, activeWorkOrders, allPlayers])
 
   const cardImages = useMemo(() => {
     const images = new Map<string, string>()
@@ -111,16 +112,16 @@ export function ActionLog({ players, localPlayerName }: { players?: Player[]; lo
     visitorDiscard.forEach(c => add(c.name, c.imageFile))
     professionalSlots.forEach(c => add(c?.name, c?.imageFile))
     workOrderDeck.forEach(c => add(c.name, c.imageFile))
+    activeWorkOrders.forEach(c => add(c?.name, c?.imageFile))
     allPlayers.forEach(p => {
       p.hoard.forEach(c => add(c.name, c.imageFile))
       p.windows.forEach(w => add(w.card?.name, w.card?.imageFile))
       p.counterfeitCards.forEach(c => add(c.name, c.imageFile))
       p.counterfeitHand.forEach(c => add(c.name, c.imageFile))
       p.renownCards.forEach(c => add(c.name, c.imageFile))
-      add(p.workOrder?.name, p.workOrder?.imageFile)
     })
     return images
-  }, [resourceDeck, resourceDiscard, fleaMarket, activeVisitors, visitorDeck, visitorDiscard, professionalSlots, workOrderDeck, allPlayers])
+  }, [resourceDeck, resourceDiscard, fleaMarket, activeVisitors, visitorDeck, visitorDiscard, professionalSlots, workOrderDeck, activeWorkOrders, allPlayers])
 
   function renderMessage(message: string) {
     const terms = [

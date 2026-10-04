@@ -1,10 +1,10 @@
 import { create } from 'zustand'
 import type {
-  GameState, Player, ResourceCard, WorkOrderCard, VisitorCard, CounterfeitCard,
+  GameState, Player, ResourceCard, VisitorCard, CounterfeitCard,
   ClassId, Location, WindowStatus, LogEntry, RepType, ShamanPatienceEffects, AmbushCard,
   DemandMap, PlayerSetup, BotDifficulty,
 } from '../types'
-import { parseRequirements } from '../utils/requirements'
+import { canCraft, parseRequirements } from '../utils/requirements'
 import { RESOURCE_CARDS } from '../data/resources'
 import { VISITOR_CARDS } from '../data/visitors'
 import { PROFESSIONAL_CARDS } from '../data/professionals'
@@ -19,6 +19,8 @@ export const FEARSOME_CHAMPION_MAX = 2
 export const CLAN_TOLL = 1
 /** Shaman Elemental dice that have been used recharge at the start of this round. */
 export const SHAMAN_DICE_RECHARGE_ROUND = 4
+/** Face-up Work Orders on the board that any player may complete with Craft. */
+export const PUBLIC_WORK_ORDERS = 3
 
 function shuffle<T>(arr: T[]): T[] {
   const a = [...arr]
@@ -84,7 +86,6 @@ function makePlayer(id: string, name: string, classId: ClassId, bot?: BotDifficu
     activeTokens: classId === 'monk' ? 0 : 2,
     windows,
     hoard: [],
-    workOrder: null,
     renownCards,
     counterfeitCards,
     counterfeitHand,
@@ -163,6 +164,8 @@ function buildInitialGameState(players: Player[]): GameState {
   const resourceDeck = shuffle(RESOURCE_CARDS)
   const visitorDeck = shuffle(VISITOR_CARDS)
   const workOrderDeck = shuffle(WORK_ORDER_CARDS)
+  // Public Work Orders: dealt face-up on the board for anyone to Craft
+  const activeWorkOrders = workOrderDeck.splice(0, PUBLIC_WORK_ORDERS)
 
   // Flea market: 5 face-up resource cards
   const fleaMarket = resourceDeck.splice(0, 5)
@@ -203,6 +206,7 @@ function buildInitialGameState(players: Player[]): GameState {
     activeVisitors: [...activeVisitors, null, null].slice(0, 3),
     professionalSlots,
     workOrderDeck,
+    activeWorkOrders: [...activeWorkOrders, ...Array(PUBLIC_WORK_ORDERS).fill(null)].slice(0, PUBLIC_WORK_ORDERS),
     actionLog: [logEntry(draftCards.length > 0 ? 'Starting resource snake draft began.' : 'Game started. Good luck, shopkeepers!')],
     lastGuildFencedCard: null,
     lastGuildFenceType: null,
@@ -256,8 +260,6 @@ export interface GameStore extends GameState {
   // Deck actions
   drawResource: (playerId: string, toHoard?: boolean) => void
   discardResource: (playerId: string, cardId: string, fromZone: 'hoard' | 'window', windowIdx?: number) => void
-  drawWorkOrders: (playerId: string) => void
-  chooseWorkOrder: (playerId: string, cardId: string) => void
 
   // Window actions
   placeInWindow: (playerId: string, cardId: string, windowIdx: number) => void
@@ -323,7 +325,8 @@ export interface GameStore extends GameState {
   hireBodyguard: (playerId: string) => void
   repairAllWindows: (playerId: string, repType?: import('../types').RepType) => void
   reportCrimeB: (byPlayerId: string, targetPlayerId: string, stolenCardId: string, repType: RepType) => void
-  completeCraft: (playerId: string, cardIds: string[]) => void
+  /** Complete public Work Order `orderIdx` by spending `cardIds` (hoard, windows, or Rogue counterfeits) */
+  completeCraft: (playerId: string, orderIdx: number, cardIds: string[]) => void
   pitchCamp: (playerId: string) => void
   peekTownCrier: (playerId: string) => void
   completeTownCrier: (playerId: string, placeCardId: string, replaceSlotIdx: number) => void
@@ -449,6 +452,7 @@ const INITIAL: GameState = {
   activeVisitors: [null, null, null],
   professionalSlots: [],
   workOrderDeck: [],
+  activeWorkOrders: Array(PUBLIC_WORK_ORDERS).fill(null),
   actionLog: [],
   lastGuildFencedCard: null,
   lastGuildFenceType: null,
@@ -849,44 +853,6 @@ export const useGameStore = create<GameStore>((set, get) => ({
     if (discardedCard && isCounterfeitCard(discardedCard)) {
       get().returnCounterfeitsToRogue([discardedCard], playerId, 'discarded')
     }
-  },
-
-  drawWorkOrders(playerId) {
-    const { workOrderDeck, players } = get()
-    if (workOrderDeck.length < 2) return
-    const player = players.find(p => p.id === playerId)
-    if (!player) return
-    // Give player 2 options stored temporarily; they pick one
-    const [a, b, ...rest] = workOrderDeck
-    set(s => ({
-      workOrderDeck: rest,
-      // Store both as a pending choice on the player — we simplify by just showing the first
-      players: s.players.map(p =>
-        p.id === playerId ? { ...p, _pendingWorkOrders: [a, b] as WorkOrderCard[] } : p
-      ) as Player[],
-      actionLog: [logEntry(`${player.name} drew 2 Work Orders.`, playerId), ...s.actionLog.slice(0, 49)],
-    }))
-  },
-
-  chooseWorkOrder(playerId, cardId) {
-    const { players } = get()
-    const player = players.find(p => p.id === playerId) as (Player & { _pendingWorkOrders?: WorkOrderCard[] }) | undefined
-    if (!player) return
-    const pending = player._pendingWorkOrders ?? []
-    const chosen = pending.find(c => c.id === cardId)
-    const returned = pending.find(c => c.id !== cardId)
-    if (!chosen) return
-
-    set(s => ({
-      workOrderDeck: returned ? [...s.workOrderDeck, returned] : s.workOrderDeck,
-      players: s.players.map(p => {
-        if (p.id !== playerId) return p
-        const pp = p as Player & { _pendingWorkOrders?: WorkOrderCard[] }
-        const { _pendingWorkOrders: _, ...rest } = pp
-        return { ...rest, workOrder: chosen }
-      }),
-      actionLog: [logEntry(`${player.name} took Work Order: ${chosen.name}.`, playerId), ...s.actionLog.slice(0, 49)],
-    }))
   },
 
   placeInWindow(playerId, cardId, windowIdx) {
@@ -2233,67 +2199,62 @@ export const useGameStore = create<GameStore>((set, get) => ({
     }))
   },
 
-  completeCraft(playerId, cardIds) {
-    const { players } = get()
+  completeCraft(playerId, orderIdx, cardIds) {
+    const { players, activeWorkOrders, workOrderDeck } = get()
     const player = players.find(p => p.id === playerId)
-    if (!player || !player.workOrder) return
+    const order = activeWorkOrders[orderIdx]
+    if (!player || !order) return
 
     const cardIdSet = new Set(cardIds)
 
-    // Cards can come from hoard, windows, or Rogue's drawn counterfeit hand
+    // Cards can come from hoard, non-broken windows, or the Rogue's counterfeit hand
     const fromHoard = player.hoard.filter(c => cardIdSet.has(c.id))
-
     const fromWindows = player.windows.flatMap(w =>
-      w.card && cardIdSet.has(w.card.id) ? [w.card] : []
+      w.card && w.status !== 'broken' && cardIdSet.has(w.card.id) ? [w.card] : []
     )
-
     const fromCounterfeitHand =
       player.classId === 'rogue'
         ? player.counterfeitHand.filter(c => cardIdSet.has(c.id))
         : []
+    const spentCards = [...fromHoard, ...fromWindows, ...fromCounterfeitHand]
 
-    const spentCards = [
-      ...fromHoard,
-      ...fromWindows,
-      ...fromCounterfeitHand,
-    ]
+    if (!canCraft(spentCards, order.recipe, player.craftDiscount)) {
+      set(s => ({
+        actionLog: [logEntry(`${player.name} can't complete "${order.name}" — those resources don't match the recipe.`, playerId), ...s.actionLog.slice(0, 49)],
+      }))
+      return
+    }
 
     const counterfeitCards = spentCards.filter(isCounterfeitCard)
     const discardedCards = spentCards.filter(c => !isCounterfeitCard(c))
-    const removedCounterfeitCount = counterfeitCards.length
-
-    const baseGain = player.workOrder.price
+    const spentIds = new Set(spentCards.map(c => c.id))
 
     // Forge of Ironpeak (rn02) passive: +3 bonus coins on craft completion
     const rn02Bonus =
       player.classId === 'paladin' && player.renownCards.some(c => c.id === 'rn02')
         ? 3
         : 0
-
-    const gained = baseGain + rn02Bonus
+    const gained = order.price + rn02Bonus
     const discountUsed = player.craftDiscount > 0
+
+    // Refill the public slot from the deck; the completed order goes to the bottom
+    const [next, ...rest] = workOrderDeck
 
     set(s => ({
       resourceDiscard: [...discardedCards, ...s.resourceDiscard],
+      activeWorkOrders: s.activeWorkOrders.map((o, i) => (i === orderIdx ? next ?? null : o)),
+      workOrderDeck: [...rest, order],
       players: s.players.map(p =>
         p.id === playerId
           ? {
               ...p,
-              workOrder: null,
               craftDiscount: 0,
               coins: p.coins + gained,
-
-              // Remove spent normal cards from hoard
-              hoard: p.hoard.filter(c => !cardIdSet.has(c.id)),
-
-              // Remove spent drawn counterfeits from Rogue's hand
-              counterfeitHand: p.counterfeitHand.filter(c => !cardIdSet.has(c.id)),
-
-              stolenHoardCardIds: p.stolenHoardCardIds.filter(id => !cardIdSet.has(id)),
-
-              // Remove spent window cards
+              hoard: p.hoard.filter(c => !spentIds.has(c.id)),
+              counterfeitHand: p.counterfeitHand.filter(c => !spentIds.has(c.id)),
+              stolenHoardCardIds: p.stolenHoardCardIds.filter(id => !spentIds.has(id)),
               windows: p.windows.map(w =>
-                w.card && cardIdSet.has(w.card.id)
+                w.card && w.status !== 'broken' && spentIds.has(w.card.id)
                   ? { ...w, card: null, stolen: false }
                   : w
               ),
@@ -2301,12 +2262,13 @@ export const useGameStore = create<GameStore>((set, get) => ({
           : p
       ),
       actionLog: [logEntry(
-        `${player.name} completed Work Order "${player.workOrder!.name}" — spent ${spentCards.length} cards, gained ${gained} coins.` +
+        `${player.name} completed Work Order "${order.name}" — spent ${spentCards.length} cards, gained ${gained} coins.` +
         (discountUsed ? ' (Forge of Ironpeak discount applied)' : '') +
         (rn02Bonus > 0 ? ` ◆ Forge of Ironpeak — +${rn02Bonus} bonus coins.` : '') +
-        (removedCounterfeitCount > 0
-          ? ` ${removedCounterfeitCount} Counterfeit card${removedCounterfeitCount !== 1 ? 's were' : ' was'} returned to the Rogue.`
-          : ''),
+        (counterfeitCards.length > 0
+          ? ` ${counterfeitCards.length} Counterfeit card${counterfeitCards.length !== 1 ? 's were' : ' was'} returned to the Rogue.`
+          : '') +
+        (next ? ` New Work Order: ${next.name}.` : ''),
         playerId
       ), ...s.actionLog.slice(0, 49)],
     }))
@@ -3672,11 +3634,11 @@ export const useGameStore = create<GameStore>((set, get) => ({
           logMsg += 'Trade cancelled — no valid selection.'
           break
         }
-        case 'rn02': { // Complete Crafting Order for 1 less resource
+        case 'rn02': { // Next Craft needs 1 less resource
           updatedPlayers = updatedPlayers.map(p =>
             p.id !== playerId ? p : { ...p, craftDiscount: p.craftDiscount + 1 }
           )
-          logMsg += 'Forge of Ironpeak — next Work Order can be completed with 1 fewer resource.'
+          logMsg += 'Forge of Ironpeak — their next Craft needs 1 fewer resource.'
           break
         }
         case 'rn03': { // Close 2 middle windows until your next turn; gain 1 Rep each

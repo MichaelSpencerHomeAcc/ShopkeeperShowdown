@@ -1,7 +1,7 @@
 import { useState } from 'react'
 import { useGameStore } from '../store/gameStore'
 import { ResourceCardMini } from './ResourceCardMini'
-import { RecipeDisplay } from './ResourceCardTile'
+import { PublicWorkOrdersReference } from './PublicWorkOrders'
 import { parseRequirements } from '../utils/requirements'
 import type { ResourceCard, DemandMap } from '../types'
 
@@ -51,7 +51,6 @@ export function SellPhase({ onDone }: { onDone?: () => void } = {}) {
 
   // assignments: visitorIdx → windowIdx
   const [assignments, setAssignments] = useState<Map<number, number>>(new Map())
-  const [showWorkOrder, setShowWorkOrder] = useState(false)
 
   if (!player || round < 2) return null
 
@@ -96,25 +95,8 @@ export function SellPhase({ onDone }: { onDone?: () => void } = {}) {
 
   return (
     <div className="space-y-3">
-      {/* Work Order reference */}
-      {player.workOrder && (
-        <div>
-          <button
-            onClick={() => setShowWorkOrder(v => !v)}
-            className="w-full flex items-center justify-between px-2 py-1.5 bg-amber-950/40 border border-amber-700/30 rounded-lg text-[10px] text-amber-300 font-semibold hover:bg-amber-900/40 transition-colors"
-          >
-            <span>📋 Work Order: {player.workOrder.name}</span>
-            <span>{showWorkOrder ? '▲' : '▼'}</span>
-          </button>
-          {showWorkOrder && (
-            <div className="px-2 py-1.5 bg-amber-950/20 border-x border-b border-amber-700/30 rounded-b-lg space-y-0.5">
-              <div className="text-[10px] text-parchment-400">Recipe: <RecipeDisplay recipe={player.workOrder.recipe} /></div>
-              <div className="text-[10px] text-gold-400 font-semibold">Reward: ${player.workOrder.price}</div>
-              <div className="text-[9px] text-parchment-600 italic">Complete this at the Workshop — keep the right resources in your windows.</div>
-            </div>
-          )}
-        </div>
-      )}
+      {/* Public Work Order reference — helps decide what to keep back */}
+      <PublicWorkOrdersReference player={player} compact />
 
       {windowOptions.length === 0 ? (
         <div className="text-xs text-parchment-600 italic">No items in windows to sell.</div>

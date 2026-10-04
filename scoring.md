@@ -125,7 +125,7 @@ If two or more players are tied on final score, apply these tiebreakers in order
 ## What does NOT count toward score
 
 - Resources still in windows or hoard (these are NOT converted to coins at end of game)
-- Unsold Work Orders on Workbench (these are wasted effort)
+- Resources held back for a public Work Order that was never crafted (these are wasted effort)
 - Coins owed to other players (Warlock Debt tokens — these still count as held coins for the holder)
 - Active tokens, Momentum tokens (Monk's Momentum DOES convert — see below)
 
@@ -200,7 +200,7 @@ function compareForTiebreak(a, b) {
 
 These are edge cases that have not been definitively resolved in design and should be confirmed via playtest:
 
-- **What happens to mid-craft Work Orders at game end?** Currently: discarded, no value. Resources used toward them are not refunded.
+- **What about resources saved for a public Work Order at game end?** Currently: no value unless sold in the final Sell Phase. Work Orders are public, so nobody owns an unfinished one.
 - **Are Counterfeits in windows worth their printed coin value at end of game?** Currently: only if sold during the final Sell Phase. Otherwise no value.
 - **What if the resource deck runs out mid-final-Sell-Phase?** Reshuffle the discard pile. Worth noting in case the app needs to handle this.
 - **Does the player with the Night Watcher badge at game end gain any bonus?** No. The badge has no end-game value.

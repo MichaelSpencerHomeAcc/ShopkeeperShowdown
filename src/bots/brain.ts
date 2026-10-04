@@ -6,7 +6,7 @@ import { parseRequirements } from '../utils/requirements'
 import {
   MIDDLE_WINDOWS, RESOURCE_TYPES, actionsLeft, averageWorth, bestRepType, buildContext, cardWorth,
   clamp, drawValue, harmWeight, heldCards, isCounterfeit, liveScore, marginalRep, rankOpponents,
-  repValue, saleValue, sellPhasesLeft, sortByWorth, type ValueContext,
+  missingForOrder, repValue, saleValue, sellPhasesLeft, sortByWorth, targetWorkOrder, type ValueContext,
 } from './evaluate'
 
 /**
@@ -438,7 +438,7 @@ export function planSales(s: GameStore, me: Player, ctx: ValueContext): { visito
     .filter((x): x is { v: VisitorCard; i: number } => x.v !== null)
   if (windows.length === 0 || visitors.length === 0) return []
 
-  const reserved = me.bot === 'easy' ? new Set<string>() : craftReservation(me, ctx)
+  const reserved = me.bot === 'easy' ? new Set<string>() : craftReservation(s, me, ctx)
 
   const fits = (card: ResourceCard, v: VisitorCard) => {
     const rem = s.visitorDemandRemaining[v.id] ?? parseRequirements(v.demand)
@@ -486,12 +486,12 @@ export function planSales(s: GameStore, me: Player, ctx: ValueContext): { visito
   return best.list
 }
 
-/** Card ids a bot wants to keep for a Work Order it can finish soon. */
-function craftReservation(me: Player, ctx: ValueContext): Set<string> {
-  const plan = craftPlan(me, ctx)
-  // Hard bots also hold cards back while one card short — they'll go and find the last one
-  const maxMissing = ctx.difficulty === 'hard' ? 1 : 0
-  return new Set(plan && plan.missing <= maxMissing ? plan.cardIds : [])
+/** Card ids a bot wants to keep for the public Work Order it can finish soon. */
+function craftReservation(s: GameStore, me: Player, ctx: ValueContext): Set<string> {
+  const target = targetWorkOrder(s, me, ctx.difficulty)
+  const plan = target ? craftPlan(me, ctx, target) : null
+  // Orders are public, so only hold cards back once the order can be finished right away
+  return new Set(plan && plan.missing === 0 ? plan.cardIds : [])
 }
 
 function finalSellStep(s: GameStore, memory: BotMemory): BotStep | null {
@@ -774,24 +774,18 @@ function locationCandidates(s: GameStore, me: Player, ctx: ValueContext): Candid
       add('workshop', `take:${flea.map(x => x.c.id).join(',')}`, value,
         g => g.takeManyFromFleaMarket(me.id, flea.map(x => x.i)), true)
     }
-    if (me.workOrder) {
-      const plan = craftPlan(me, ctx)
-      if (plan && plan.missing === 0) {
-        const bonus = me.classId === 'paladin' && me.renownCards.some(c => c.id === 'rn02') ? 3 : 0
-        add('workshop', `craft:${plan.cardIds.join(',')}`, me.workOrder.price + bonus - plan.cost * 0.85,
-          g => g.completeCraft(me.id, plan.cardIds), true)
-      }
-    } else if (s.workOrderDeck.length >= 2 && phases >= 2) {
-      const orderValue = difficulty === 'hard' ? 8 : 3.5
-      add('workshop', 'draw-work-order', orderValue * clamp(phases / 4, 0.25, 1), g => {
-        g.drawWorkOrders(me.id)
-        const pending = (st().players.find(p => p.id === me.id) as Player & { _pendingWorkOrders?: WorkOrderCard[] })._pendingWorkOrders
-        if (pending && pending.length > 0) {
-          const chosen = chooseWorkOrder(st().players.find(p => p.id === me.id)!, pending, ctx)
-          st().chooseWorkOrder(me.id, chosen.id)
-        }
-      }, true)
-    }
+    // Craft: complete any public Work Order the bot can already fill
+    s.activeWorkOrders.forEach((wo, idx) => {
+      if (!wo) return
+      const plan = craftPlan(me, ctx, wo)
+      if (!plan || plan.missing > 0) return
+      const bonus = me.classId === 'paladin' && me.renownCards.some(c => c.id === 'rn02') ? 3 : 0
+      // Hard bots also value snatching an order a rival could finish on their next turn
+      const rivalReady = difficulty === 'hard' && s.players.some(p => p.id !== me.id && missingForOrder(p, wo) === 0)
+      const denial = rivalReady ? wo.price * 0.3 : 0
+      add('workshop', `craft:${wo.id}:${plan.cardIds.join(',')}`, wo.price + bonus + denial - plan.cost * 0.85,
+        g => g.completeCraft(me.id, idx, plan.cardIds), true)
+    })
     if (s.resourceDeck.length >= 1) {
       add('workshop', 'appraise', drawValue(2, avgDraw * 1.25, me), g => {
         g.peekWorkshopAppraise(me.id)
@@ -951,10 +945,9 @@ function bestFence(s: GameStore, me: Player, ctx: ValueContext) {
   return best
 }
 
-/** Cheapest set of held cards that satisfies the bot's Work Order recipe. */
-function craftPlan(me: Player, ctx: ValueContext): { cardIds: string[]; cost: number; missing: number } | null {
-  if (!me.workOrder) return null
-  const req = parseRequirements(me.workOrder.recipe)
+/** Cheapest set of held cards that satisfies a Work Order recipe. */
+function craftPlan(me: Player, ctx: ValueContext, order: WorkOrderCard): { cardIds: string[]; cost: number; missing: number } {
+  const req = parseRequirements(order.recipe)
   if (me.craftDiscount > 0) {
     // Waive the requirement that would otherwise cost the most valuable card
     const t = RESOURCE_TYPES.filter(rt => req[rt] > 0)
@@ -985,17 +978,6 @@ function craftPlan(me: Player, ctx: ValueContext): { cardIds: string[]; cost: nu
   const ids = [...used]
   const cost = pool.filter(c => used.has(c.id)).reduce((n, c) => n + cardWorth(c, ctx), 0)
   return { cardIds: ids, cost, missing }
-}
-
-function chooseWorkOrder(me: Player, options: WorkOrderCard[], ctx: ValueContext): WorkOrderCard {
-  const have: Record<ResourceType, number> = { ARM: 0, CON: 0, TRI: 0, TRG: 0 }
-  for (const c of heldCards(me)) have[c.type]++
-  const score = (wo: WorkOrderCard) => {
-    const req = parseRequirements(wo.recipe)
-    const missing = RESOURCE_TYPES.reduce((n, t) => n + Math.max(0, req[t] - have[t]), 0)
-    return wo.price - missing * (ctx.difficulty === 'easy' ? 0 : 5)
-  }
-  return [...options].sort((a, b) => score(b) - score(a))[0]
 }
 
 /** How many of the bot's held cards this Visitor would buy. */

@@ -18,7 +18,7 @@ export function CheatSheetModal({ onClose }: { onClose: () => void }) {
         </div>
         <div className="p-4 grid md:grid-cols-2 gap-3 text-sm text-parchment-300">
           <GuideSection title="Aim Of The Game">
-            <p>Build the best shop by collecting resources, placing them in windows, completing Visitor and Work Order sales, and scoring coins plus Reputation.</p>
+            <p>Build the best shop by collecting resources, placing them in windows, selling to Visitors, crafting the public Work Orders, and scoring coins plus Reputation.</p>
             <p>Reputation scores by type, and balanced sets are valuable at the end. Coins still matter, but a strong rep spread can swing the game.</p>
           </GuideSection>
 
@@ -45,7 +45,7 @@ export function CheatSheetModal({ onClose }: { onClose: () => void }) {
               <li>Visitor demand: match the symbols they still need.</li>
               <li>Card value: higher values pay more coins when sold.</li>
               <li>Star rep: cards with rep icons give bonus rep when sold.</li>
-              <li>Work Order recipes: save the right resource types if a big craft payout is close.</li>
+              <li>Work Orders are public: anyone can Craft them at the Workshop, so finish a big one before a rival does.</li>
             </ul>
           </GuideSection>
 
@@ -62,7 +62,7 @@ export function CheatSheetModal({ onClose }: { onClose: () => void }) {
             <ol className="space-y-1 list-decimal list-inside">
               <li>Check visitors.</li>
               <li>Fill windows with matching resources.</li>
-              <li>Use actions to patch gaps or build toward your Work Order.</li>
+              <li>Use actions to patch gaps or build toward one of the public Work Orders.</li>
               <li>End with windows filled and your hoard under control.</li>
             </ol>
           </GuideSection>

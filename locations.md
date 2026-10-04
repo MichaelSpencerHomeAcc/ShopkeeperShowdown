@@ -64,8 +64,7 @@ Look at the top 3 Visitor cards. Place 1 of them into play, replacing a current 
 Take 1 resource currently displayed in the Flea Market into your hand or windows. The Flea Market refills from the deck immediately.
 
 **Craft**
-- If your Workbench is empty: draw 2 Work Order cards. Choose 1 to place face-up on your Workbench. Return the other to the bottom of the Work Order deck.
-- If your Workbench is active and you have the required resources: spend the listed resources from your windows/hoard and complete the Work Order. Flip the card to reveal the crafted item and gain the printed coin value immediately. The Work Order leaves play.
+Three Work Orders are always face-up on the board, and any player may complete any of them. Choose one public Work Order whose recipe you can meet, spend the listed resources from your windows/hoard, and gain the printed coin value immediately. The completed Work Order goes to the bottom of the Work Order deck and its slot is refilled from the top of the deck.
 
 **Appraise 4**
 Look at the top 4 resources of the resource deck. Keep all 4. Return any unwanted cards in any order on top.
