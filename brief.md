@@ -29,6 +29,8 @@ A single image (PNG/SVG) of the Town board with 6 location labels: Guildhall, Ta
 2. **Visitor deck — 34 cards.** Each Visitor has a name, title, art, and a resource demand (e.g. "2 ARM, 1 CON"). 3 are face-up on the board at all times.
 3. **Professional deck — 9 cards.** 3 are face-up at the Guildhall for the whole game.
 4. **Work Order deck — 20 cards.** 2 are face-up on the board; any player can Craft either of them. A completed order's slot is refilled from the deck at the start of the next round.
+
+**Turn order:** the first-player role passes one seat to the left at the start of every round, so each player gets a turn at first pick of the freshly restocked Work Orders.
 5. **Counterfeit deck — 8 cards.** Rogue class only; player-specific deck.
 6. **Renown deck — 10 cards.** Paladin class only; player draws 4 at game start.
 

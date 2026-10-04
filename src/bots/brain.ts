@@ -2,7 +2,7 @@ import { useGameStore, CLAN_TOLL, FEARSOME_CHAMPION_MAX, type GameStore } from '
 import type {
   BotDifficulty, DuelStake, Location, Player, ResourceCard, ResourceType, VisitorCard, WorkOrderCard,
 } from '../types'
-import { parseRequirements } from '../utils/requirements'
+import { parseRequirements, recipeMainType } from '../utils/requirements'
 import {
   MIDDLE_WINDOWS, RESOURCE_TYPES, actionsLeft, averageWorth, bestRepType, buildContext, cardWorth,
   clamp, drawValue, harmWeight, heldCards, isCounterfeit, liveScore, marginalRep, rankOpponents,
@@ -783,7 +783,9 @@ function locationCandidates(s: GameStore, me: Player, ctx: ValueContext): Candid
       // Hard bots also value snatching an order a rival could finish on their next turn
       const rivalReady = difficulty === 'hard' && s.players.some(p => p.id !== me.id && missingForOrder(p, wo) === 0)
       const denial = rivalReady ? wo.price * 0.3 : 0
-      add('workshop', `craft:${wo.id}:${plan.cardIds.join(',')}`, wo.price + bonus + denial - plan.cost * 0.85,
+      // Paladin Honourable Trade: +1 Rep of the recipe's main type
+      const honour = me.classId === 'paladin' ? repValue(me.rep, recipeMainType(wo.recipe), difficulty) : 0
+      add('workshop', `craft:${wo.id}:${plan.cardIds.join(',')}`, wo.price + bonus + denial + honour - plan.cost * 0.85,
         g => g.completeCraft(me.id, idx, plan.cardIds), true)
     })
     if (s.resourceDeck.length >= 1) {

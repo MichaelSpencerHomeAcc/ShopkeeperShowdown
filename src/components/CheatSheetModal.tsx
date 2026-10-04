@@ -24,6 +24,7 @@ export function CheatSheetModal({ onClose }: { onClose: () => void }) {
 
           <GuideSection title="On Your Turn">
             <ul className="space-y-1">
+              <li>The first player passes one seat to the left each round, so everyone gets a turn at first pick of the new Work Orders.</li>
               <li>From round 2 onward, resolve your Sell Phase first if visitors can buy from your windows.</li>
               <li>You normally have 3 actions. Pick town locations to gather, trade, repair, steal, craft, or use Guild options.</li>
               <li>Each location can usually be used once per turn. Class abilities may spend active tokens or happen off-turn.</li>

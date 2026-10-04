@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { canCraft, meetsRequirements, parseRequirements } from './requirements'
+import { canCraft, meetsRequirements, parseRequirements, recipeMainType } from './requirements'
 import { cardsOf } from '../test/helpers'
 
 describe('parseRequirements', () => {
@@ -21,6 +21,14 @@ describe('meetsRequirements', () => {
     const req = parseRequirements('1 ARM, 2 ANY')
     expect(meetsRequirements(cardsOf('ARM', 'TRI', 'TRG'), req)).toBe(true)
     expect(meetsRequirements(cardsOf('ARM', 'TRI'), req)).toBe(false)
+  })
+})
+
+describe('recipeMainType', () => {
+  it('picks the most-needed type, breaking ties in ARM, CON, TRI, TRG order', () => {
+    expect(recipeMainType('1 ARM + 1 TRI + 3 TRG')).toBe('TRG')
+    expect(recipeMainType('2 ARM + 2 TRG')).toBe('ARM')
+    expect(recipeMainType('2 CON + 2 TRI')).toBe('CON')
   })
 })
 

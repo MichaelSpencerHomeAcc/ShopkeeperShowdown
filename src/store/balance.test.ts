@@ -1,6 +1,7 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { CLAN_TOLL, FEARSOME_CHAMPION_MAX, SHAMAN_DICE_RECHARGE_ROUND, useGameStore } from './gameStore'
-import { cardsOf, patchPlayer, playerOf, seedRandom, st, startGame } from '../test/helpers'
+import { cardsForRecipe, cardsOf, patchPlayer, playerOf, seedRandom, st, startGame } from '../test/helpers'
+import { recipeMainType } from '../utils/requirements'
 import type { Player } from '../types'
 
 beforeEach(() => { seedRandom(3) })
@@ -85,6 +86,32 @@ describe('Paladin — Honourable Trade', () => {
 
     expect(playerOf('paladin').rep).toEqual({ ARM: 1, CON: 0, TRI: 0, TRG: 0 })
     expect(playerOf('rogue').hoard).toHaveLength(0)
+  })
+
+  it('gets 1 Reputation of the recipe main type for completing a Work Order', () => {
+    const pal = paladinGame()
+    const order = st().activeWorkOrders[0]!
+    const cards = cardsForRecipe(order.recipe)
+    patchPlayer(pal.id, { hoard: cards })
+
+    st().completeCraft(pal.id, 0, cards.map(c => c.id))
+
+    const main = recipeMainType(order.recipe)
+    expect(playerOf('paladin').rep[main]).toBe(1)
+    expect(Object.values(playerOf('paladin').rep).reduce((a, b) => a + b, 0)).toBe(1)
+    expect(st().actionLog[0].message).toContain(`Honourable Trade — +1 ${main} Rep`)
+  })
+
+  it('other classes get no Reputation for crafting', () => {
+    paladinGame()
+    const rogue = playerOf('rogue')
+    const order = st().activeWorkOrders[0]!
+    const cards = cardsForRecipe(order.recipe)
+    patchPlayer(rogue.id, { hoard: cards })
+
+    st().completeCraft(rogue.id, 0, cards.map(c => c.id))
+
+    expect(playerOf('rogue').rep).toEqual({ ARM: 0, CON: 0, TRI: 0, TRG: 0 })
   })
 
   it('gets no bonus Reputation for completing a Visitor', () => {

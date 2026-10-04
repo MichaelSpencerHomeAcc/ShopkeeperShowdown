@@ -30,6 +30,12 @@ export function meetsRequirements(selected: { type: ResourceType }[], req: Requi
   return true
 }
 
+/** The resource type a recipe needs most of (ties go to the earlier of ARM, CON, TRI, TRG). */
+export function recipeMainType(recipe: string): ResourceType {
+  const req = parseRequirements(recipe)
+  return (['ARM', 'CON', 'TRI', 'TRG'] as ResourceType[]).reduce((best, t) => (req[t] > req[best] ? t : best), 'ARM')
+}
+
 export function totalRequired(req: Requirements): number {
   return req.ARM + req.CON + req.TRI + req.TRG + req.ANY
 }

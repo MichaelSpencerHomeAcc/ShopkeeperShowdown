@@ -1,5 +1,6 @@
 import type { BotDifficulty, GameState, Player, RepTokens, RepType, ResourceCard, ResourceType, WorkOrderCard } from '../types'
 import { parseRequirements } from '../utils/requirements'
+import { turnOrder } from '../store/gameStore'
 import { repPoints, repSets, scorePlayer, SET_BONUS } from '../utils/scoring'
 
 /**
@@ -53,7 +54,7 @@ export function bestRepType(rep: RepTokens, difficulty: BotDifficulty): RepType 
 /** Sell phases still to come for `playerId` (round turns plus the final sell). */
 export function sellPhasesLeft(s: GameState, playerId: string): number {
   if (s.endgame) return s.endgame.phase === 'final-sell' && s.endgame.playerQueue.includes(playerId) ? 1 : 0
-  const order = s.players.map(p => p.id)
+  const order = turnOrder(s).map(p => p.id)
   const me = order.indexOf(playerId)
   const cur = order.indexOf(s.currentTurnPlayerId)
   let left = Math.max(0, 6 - s.round) + 1 // future rounds + final sell

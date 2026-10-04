@@ -6,7 +6,7 @@ import { Keyword } from './Keyword'
 import { ResourceCardMini } from './ResourceCardMini'
 import { CardPickerGrid } from './CardPickerGrid'
 import { RecipeDisplay } from './ResourceCardTile'
-import { parseRequirements, meetsRequirements, type Requirements } from '../utils/requirements'
+import { parseRequirements, meetsRequirements, recipeMainType, type Requirements } from '../utils/requirements'
 import { DiceRollModal } from './DiceRollModal'
 
 interface Props {
@@ -1874,6 +1874,10 @@ function CraftCardPicker({ player, order, orderIdx, onDone, onBack }: {
         </>
       )}
       {allAvailable.length === 0 && <span className="text-parchment-600 italic">No cards available</span>}
+
+      {player.classId === 'paladin' && (
+        <div className="text-blue-300 font-semibold">◆ Honourable Trade: also gain 1 {recipeMainType(wo.recipe)} Rep.</div>
+      )}
 
       {/* Cost / reward summary */}
       <div className="flex items-center justify-between pt-1 border-t border-parchment-800/30">

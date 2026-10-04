@@ -4,7 +4,7 @@ import type {
   ClassId, Location, WindowStatus, LogEntry, RepType, ShamanPatienceEffects, AmbushCard,
   DemandMap, PlayerSetup, BotDifficulty,
 } from '../types'
-import { canCraft, parseRequirements } from '../utils/requirements'
+import { canCraft, parseRequirements, recipeMainType } from '../utils/requirements'
 import { RESOURCE_CARDS } from '../data/resources'
 import { VISITOR_CARDS } from '../data/visitors'
 import { PROFESSIONAL_CARDS } from '../data/professionals'
@@ -22,6 +22,14 @@ export const SHAMAN_DICE_RECHARGE_ROUND = 4
 /** Face-up Work Orders on the board that any player may complete with Craft.
  *  A completed order's slot stays empty until the next round begins. */
 export const PUBLIC_WORK_ORDERS = 2
+
+/** This round's turn order: the player list rotated so the round's first player comes first. */
+export function turnOrder(s: Pick<GameState, 'players' | 'startPlayerOffset'>): Player[] {
+  const n = s.players.length
+  if (n === 0) return []
+  const k = ((s.startPlayerOffset % n) + n) % n
+  return [...s.players.slice(k), ...s.players.slice(0, k)]
+}
 
 function shuffle<T>(arr: T[]): T[] {
   const a = [...arr]
@@ -217,6 +225,7 @@ function buildInitialGameState(players: Player[]): GameState {
     foragePeek: null,
     lastDrawnCards: null,
     visitorDemandRemaining,
+    startPlayerOffset: 0,
     currentTurnPlayerId: draftOrder[0] ?? players[0]?.id ?? '',
     turnActionsUsed: 0,
     locationsUsedThisTurn: [],
@@ -463,6 +472,7 @@ const INITIAL: GameState = {
   foragePeek: null,
   lastDrawnCards: null,
   visitorDemandRemaining: {},
+  startPlayerOffset: 0,
   currentTurnPlayerId: '',
   turnActionsUsed: 0,
   locationsUsedThisTurn: [],
@@ -1402,10 +1412,13 @@ export const useGameStore = create<GameStore>((set, get) => ({
       const rechargeLogs = recharge
         ? updatedPlayers.filter(p => p.elementalDice.some(d => d.used)).map(p => logEntry(`${p.name}'s Elemental dice recharge — all 4 are ready again.`, p.id))
         : []
+      const startPlayerOffset = s.players.length > 0 ? (s.startPlayerOffset + 1) % s.players.length : 0
+      const starter = turnOrder({ players: s.players, startPlayerOffset })[0]
       return {
         round: newRound,
+        startPlayerOffset,
         players: playersWithReopened,
-        actionLog: [...rechargeLogs, logEntry(`--- Round ${newRound} begins ---`), ...s.actionLog.slice(0, 49 - rechargeLogs.length)],
+        actionLog: [...rechargeLogs, logEntry(`--- Round ${newRound} begins — ${starter?.name ?? 'Someone'} goes first ---`), ...s.actionLog.slice(0, 49 - rechargeLogs.length)],
       }
     })
     get().refillVisitors()
@@ -2254,6 +2267,8 @@ export const useGameStore = create<GameStore>((set, get) => ({
         ? 3
         : 0
     const gained = order.price + rn02Bonus
+    // Paladin Honourable Trade: +1 Rep of the recipe's main type
+    const honourType = player.classId === 'paladin' ? recipeMainType(order.recipe) : null
     const discountUsed = player.craftDiscount > 0
 
 
@@ -2268,6 +2283,7 @@ export const useGameStore = create<GameStore>((set, get) => ({
               ...p,
               craftDiscount: 0,
               coins: p.coins + gained,
+              rep: honourType ? { ...p.rep, [honourType]: p.rep[honourType] + 1 } : p.rep,
               hoard: p.hoard.filter(c => !spentIds.has(c.id)),
               counterfeitHand: p.counterfeitHand.filter(c => !spentIds.has(c.id)),
               stolenHoardCardIds: p.stolenHoardCardIds.filter(id => !spentIds.has(id)),
@@ -2283,6 +2299,7 @@ export const useGameStore = create<GameStore>((set, get) => ({
         `${player.name} completed Work Order "${order.name}" — spent ${spentCards.length} cards, gained ${gained} coins.` +
         (discountUsed ? ' (Forge of Ironpeak discount applied)' : '') +
         (rn02Bonus > 0 ? ` ◆ Forge of Ironpeak — +${rn02Bonus} bonus coins.` : '') +
+        (honourType ? ` ◆ Honourable Trade — +1 ${honourType} Rep.` : '') +
         (counterfeitCards.length > 0
           ? ` ${counterfeitCards.length} Counterfeit card${counterfeitCards.length !== 1 ? 's were' : ' was'} returned to the Rogue.`
           : ''),
@@ -3814,12 +3831,13 @@ export const useGameStore = create<GameStore>((set, get) => ({
   },
 
   _advanceTurn() {
-    const { players, currentTurnPlayerId, round } = get()
-    const idx = players.findIndex(p => p.id === currentTurnPlayerId)
+    const { currentTurnPlayerId, round } = get()
+    const order = turnOrder(get())
+    const idx = order.findIndex(p => p.id === currentTurnPlayerId)
     const nextIdx = idx + 1
 
     // Helper: shutter windows 0 and 4 of the player whose turn just ended
-    const shutterEndingPlayer = (allPlayers: typeof players, endingId: string) =>
+    const shutterEndingPlayer = (allPlayers: Player[], endingId: string) =>
       allPlayers.map(p =>
         p.id !== endingId ? p : {
           ...p,
@@ -3831,7 +3849,7 @@ export const useGameStore = create<GameStore>((set, get) => ({
 
     // Helper: unshutter windows 0 and 4 (turn-mechanic windows) for the player whose turn is starting.
     // rn03 roundShuttered windows also reopen here — they last until the player's own next turn.
-    const unshutterStartingPlayer = (allPlayers: typeof players, startingId: string) =>
+    const unshutterStartingPlayer = (allPlayers: Player[], startingId: string) =>
       allPlayers.map(p =>
         p.id !== startingId ? p : {
           ...p,
@@ -3846,7 +3864,7 @@ export const useGameStore = create<GameStore>((set, get) => ({
     // Helper: expire Clan marker for a player whose new turn is starting (if not just relocated via Raiding Party)
     // The Clan was placed last turn — it expires now unless refreshed by Raiding Party this turn.
     // We mark it for expiry; the actual clear happens here since turns are sequential.
-    const expireClan = (allPlayers: typeof players, startingId: string) =>
+    const expireClan = (allPlayers: Player[], startingId: string) =>
       allPlayers.map(p =>
         p.id !== startingId || p.classId !== 'barbarian' ? p : { ...p, clanLocation: null }
       )
@@ -3913,9 +3931,10 @@ export const useGameStore = create<GameStore>((set, get) => ({
 
 
 
-    if (nextIdx >= players.length) {
+    if (nextIdx >= order.length) {
       if (round >= 6) {
-        const queue = players.map(p => p.id)
+        // Final sell follows the last round's turn order
+        const queue = order.map(p => p.id)
         set(s => {
           let updated = shutterEndingPlayer(s.players, currentTurnPlayerId)
           updated = unshutterStartingPlayer(updated, queue[0])
@@ -3936,8 +3955,8 @@ export const useGameStore = create<GameStore>((set, get) => ({
       }
       set(s => ({ players: shutterEndingPlayer(s.players, currentTurnPlayerId) }))
       get().nextRound()
-      const freshPlayers = get().players
-      const firstId = freshPlayers[0]?.id ?? ''
+      // nextRound passed the first-player role one seat to the left
+      const firstId = turnOrder(get())[0]?.id ?? ''
       set(s => ({
         players: expireClan(unshutterStartingPlayer(s.players, firstId), firstId),
         currentTurnPlayerId: firstId,
@@ -3961,7 +3980,7 @@ export const useGameStore = create<GameStore>((set, get) => ({
       applyRangerPassive(firstId)
       applyRogueLowCounterfeitPassive(firstId)
     } else {
-      const next = players[nextIdx]
+      const next = order[nextIdx]
       set(s => ({
         players: expireClan(unshutterStartingPlayer(shutterEndingPlayer(s.players, currentTurnPlayerId), next.id), next.id),
         currentTurnPlayerId: next.id,

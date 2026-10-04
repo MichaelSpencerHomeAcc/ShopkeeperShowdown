@@ -212,6 +212,8 @@ export interface GameState {
   visitorDemandRemaining: Record<string, DemandMap>
 
   // Turn management
+  /** Seats the first player has moved left since round 1 — turn order rotates each round */
+  startPlayerOffset: number
   currentTurnPlayerId: string
   turnActionsUsed: number
   locationsUsedThisTurn: Location[]

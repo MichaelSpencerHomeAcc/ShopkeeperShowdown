@@ -2,7 +2,7 @@
 
 ## When scoring happens
 
-The game ends after the final turn of Round 6. Each player then takes one **final Sell Phase** in turn order before scoring begins.
+The game ends after the final turn of Round 6. Each player then takes one **final Sell Phase** in turn order (Round 6's order) before scoring begins.
 
 ### Final Sell Phase
 - Each player, in turn order, takes one last Sell Phase.

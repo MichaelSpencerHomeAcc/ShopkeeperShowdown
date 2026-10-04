@@ -195,6 +195,7 @@ Place 1 Counterfeit from your hand into any window (yours or another player's). 
 ### Passive — Honourable Trade
 Gain 1 additional Reputation token whenever you:
 - Resolve a Negotiate action at the Guildhall
+- Complete a Work Order (gain a token of the type the recipe needs most; ties go ARM, CON, TRI, TRG)
 - Use Report the Crime at the Barracks to repair at least one Broken window
 
 ### Active — Righteous Duel
