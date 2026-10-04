@@ -1,5 +1,5 @@
 import { useState, useEffect, useRef, type Dispatch, type SetStateAction } from 'react'
-import { useGameStore } from '../store/gameStore'
+import { useGameStore, CLAN_TOLL } from '../store/gameStore'
 import type { Location, Player, GameState, DuelStake, ResourceCard } from '../types'
 import { LocationActionPanel, DrawnCardsToast } from './LocationActionPanel'
 import { SellPhase } from './SellPhase'
@@ -1110,7 +1110,7 @@ export function SharedBoard({ canAct = true, localPlayerName }: SharedBoardProps
 
                   {/* Clan marker */}
                   {clanOwner && (
-                    <div className="absolute top-7 left-1.5 z-10" title={`${clanOwner.name}'s Clan — costs 2 coins to use`}>
+                    <div className="absolute top-7 left-1.5 z-10" title={`${clanOwner.name}'s Clan — costs ${CLAN_TOLL} coin${CLAN_TOLL !== 1 ? 's' : ''} to use`}>
                       <div className="relative">
                         <div className="absolute inset-0 rounded-full animate-ping bg-red-500/30" />
                         <div className="relative flex items-center gap-1 bg-red-950/90 border-2 border-red-500 rounded-full pl-0.5 pr-2 py-0.5 shadow-lg shadow-red-900/60">
@@ -1278,9 +1278,9 @@ export function SharedBoard({ canAct = true, localPlayerName }: SharedBoardProps
                 if (pendingClanToll) {
                   const visitor = players.find(p => p.id === currentTurnPlayerId)
                   const barb = players.find(p => p.id === pendingClanToll.barbarianId)
-                  adjustCoins(currentTurnPlayerId, -2)
-                  adjustCoins(pendingClanToll.barbarianId, 2)
-                  addLog(`${visitor?.name} paid ${barb?.name}'s Clan toll at ${pendingClanToll.locLabel} — 2 coins transferred.`, currentTurnPlayerId)
+                  adjustCoins(currentTurnPlayerId, -CLAN_TOLL)
+                  adjustCoins(pendingClanToll.barbarianId, CLAN_TOLL)
+                  addLog(`${visitor?.name} paid ${barb?.name}'s Clan toll at ${pendingClanToll.locLabel} — ${CLAN_TOLL} coin${CLAN_TOLL !== 1 ? 's' : ''} transferred.`, currentTurnPlayerId)
                   setPendingClanToll(null)
                 }
                 useGameStore.getState().useTurnAction(loc)
@@ -1291,9 +1291,9 @@ export function SharedBoard({ canAct = true, localPlayerName }: SharedBoardProps
                 if (pendingClanToll) {
                   const visitor = players.find(p => p.id === currentTurnPlayerId)
                   const barb = players.find(p => p.id === pendingClanToll.barbarianId)
-                  adjustCoins(currentTurnPlayerId, -2)
-                  adjustCoins(pendingClanToll.barbarianId, 2)
-                  addLog(`${visitor?.name} paid ${barb?.name}'s Clan toll at ${pendingClanToll.locLabel} — 2 coins transferred.`, currentTurnPlayerId)
+                  adjustCoins(currentTurnPlayerId, -CLAN_TOLL)
+                  adjustCoins(pendingClanToll.barbarianId, CLAN_TOLL)
+                  addLog(`${visitor?.name} paid ${barb?.name}'s Clan toll at ${pendingClanToll.locLabel} — ${CLAN_TOLL} coin${CLAN_TOLL !== 1 ? 's' : ''} transferred.`, currentTurnPlayerId)
                   setPendingClanToll(null)
                 }
                 useGameStore.getState().useTurnAction(selectedLocation)
@@ -2550,7 +2550,7 @@ function ClanTollModal({
   const barb = players.find(p => p.id === gate.barbarianId)
   const currentPlayer = players.find(p => p.id === currentPlayerId)
   const loc = LOCATIONS.find(l => l.id === gate.location)
-  const canAfford = (currentPlayer?.coins ?? 0) >= 2
+  const canAfford = (currentPlayer?.coins ?? 0) >= CLAN_TOLL
 
   return (
     <div className="fixed inset-0 z-[290] flex items-center justify-center bg-black/50">
@@ -2563,7 +2563,7 @@ function ClanTollModal({
             <span className="text-parchment-200 font-semibold">{loc?.label}</span>.
           </div>
           <div className="text-sm text-parchment-500 mt-2 leading-relaxed">
-            You must pay <span className="text-parchment-200 font-semibold">{barb?.name} 2 coins</span> to use
+            You must pay <span className="text-parchment-200 font-semibold">{barb?.name} {CLAN_TOLL} coin{CLAN_TOLL !== 1 ? 's' : ''}</span> to use
             this location. The toll is charged when you take an action — you can still back out for free.
           </div>
           {!canAfford && (
@@ -2579,7 +2579,7 @@ function ClanTollModal({
             disabled={!canAfford}
             className="btn-primary text-xs py-2 font-semibold disabled:opacity-40 disabled:cursor-not-allowed"
           >
-            Pay 2 coins &amp; use {loc?.label}
+            Pay {CLAN_TOLL} coin{CLAN_TOLL !== 1 ? 's' : ''} &amp; use {loc?.label}
           </button>
           <button
             onClick={onLeave}

@@ -7,12 +7,12 @@ export const CLASSES: ClassCard[] = [
     tagline: 'Smash first, sell later',
     imageFile: '/cards/player-boards/Barbarian.png',
     status: 'BETA',
-    passive: 'Fearsome Champion — Add 2 to all Clash rolls. Other players may give you 2 resources from their Hoard to make you retreat from a Clash (you forfeit; they skip the roll). At the start of your turn, gain 1 coin for each Broken window currently on the board (minimum 1).',
+    passive: 'Fearsome Champion — Add 2 to all Clash rolls. Other players may give you 2 resources from their Hoard to make you retreat from a Clash (you forfeit; they skip the roll). At the start of your turn, gain 1 coin for each Broken window currently on the board (maximum 2).',
     actives: [
       'Reckless Swing — Break 1 of another player\'s windows. If that player has more Reputation tokens than you, Break 2 of their windows instead.',
-      'Raiding Party — Place your Clan marker on any location. Then Appraise 2 (look at the top 4 resource cards; keep 2, the rest go to the bottom of the deck).',
+      'Raiding Party — Place your Clan marker on any location; any other player who uses that location pays you 1 coin first. Then Appraise 1 (look at the top 4 resource cards; keep 1, the rest go to the bottom of the deck).',
     ],
-    playstyle: 'The Antagonist. Difficulty 1/5. Dominates through Clashes and board control. Your Clan marker forces opponents to pay a toll just to use a location — passive coin income adds up fast. Reckless Swing is devastating against leading players. The broken-window passive means chaos on the board pays you directly. Straightforward and brutal; great for new players who want to apply pressure.',
+    playstyle: 'The Antagonist. Difficulty 1/5. Dominates through Clashes and board control. Your Clan marker charges opponents a 1-coin toll just to use a location. Reckless Swing is devastating against leading players. The broken-window passive means chaos on the board pays you directly — up to 2 coins a turn. Straightforward and brutal; great for new players who want to apply pressure.',
   },
   {
     id: 'monk',
@@ -33,12 +33,12 @@ export const CLASSES: ClassCard[] = [
     tagline: 'Honour in every transaction',
     imageFile: '/cards/player-boards/Paladin.png',
     status: 'BETA',
-    passive: 'Honourable Trade — Gain 1 additional Reputation token whenever you: Resolve a Negotiate at the Guildhall, use Report the Crime at the Barracks, or complete a public Visitor\'s order. Starts with a hand of 4 Renown Cards (drawn from a 10-card personal deck).',
+    passive: 'Honourable Trade — Gain 1 additional Reputation token whenever you: Resolve a Negotiate at the Guildhall, or use Report the Crime at the Barracks to repair at least one Broken window. Starts with a hand of 4 Renown Cards (drawn from a 10-card personal deck).',
     actives: [
       'Righteous Duel — Name a player and declare a stake. Both roll d6; the Paladin adds their current Renown card count to their roll. Highest total wins both stakes. Tie: both returned.',
       'Tales of Old (off-turn) — Discard 1 Renown Card from your hand and immediately resolve its Spend effect. Renown is never replenished — once spent, it\'s gone.',
     ],
-    playstyle: 'The Renowned. Difficulty 4/5. Scores heavily through Reputation while a hand of powerful Renown Cards provide held passives and one-shot Spend effects. Renown cards are never replaced — every Spend is a permanent sacrifice, so timing matters enormously. Strong at converting normal play into bonus Rep; the Duel ability lets you stake resources or coins when you hold the advantage.',
+    playstyle: 'The Renowned. Difficulty 4/5. Scores heavily through Reputation while a hand of powerful Renown Cards provide held passives and one-shot Spend effects. Renown cards are never replaced — every Spend is a permanent sacrifice, so timing matters enormously. Earns bonus Rep from fair trades and keeping the town in good repair; the Duel ability lets you stake resources or coins when you hold the advantage.',
   },
   {
     id: 'ranger',
@@ -72,12 +72,12 @@ export const CLASSES: ClassCard[] = [
     tagline: 'The spirits always know a deal',
     imageFile: '/cards/player-boards/Shaman.png',
     status: 'BETA',
-    passive: 'Dominion of the Elements — At game start, roll all 4 Elemental dice. Each die\'s face rolled determines one effect available to you for the whole game. Use each die ONCE on your turn, then discard it. Effects: 1=Draw 3, 2=Trade 5, 3=Repair 2, 4=Refresh 2 tokens, 5=Appraise 1 (top 4 keep 1), 6=Gain 1 extra action.',
+    passive: 'Dominion of the Elements — At game start, roll all 4 Elemental dice. Each die\'s face rolled determines its effect for the whole game. Use each die once on your turn; all used dice recharge at the start of round 4. Effects: 1=Draw 3, 2=Trade 5, 3=Repair 2, 4=Refresh 2 tokens, 5=Appraise 1 (top 4 keep 1), 6=Gain 1 extra action.',
     actives: [
       'Call Lightning — Choose 1 player. That player discards 2 resources from their Hoard (their choice). Then you Draw 1 resource.',
       'Patience of Stone — For each unused Elemental die still in your possession, choose one effect: Repair 1, Trade 1, Draw 1, or Forage 2. Each effect may only be chosen once per use of this ability.',
     ],
-    playstyle: 'The Patient. Difficulty 2/5. Uniquely powerful resource toolkit defined at game start by 4 dice rolls — you might have a great Trade die, a Draw die, or an extra-action die. Plan your whole game around what you rolled. Call Lightning strips opponents\' hoards when they\'re most vulnerable. Patience of Stone squeezes value from your remaining dice. High game-to-game variance but consistent execution once you know your loadout.',
+    playstyle: 'The Patient. Difficulty 2/5. Uniquely powerful resource toolkit defined at game start by 4 dice rolls — you might have a great Trade die, a Draw die, or an extra-action die. Plan your whole game around what you rolled — your dice come back once, at the start of round 4. Call Lightning strips opponents\' hoards when they\'re most vulnerable. Patience of Stone squeezes value from your remaining dice. High game-to-game variance but consistent execution once you know your loadout.',
   },
   {
     id: 'sorcerer',

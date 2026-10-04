@@ -1444,20 +1444,22 @@ function BarracksActions({ actionId, onAction, onBack }: { actionId: string; onA
   const targetStolenCards = targetPlayer
     ? targetPlayer.hoard.filter(c => targetPlayer.stolenHoardCardIds.includes(c.id))
     : []
-  const selectedReportCard = targetStolenCards.find(c => c.id === reportCard)
 
   const crierActive = townCrierPeek && townCrierPeek.playerId === player.id
+  const brokenWindowCount = player.windows.filter(w => w.status === 'broken').length
 
   if (actionId === 'report') {
     return (
       <div className="space-y-1">
         <BackButton onBack={onBack} />
 
-        {/* Repair All Windows — Paladins also gain Rep; others just repair */}
+        {/* Repair All Windows — Paladins also gain Rep if anything was broken; others just repair */}
         <div className="space-y-1 pb-1">
           {player.classId === 'paladin' ? (
             <>
-              <div className="text-[10px] text-parchment-500">Repair + Gain Rep (Paladin):</div>
+              <div className="text-[10px] text-parchment-500">
+                Repair + Gain Rep (Paladin){brokenWindowCount === 0 ? ' — no broken windows, so no Rep' : ''}:
+              </div>
               <div className="flex flex-wrap gap-1">
                 {REP_TYPES.map(rt => (
                   <button key={rt} type="button" onClick={() => setRepairRepType(rt)}
@@ -1470,7 +1472,7 @@ function BarracksActions({ actionId, onAction, onBack }: { actionId: string; onA
                 onClick={() => { repairAllWindows(player.id, repairRepType); onAction() }}
                 className="btn-secondary text-xs px-2 py-0.5"
               >
-                <Keyword name="Repair">Repair</Keyword> All Windows → +1 {repairRepType}
+                <Keyword name="Repair">Repair</Keyword> All Windows{brokenWindowCount > 0 ? ` → +1 ${repairRepType}` : ''}
               </button>
             </>
           ) : (
@@ -1489,20 +1491,18 @@ function BarracksActions({ actionId, onAction, onBack }: { actionId: string; onA
 
         <div className="border-t border-parchment-800/30 pt-1 space-y-1">
           <div className="text-[10px] text-parchment-500">Report theft + Gain Rep:</div>
-          {player.classId !== 'paladin' && (
-            <div className="flex flex-wrap gap-1">
-              {REP_TYPES.map(rt => (
-                <button
-                  key={rt}
-                  type="button"
-                  onClick={() => setReportRep(rt)}
-                  className={repBtnCls(rt, reportRep === rt)}
-                >
-                  {rt}
-                </button>
-              ))}
-            </div>
-          )}
+          <div className="flex flex-wrap gap-1">
+            {REP_TYPES.map(rt => (
+              <button
+                key={rt}
+                type="button"
+                onClick={() => setReportRep(rt)}
+                className={repBtnCls(rt, reportRep === rt)}
+              >
+                {rt}
+              </button>
+            ))}
+          </div>
           <div className="flex flex-wrap gap-1">
             {players.filter(p => p.id !== player.id).map(p => (
               <button
@@ -1527,11 +1527,6 @@ function BarracksActions({ actionId, onAction, onBack }: { actionId: string; onA
             size="lg"
             emptyText="No stolen cards held by this player"
           />
-          {player.classId === 'paladin' && selectedReportCard && (
-            <div className="text-[10px] text-blue-300 font-semibold">
-              Honourable Trade: gain {selectedReportCard.type} Rep from {selectedReportCard.name}.
-            </div>
-          )}
           <button
             type="button"
             onClick={() => {
@@ -1543,7 +1538,7 @@ function BarracksActions({ actionId, onAction, onBack }: { actionId: string; onA
             disabled={!reportCard || !reportTarget}
             className="btn-primary text-xs px-2 py-0.5 disabled:opacity-50"
           >
-            Report — gain {player.classId === 'paladin' ? 2 : 1} {player.classId === 'paladin' ? (selectedReportCard?.type ?? '?') : reportRep} rep{player.classId === 'paladin' ? ' (Honourable Trade)' : ''}
+            Report — gain 1 {reportRep} rep
           </button>
         </div>
       </div>

@@ -1,4 +1,4 @@
-import { useGameStore, type GameStore } from '../store/gameStore'
+import { useGameStore, CLAN_TOLL, FEARSOME_CHAMPION_MAX, type GameStore } from '../store/gameStore'
 import type {
   BotDifficulty, DuelStake, Location, Player, ResourceCard, ResourceType, VisitorCard, WorkOrderCard,
 } from '../types'
@@ -451,7 +451,7 @@ export function planSales(s: GameStore, me: Player, ctx: ValueContext): { visito
   }
   const gain = (card: ResourceCard, v: VisitorCard) => {
     let g = saleValue(card, ctx) - (reserved.has(card.id) ? cardWorth(card, ctx) + ctx.orderUnitValue : 0)
-    if (completes(card, v)) g += me.classId === 'paladin' ? 1 + repValue(me.rep, card.type, ctx.difficulty) : 1
+    if (completes(card, v)) g += 1
     return g
   }
 
@@ -637,9 +637,9 @@ function locationAction(meId: string, loc: Location, fn: (s: GameStore) => void)
     const me = s.players.find(p => p.id === meId)
     const clan = clanOwnerAt(s, loc, meId)
     if (me && clan) {
-      s.adjustCoins(meId, -2)
-      s.adjustCoins(clan.id, 2)
-      s.addLog(`${me.name} paid ${clan.name}'s Clan toll at ${LOCATION_LABELS[loc]} — 2 coins transferred.`, meId)
+      s.adjustCoins(meId, -CLAN_TOLL)
+      s.adjustCoins(clan.id, CLAN_TOLL)
+      s.addLog(`${me.name} paid ${clan.name}'s Clan toll at ${LOCATION_LABELS[loc]} — ${CLAN_TOLL} coin${CLAN_TOLL !== 1 ? 's' : ''} transferred.`, meId)
     }
     fn(st())
     st().useTurnAction(loc)
@@ -659,9 +659,9 @@ function locationCandidates(s: GameStore, me: Player, ctx: ValueContext): Candid
   const usable = (loc: Location, coinsNeeded = 0) => {
     if (s.locationsUsedThisTurn.includes(loc)) return false
     const clan = clanOwnerAt(s, loc, me.id)
-    return me.coins >= coinsNeeded + (clan ? 2 : 0)
+    return me.coins >= coinsNeeded + (clan ? CLAN_TOLL : 0)
   }
-  const tollCost = (loc: Location) => (clanOwnerAt(s, loc, me.id) ? 2.5 : 0)
+  const tollCost = (loc: Location) => (clanOwnerAt(s, loc, me.id) ? CLAN_TOLL * 1.25 : 0)
   const add = (loc: Location, id: string, value: number, fn: (s: GameStore) => void, basic = false) => {
     out.push({
       key: `act:${loc}:${id}`,
@@ -724,8 +724,9 @@ function locationCandidates(s: GameStore, me: Player, ctx: ValueContext): Candid
   // ── Barracks ──
   if (usable('barracks')) {
     const broken = me.windows.filter(w => w.status === 'broken').length
-    if (broken > 0 || me.classId === 'paladin') {
+    if (broken > 0) {
       const t = bestRepType(me.rep, difficulty)
+      // Honourable Trade: Paladins gain 1 Rep when a window actually gets repaired
       const paladinRep = me.classId === 'paladin' ? repValue(me.rep, t, difficulty) : 0
       add('barracks', 'repair', broken * windowWorth + paladinRep,
         g => g.repairAllWindows(me.id, me.classId === 'paladin' ? t : undefined), true)
@@ -736,8 +737,8 @@ function locationCandidates(s: GameStore, me: Player, ctx: ValueContext): Candid
         const stolen = target.hoard.filter(c => target.stolenHoardCardIds.includes(c.id))
         if (stolen.length === 0) continue
         const card = [...stolen].sort((a, b) => b.value - a.value)[0]
-        const t = me.classId === 'paladin' ? card.type : bestRepType(me.rep, difficulty)
-        const repGain = me.classId === 'paladin' ? marginalRep(me.rep, t, 2) : repValue(me.rep, t, difficulty)
+        const t = bestRepType(me.rep, difficulty)
+        const repGain = repValue(me.rep, t, difficulty)
         const value = repGain + card.value * 0.6 * harmWeight(s, me, target, difficulty) * (s.players.length - 1)
         add('barracks', `report:${target.id}:${card.id}`, value, g => g.reportCrimeB(me.id, target.id, card.id, t))
       }
@@ -912,8 +913,9 @@ function bestBreak(s: GameStore, me: Player, ctx: ValueContext) {
       const w = target.windows[i]
       if (w.status !== 'normal') continue
       const loss = w.card ? w.card.value * 0.5 + 2 : 1.2
-      // Barbarian passive pays 1 coin per broken window at each of their turn starts
-      const passive = me.classId === 'barbarian' ? Math.min(3, Math.max(0, 6 - s.round)) * 0.5 : 0
+      // Barbarian passive pays 1 coin per broken window (capped) at each of their turn starts
+      const brokenOnBoard = s.players.reduce((n, p) => n + p.windows.filter(x => x.status === 'broken').length, 0)
+      const passive = me.classId === 'barbarian' && brokenOnBoard < FEARSOME_CHAMPION_MAX ? Math.min(3, Math.max(0, 6 - s.round)) * 0.5 : 0
       const value = loss * harmWeight(s, me, target, ctx.difficulty) * (s.players.length - 1) * 0.6 + passive
       if (!best || value > best.value) best = { target, windowIdx: i, value }
     }
@@ -1152,7 +1154,7 @@ function abilityCandidates(s: GameStore, me: Player, ctx: ValueContext): Candida
       const loc = difficulty === 'hard'
         ? busy.sort((a, b) => s.pawns.filter(p => p.location === b).length - s.pawns.filter(p => p.location === a).length)[0]
         : pickRandom(busy)!
-      push(`raid:${loc}`, drawValue(2, avgDraw * 1.25, me) + 1.5 - tokenCost, () => st().raidingParty(me.id, loc))
+      push(`raid:${loc}`, drawValue(1, avgDraw * 1.4, me) + CLAN_TOLL * 0.75 - tokenCost, () => st().raidingParty(me.id, loc))
     }
   }
 

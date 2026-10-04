@@ -13,6 +13,13 @@ import { COUNTERFEIT_CARDS } from '../data/counterfeits'
 import { RENOWN_CARDS } from '../data/renown'
 import { AMBUSH_CARDS } from '../data/ambushCards'
 
+/** Barbarian Fearsome Champion: coins per turn = broken windows on the board, up to this cap. */
+export const FEARSOME_CHAMPION_MAX = 2
+/** Coins a player pays a Barbarian to use a location holding their Clan marker. */
+export const CLAN_TOLL = 1
+/** Shaman Elemental dice that have been used recharge at the start of this round. */
+export const SHAMAN_DICE_RECHARGE_ROUND = 4
+
 function shuffle<T>(arr: T[]): T[] {
   const a = [...arr]
   for (let i = a.length - 1; i > 0; i--) {
@@ -484,7 +491,7 @@ const INITIAL: GameState = {
 
 /**
  * Undoes the Guildhall visit for a Negotiate proposal that was turned down: the action comes
- * back and, if a Barbarian's Clan toll was paid to get in, so do the 2 coins.
+ * back and, if a Barbarian's Clan toll was paid to get in, so do those coins.
  */
 function refundNegotiateAction(
   s: GameState,
@@ -497,8 +504,8 @@ function refundNegotiateAction(
     locationsUsedThisTurn: s.locationsUsedThisTurn.filter(l => l !== 'guildhall'),
     ...(tollTo ? {
       players: s.players.map(p =>
-        p.id === deal.proposerId ? { ...p, coins: p.coins + 2 }
-        : p.id === tollTo ? { ...p, coins: Math.max(0, p.coins - 2) }
+        p.id === deal.proposerId ? { ...p, coins: p.coins + CLAN_TOLL }
+        : p.id === tollTo ? { ...p, coins: Math.max(0, p.coins - CLAN_TOLL) }
         : p
       ),
     } : {}),
@@ -508,7 +515,7 @@ function refundNegotiateAction(
 function negotiateRefundNote(s: GameState, deal: { actionCharged?: boolean; clanTollPaidTo?: string }) {
   if (!deal.actionCharged) return ''
   const barb = deal.clanTollPaidTo ? s.players.find(p => p.id === deal.clanTollPaidTo) : null
-  return barb ? ` Guildhall action and ${barb.name}'s 2-coin Clan toll refunded.` : ' Guildhall action refunded.'
+  return barb ? ` Guildhall action and ${barb.name}'s Clan toll refunded.` : ' Guildhall action refunded.'
 }
 
 // Shared helper: execute the underlying action (gather/auction/mascot) with a given final roll.
@@ -603,14 +610,14 @@ function applyFirstTurnStartBonuses(get: () => GameStore, set: (partial: Partial
     const brokenCount = players.reduce(
       (sum, p) => sum + p.windows.filter(w => w.status === 'broken').length, 0
     )
-    const coins = Math.max(1, brokenCount)
-    set(s => ({
+    const coins = Math.min(FEARSOME_CHAMPION_MAX, brokenCount)
+    if (coins > 0) set(s => ({
       players: s.players.map(p =>
         p.id === firstPlayer.id ? { ...p, coins: p.coins + coins } : p
       ),
       actionLog: [
         logEntry(
-          `${firstPlayer.name}'s Fearsome Champion — gained ${coins} coin${coins > 1 ? 's' : ''} (${brokenCount} broken window${brokenCount !== 1 ? 's' : ''} on board).`,
+          `${firstPlayer.name}'s Fearsome Champion — gained ${coins} coin${coins > 1 ? 's' : ''} (${brokenCount} broken window${brokenCount !== 1 ? 's' : ''} on board${brokenCount > FEARSOME_CHAMPION_MAX ? `, max ${FEARSOME_CHAMPION_MAX}` : ''}).`,
           firstPlayer.id
         ),
         ...s.actionLog.slice(0, 49),
@@ -671,14 +678,14 @@ export const useGameStore = create<GameStore>((set, get) => ({
       const brokenCount = orderedPlayers.reduce(
         (sum, p) => sum + p.windows.filter(w => w.status === 'broken').length, 0
       )
-      const coins = Math.max(1, brokenCount)
-      set(s => ({
+      const coins = Math.min(FEARSOME_CHAMPION_MAX, brokenCount)
+      if (coins > 0) set(s => ({
         players: s.players.map(p =>
           p.id === firstPlayer.id ? { ...p, coins: p.coins + coins } : p
         ),
         actionLog: [
           logEntry(
-            `${firstPlayer.name}'s Fearsome Champion — gained ${coins} coin${coins > 1 ? 's' : ''} (${brokenCount} broken window${brokenCount !== 1 ? 's' : ''} on board).`,
+            `${firstPlayer.name}'s Fearsome Champion — gained ${coins} coin${coins > 1 ? 's' : ''} (${brokenCount} broken window${brokenCount !== 1 ? 's' : ''} on board${brokenCount > FEARSOME_CHAMPION_MAX ? `, max ${FEARSOME_CHAMPION_MAX}` : ''}).`,
             firstPlayer.id
           ),
           ...s.actionLog.slice(0, 49),
@@ -1419,14 +1426,19 @@ export const useGameStore = create<GameStore>((set, get) => ({
         return p.classId === 'monk' ? { ...p, activeTokens: 0 } : p
       })
       // Reset rn04 reroll availability (rn03 roundShuttered windows reopen at turn start, not here)
+      const recharge = newRound === SHAMAN_DICE_RECHARGE_ROUND
       const playersWithReopened = updatedPlayers.map(p => ({
         ...p,
         rn04RerollUsed: false,
+        elementalDice: recharge ? p.elementalDice.map(d => ({ ...d, used: false })) : p.elementalDice,
       }))
+      const rechargeLogs = recharge
+        ? updatedPlayers.filter(p => p.elementalDice.some(d => d.used)).map(p => logEntry(`${p.name}'s Elemental dice recharge — all 4 are ready again.`, p.id))
+        : []
       return {
         round: newRound,
         players: playersWithReopened,
-        actionLog: [logEntry(`--- Round ${newRound} begins ---`), ...s.actionLog.slice(0, 49)],
+        actionLog: [...rechargeLogs, logEntry(`--- Round ${newRound} begins ---`), ...s.actionLog.slice(0, 49 - rechargeLogs.length)],
       }
     })
     get().refillVisitors()
@@ -2165,8 +2177,8 @@ export const useGameStore = create<GameStore>((set, get) => ({
       players: s.players.map(p => {
         if (p.id !== playerId) return p
         const withWindows = { ...p, windows: p.windows.map(w => ({ ...w, status: 'normal' as WindowStatus })) }
-        // +1 rep of chosen type — Paladin only (only Paladins gain Rep from repairing)
-        const withRepType = (repType && p.classId === 'paladin') ? { ...withWindows, rep: { ...withWindows.rep, [repType]: withWindows.rep[repType] + 1 } } : withWindows
+        // Honourable Trade: +1 rep of chosen type — Paladin only, and only if a window was actually repaired
+        const withRepType = (repType && p.classId === 'paladin' && brokenCount > 0) ? { ...withWindows, rep: { ...withWindows.rep, [repType]: withWindows.rep[repType] + 1 } } : withWindows
         // rn03: additional ARM rep per window repaired
         const withRn03 = rn03 && brokenCount > 0 ? { ...withRepType, rep: { ...withRepType.rep, ARM: withRepType.rep.ARM + brokenCount } } : withRepType
         const withDraw = draw ? { ...withRn03, hoard: [...withRn03.hoard, ...draw.drawn] } : withRn03
@@ -2196,10 +2208,8 @@ export const useGameStore = create<GameStore>((set, get) => ({
 
     const card = target.hoard.find(c => c.id === stolenCardId)
 
-    // Paladin passive: +1 extra Rep (Honourable Trade)
-    const paladinCrimeBonus = reporter.classId === 'paladin' ? 1 : 0
-    const totalRep = 1 + paladinCrimeBonus
-    const awardedRepType = reporter.classId === 'paladin' && card ? card.type : repType
+    const totalRep = 1
+    const awardedRepType = repType
 
     set(s => ({
       players: s.players.map(p => {
@@ -2217,7 +2227,7 @@ export const useGameStore = create<GameStore>((set, get) => ({
       }),
       resourceDiscard: card ? [card, ...s.resourceDiscard] : s.resourceDiscard,
       actionLog: [logEntry(
-        `${reporter.name} reported crime — gained ${totalRep} ${awardedRepType} rep${paladinCrimeBonus > 0 ? ` (Honourable Trade +${paladinCrimeBonus})` : ''}; ${target.name} discarded ${card?.name ?? 'stolen card'}.`,
+        `${reporter.name} reported crime — gained ${totalRep} ${awardedRepType} rep; ${target.name} discarded ${card?.name ?? 'stolen card'}.`,
         byPlayerId
       ), ...s.actionLog.slice(0, 49)],
     }))
@@ -3087,11 +3097,11 @@ export const useGameStore = create<GameStore>((set, get) => ({
       actionLog: [logEntry(`${player.name} used Raiding Party — Clan marker placed at ${clanLoc}.`, playerId), ...s.actionLog.slice(0, 49)],
     }))
 
-    // Trigger Appraise 2 (look at top 4 cards, keep 2)
+    // Trigger Appraise 1 (look at top 4 cards, keep 1)
     const deck = get().resourceDeck
     const cards = deck.slice(0, 4)
     if (cards.length > 0) {
-      set({ appraisePeek: { playerId, cards, maxKeep: 2 } })
+      set({ appraisePeek: { playerId, cards, maxKeep: 1 } })
     }
   },
 
@@ -3328,7 +3338,7 @@ export const useGameStore = create<GameStore>((set, get) => ({
     // consumes it); a Council of Seven second Negotiate is free. Remember which, for refunds.
     const { negotiatesCompletedThisTurn, players } = get()
     const actionCharged = negotiatesCompletedThisTurn === 0
-    // Entering a Barbarian's Clan location costs a 2-coin toll, charged with that action
+    // Entering a Barbarian's Clan location costs CLAN_TOLL coins, charged with that action
     const clanTollPaidTo = actionCharged
       ? players.find(p => p.classId === 'barbarian' && p.clanLocation === 'guildhall' && p.id !== proposerId)?.id
       : undefined
@@ -3854,16 +3864,16 @@ export const useGameStore = create<GameStore>((set, get) => ({
         p.id !== startingId || p.classId !== 'barbarian' ? p : { ...p, clanLocation: null }
       )
 
-    // Helper: apply Barbarian's passive — gain 1 coin per broken window on board (min 1)
+    // Helper: apply Barbarian's passive — gain 1 coin per broken window on board (max FEARSOME_CHAMPION_MAX)
     const applyBarbPassive = (startingId: string) => {
       const state = get()
       const barb = state.players.find(p => p.id === startingId)
       if (!barb || barb.classId !== 'barbarian') return
       const brokenCount = state.players.reduce((sum, p) => sum + p.windows.filter(w => w.status === 'broken').length, 0)
-      const coins = Math.max(1, brokenCount)
-      set(s => ({
+      const coins = Math.min(FEARSOME_CHAMPION_MAX, brokenCount)
+      if (coins > 0) set(s => ({
         players: s.players.map(p => p.id === startingId ? { ...p, coins: p.coins + coins } : p),
-        actionLog: [logEntry(`${barb.name}'s Fearsome Champion — gained ${coins} coin${coins > 1 ? 's' : ''} (${brokenCount} broken window${brokenCount !== 1 ? 's' : ''} on board).`, startingId), ...s.actionLog.slice(0, 49)],
+        actionLog: [logEntry(`${barb.name}'s Fearsome Champion — gained ${coins} coin${coins > 1 ? 's' : ''} (${brokenCount} broken window${brokenCount !== 1 ? 's' : ''} on board${brokenCount > FEARSOME_CHAMPION_MAX ? `, max ${FEARSOME_CHAMPION_MAX}` : ''}).`, startingId), ...s.actionLog.slice(0, 49)],
       }))
     }
 
@@ -4033,7 +4043,6 @@ export const useGameStore = create<GameStore>((set, get) => ({
     const discarded: ResourceCard[] = []
     let totalCoins = 0
     const repGains: Partial<Record<RepType, number>> = {}
-    const paladinVisitorRepGains: Partial<Record<RepType, number>> = {}
     const usedWindowIdxs = new Set(assignments.map(a => a.windowIdx))
 
     // Updated demand remaining after this sell phase
@@ -4064,9 +4073,6 @@ export const useGameStore = create<GameStore>((set, get) => ({
       // Check if fully satisfied
       if (Object.values(remaining).every(n => n === 0)) {
         claimedVisitorIdxs.push(visitorIdx)
-        if (player.classId === 'paladin') {
-          paladinVisitorRepGains[card.type] = (paladinVisitorRepGains[card.type] ?? 0) + 1
-        }
       }
     }
 
@@ -4074,8 +4080,6 @@ export const useGameStore = create<GameStore>((set, get) => ({
     const counterfeitSold = discarded.filter(isCounterfeitCard)
     const normalSold = discarded.filter(c => !isCounterfeitCard(c))
 
-    // Paladin passive: Honourable Trade — +1 Rep matching the resource that satisfied each public Visitor
-    const paladinVisitorBonus = Object.values(paladinVisitorRepGains).reduce((sum, n) => sum + (n ?? 0), 0)
     // King's Errand (rn07): +1 coin per completed public Visitor
     const rn07CoinBonus = claimedVisitorIdxs.length > 0 && player.classId === 'paladin'
       && player.renownCards.some(c => c.id === 'rn07')
@@ -4085,7 +4089,6 @@ export const useGameStore = create<GameStore>((set, get) => ({
     set(s => {
       const newRep = { ...player.rep }
       for (const [t, n] of Object.entries(repGains)) newRep[t as RepType] = (newRep[t as RepType] ?? 0) + n
-      for (const [t, n] of Object.entries(paladinVisitorRepGains)) newRep[t as RepType] = (newRep[t as RepType] ?? 0) + n
 
       // Remove claimed visitors from demand map
       for (const v of claimedVisitors) delete newDemandRemaining[v.id]
@@ -4113,7 +4116,6 @@ export const useGameStore = create<GameStore>((set, get) => ({
             `${player.name} sell phase — sold ${discarded.length} item(s) for ${totalCoins} coins` +
             (Object.keys(repGains).length ? ` +rep (${Object.entries(repGains).map(([t, n]) => `${n} ${t}`).join(', ')})` : '') +
             (claimedVisitors.length ? ` — ${claimedVisitors.map(v => v.name).join(', ')} satisfied!` : '') +
-            (paladinVisitorBonus > 0 ? ` Honourable Trade +rep (${Object.entries(paladinVisitorRepGains).map(([t, n]) => `${n} ${t}`).join(', ')}).` : '') +
             (rn07CoinBonus > 0 ? ` King's Errand +${rn07CoinBonus} coin(s).` : '') + '.',
             playerId
           ),
