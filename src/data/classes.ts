@@ -4,6 +4,7 @@ export const CLASSES: ClassCard[] = [
   {
     id: 'barbarian',
     name: 'Barbarian',
+    heroName: 'Ronan Ellisbane',
     tagline: 'Smash first, sell later',
     imageFile: '/cards/player-boards/Barbarian.png',
     status: 'BETA',
@@ -17,6 +18,7 @@ export const CLASSES: ClassCard[] = [
   {
     id: 'monk',
     name: 'Monk',
+    heroName: 'Jozin Kikim',
     tagline: 'Flow like coin through fingers',
     imageFile: '/cards/player-boards/Monk.png',
     status: 'WIP',
@@ -30,6 +32,7 @@ export const CLASSES: ClassCard[] = [
   {
     id: 'paladin',
     name: 'Paladin',
+    heroName: 'Jordain Tinkfast',
     tagline: 'Honour in every transaction',
     imageFile: '/cards/player-boards/Paladin.png',
     status: 'BETA',
@@ -43,6 +46,7 @@ export const CLASSES: ClassCard[] = [
   {
     id: 'ranger',
     name: 'Ranger',
+    heroName: 'Emberlyn Morishwood',
     tagline: 'Always knows where to find it',
     imageFile: '/cards/player-boards/Ranger.png',
     status: 'BETA',
@@ -56,6 +60,7 @@ export const CLASSES: ClassCard[] = [
   {
     id: 'rogue',
     name: 'Rogue',
+    heroName: 'Robyn Spichard',
     tagline: 'Your stock is my stock',
     imageFile: '/cards/player-boards/Rogue.png',
     status: 'BETA',
@@ -69,6 +74,7 @@ export const CLASSES: ClassCard[] = [
   {
     id: 'shaman',
     name: 'Shaman',
+    heroName: 'Mikael Spenrian',
     tagline: 'The spirits always know a deal',
     imageFile: '/cards/player-boards/Shaman.png',
     status: 'BETA',
@@ -82,6 +88,7 @@ export const CLASSES: ClassCard[] = [
   {
     id: 'sorcerer',
     name: 'Sorcerer',
+    heroName: 'Mathias Spellserve',
     tagline: 'Arcane arbitrage specialist',
     imageFile: '/cards/player-boards/Sorcerer.png',
     status: 'WIP',
@@ -95,6 +102,7 @@ export const CLASSES: ClassCard[] = [
   {
     id: 'warlock',
     name: 'Warlock',
+    heroName: 'Kaelan Mortisbane',
     tagline: 'Debt is just deferred profit',
     imageFile: '/cards/player-boards/Warlock.png',
     status: 'WIP',

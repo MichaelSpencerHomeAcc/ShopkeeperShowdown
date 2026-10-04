@@ -317,7 +317,7 @@ export function WaitingRoom({ roomId, roomCode, isHost, onGameStart, onLeave }: 
 
   function addBot() {
     if (!chosenBotClass || seatCount >= 6) return
-    const name = botName([...players.map(p => p.name), ...bots.map(b => b.name)])
+    const name = botName(chosenBotClass, [...players.map(p => p.name), ...bots.map(b => b.name)])
     updateBots([...bots, { name, classId: chosenBotClass, bot: newBotDifficulty }])
     setNewBotClass('')
   }
