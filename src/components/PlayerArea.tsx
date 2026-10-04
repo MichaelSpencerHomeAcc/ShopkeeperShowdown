@@ -2,7 +2,7 @@ import { useState } from 'react'
 import type { Player, WindowSlot, WindowStatus } from '../types'
 import { useGameStore } from '../store/gameStore'
 import { TokenCounter } from './TokenCounter'
-import { ResourceCardTile, RecipeDisplay } from './ResourceCardTile'
+import { ResourceCardTile } from './ResourceCardTile'
 import { CLASSES } from '../data/classes'
 import { CardImage } from './CardImage'
 import { ClassAbilitiesPanel } from './ClassAbilitiesPanel'
@@ -37,7 +37,7 @@ export function PlayerArea({ player, playerIndex, isOwn = true, isMyTurn = true 
   const {
     adjustCoins,
     placeInWindow, moveFromWindowToHoard, discardResource,
-    setWindowStatus, setWindowStolen, chooseWorkOrder,
+    setWindowStatus, setWindowStolen,
     adjustDebt, adjustMomentum, reorderHoard, swapWindows,
     currentTurnPlayerId,
     endTurn, turnActionsUsed, bonusActionsThisTurn,
@@ -49,7 +49,6 @@ export function PlayerArea({ player, playerIndex, isOwn = true, isMyTurn = true 
   const [showEndTurnWarn, setShowEndTurnWarn] = useState(false)
 
   const classInfo = CLASSES.find(c => c.id === player.classId)
-  const pendingWorkOrders = (player as Player & { _pendingWorkOrders?: import('../types').WorkOrderCard[] })._pendingWorkOrders
 
   const PAWN_COLORS = ['bg-red-500', 'bg-blue-500', 'bg-green-500', 'bg-yellow-400', 'bg-purple-500', 'bg-pink-500']
   const playerColor = PAWN_COLORS[playerIndex % PAWN_COLORS.length]
@@ -301,45 +300,6 @@ export function PlayerArea({ player, playerIndex, isOwn = true, isMyTurn = true 
           </div>
         )}
       </div>
-
-      {/* Work Order */}
-      <div>
-        <div className="mb-1">
-          <span className="zone-label">Workbench</span>
-        </div>
-
-        {pendingWorkOrders && canMove && (
-          <div className="zone p-2 space-y-2">
-            <div className="text-xs text-parchment-400">Choose one Work Order:</div>
-            {pendingWorkOrders.map(wo => (
-              <button
-                key={wo.id}
-                onClick={() => chooseWorkOrder(player.id, wo.id)}
-                className="w-full flex items-center gap-3 bg-ink-800/60 rounded-lg border border-parchment-700/30 p-2 text-left hover:border-gold-400 hover:bg-ink-700/60 active:scale-[.99] transition-all"
-              >
-                <CardImage src={wo.imageFile} alt={wo.name} className="w-14 h-14 rounded object-cover flex-shrink-0" fallbackText="" />
-                <div className="flex-1 min-w-0">
-                  <div className="text-sm font-semibold text-parchment-100 leading-tight">{wo.name}</div>
-                  <div className="text-xs text-parchment-400 mt-0.5">Recipe: <RecipeDisplay recipe={wo.recipe} /></div>
-                  <div className="text-sm font-bold text-gold-400 mt-1">${wo.price}</div>
-                </div>
-              </button>
-            ))}
-          </div>
-        )}
-
-        {player.workOrder && (
-          <div className="flex items-center gap-3 bg-ink-800/60 rounded-lg border border-parchment-700/30 p-2">
-            <CardImage src={player.workOrder.imageFile} alt={player.workOrder.name} className="w-12 h-12 rounded object-cover flex-shrink-0" fallbackText="" />
-            <div className="flex-1 min-w-0">
-              <div className="text-sm font-semibold text-parchment-100 leading-tight">{player.workOrder.name}</div>
-              <div className="text-xs text-parchment-400 mt-0.5">Recipe: <RecipeDisplay recipe={player.workOrder.recipe} /></div>
-              <div className="text-sm font-bold text-gold-400 mt-0.5">${player.workOrder.price}</div>
-            </div>
-          </div>
-        )}
-      </div>
-
 
       {/* Class-specific decks */}
       {player.classId === 'rogue' && (player.counterfeitHand.length > 0 || player.counterfeitCards.length > 0) && (

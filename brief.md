@@ -28,7 +28,9 @@ A single image (PNG/SVG) of the Town board with 6 location labels: Guildhall, Ta
 1. **Resource deck — 92 cards** in 4 types (Armament, Consumable, Trinket, Trade Good). Each card has: name, type, coin value ($1-$8), optional Reputation icon (0, 1, or 2 rep). When sold/discarded, goes to discard pile.
 2. **Visitor deck — 34 cards.** Each Visitor has a name, title, art, and a resource demand (e.g. "2 ARM, 1 CON"). 3 are face-up on the board at all times.
 3. **Professional deck — 9 cards.** 3 are face-up at the Guildhall for the whole game.
-4. **Work Order deck — 20 cards.** Players draw 2 and pick 1 (returning the other).
+4. **Work Order deck — 20 cards.** 2 are face-up on the board; any player can Craft either of them. A completed order's slot is refilled from the deck at the start of the next round.
+
+**Turn order:** the first-player role passes one seat to the left at the start of every round, so each player gets a turn at first pick of the freshly restocked Work Orders.
 5. **Counterfeit deck — 8 cards.** Rogue class only; player-specific deck.
 6. **Renown deck — 10 cards.** Paladin class only; player draws 4 at game start.
 
@@ -48,7 +50,6 @@ Each player has:
 - A class card (chosen at game start)
 - 5 window slots (resources placed here are "in shop")
 - A Hoard zone (max 8 resources, private to that player)
-- 1 Workbench zone (holds 1 Work Order if active)
 - Coin total (numeric)
 - Rep token collection (visible to all)
 - Active tokens (2, can be spent or refreshed)

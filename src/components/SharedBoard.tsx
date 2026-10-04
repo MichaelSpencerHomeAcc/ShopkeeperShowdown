@@ -1,15 +1,17 @@
 import { useState, useEffect, useRef, type Dispatch, type SetStateAction } from 'react'
-import { useGameStore, CLAN_TOLL } from '../store/gameStore'
+import { useGameStore, CLAN_TOLL, describePrize } from '../store/gameStore'
 import type { Location, Player, GameState, DuelStake, ResourceCard } from '../types'
 import { LocationActionPanel, DrawnCardsToast } from './LocationActionPanel'
 import { SellPhase } from './SellPhase'
 import { ResourceCardMini } from './ResourceCardMini'
-import { RecipeDisplay, ResourceCardTile } from './ResourceCardTile'
+import { ResourceCardTile } from './ResourceCardTile'
 import { CardImage } from './CardImage'
 import { parseRequirements } from '../utils/requirements'
 import { scorePlayer } from '../utils/scoring'
 import { LOCATIONS } from '../data/locations'
 import { DiceRollModal } from './DiceRollModal'
+import { PublicWorkOrdersRow, PublicWorkOrdersReference } from './PublicWorkOrders'
+import { VisitorPrizeInfo, VisitorPrizeModal } from './VisitorPrizes'
 
 const DEMAND_COLORS: Record<string, string> = {
   ARM: 'bg-orange-600 text-orange-100',
@@ -157,8 +159,7 @@ export function SharedBoard({ canAct = true, localPlayerName }: SharedBoardProps
     fleaMarket,
     auction, tradeWithFleaMarket, breakWindow,
     resourceDeck, resourceDiscard,
-    workOrderDeck,
-    townCrierPeek, completeTownCrier, activeVisitors, visitorDemandRemaining,
+    townCrierPeek, completeTownCrier, activeVisitors, visitorDemandRemaining, visitorPrizeQueue,
     professionalSlots,
     actionLog, lastGuildFencedCard,
     steal, heist,
@@ -1166,6 +1167,7 @@ export function SharedBoard({ canAct = true, localPlayerName }: SharedBoardProps
                       </div>
                     </div>
                   )}
+                  <VisitorPrizeInfo visitorId={v.id} />
                 </div>
               </div>
             )
@@ -1215,16 +1217,8 @@ export function SharedBoard({ canAct = true, localPlayerName }: SharedBoardProps
           <h4 className="text-base font-bold text-parchment-300 uppercase tracking-widest text-center mt-1">Flea Market</h4>
         </div>
 
-        {/* Right — Work Orders */}
-        <div className="flex flex-col items-center gap-3 flex-shrink-0">
-          <div className="card w-[80px] h-[112px]">
-            <CardImage src="/cards/workorders/Card Back.png" alt="Work Order deck" className="w-full h-full" fallbackText="Work Orders" />
-          </div>
-          <div className="text-center">
-            <div className="text-xs font-bold text-parchment-400 uppercase tracking-widest">Work Orders</div>
-            <div className="text-xs text-parchment-500">{workOrderDeck.length} remaining</div>
-          </div>
-        </div>
+        {/* Right — public Work Orders (anyone may Craft these at the Workshop) */}
+        <PublicWorkOrdersRow player={localPlayerId ? players.find(p => p.id === localPlayerId) : currentPlayer} />
 
       </div>
 
@@ -1663,6 +1657,15 @@ export function SharedBoard({ canAct = true, localPlayerName }: SharedBoardProps
               onBreak={(windowId) => resolveTrickShotBonus('break', windowId)}
             />
           : <WaitingOverlay name={ranger?.name} action="choosing Trick Shot bonus" classId={ranger?.classId} />
+      })()}
+
+      {/* Visitor contribution prize that needs a choice */}
+      {visitorPrizeQueue.length > 0 && (() => {
+        const pending = visitorPrizeQueue[0]
+        const winner = players.find(p => p.id === pending.playerId)
+        return isMe(pending.playerId)
+          ? <VisitorPrizeModal />
+          : <WaitingOverlay name={winner?.name} action={`choosing their ${pending.visitorName} prize (${describePrize(pending.prize)})`} classId={winner?.classId} />
       })()}
 
       {/* Ranger — Visitor Trade passive */}
@@ -2669,7 +2672,6 @@ function HoardOverflowModal({
   reorderCounterfeitHand: (playerId: string, fromIdx: number, toIdx: number) => void
 }) {
   const [placingCardId, setPlacingCardId] = useState<string | null>(null)
-  const [showWorkOrder, setShowWorkOrder] = useState(false)
   const over = player.hoard.length - 8
 
   const WINDOW_TYPE_BG: Record<string, string> = {
@@ -2691,29 +2693,9 @@ function HoardOverflowModal({
           </div>
         </div>
 
-        {player.workOrder && (
-          <div className="mb-4">
-            <button
-              type="button"
-              onClick={() => setShowWorkOrder(v => !v)}
-              className="w-full flex items-center justify-between px-3 py-2 bg-amber-950/40 border border-amber-700/30 rounded-lg text-sm text-amber-300 font-semibold hover:bg-amber-900/40 transition-colors"
-            >
-              <span>📋 Work Order: {player.workOrder.name}</span>
-              <span>{showWorkOrder ? '▲' : '▼'}</span>
-            </button>
-
-            {showWorkOrder && (
-              <div className="px-3 py-2 bg-amber-950/20 border-x border-b border-amber-700/30 rounded-b-lg space-y-0.5">
-                <div className="text-sm text-parchment-400">
-                  Recipe: <RecipeDisplay recipe={player.workOrder.recipe} />
-                </div>
-                <div className="text-sm text-parchment-400">
-                  Reward: {player.workOrder.price} coins
-                </div>
-              </div>
-            )}
-          </div>
-        )}
+        <div className="mb-4">
+          <PublicWorkOrdersReference player={player} />
+        </div>
 
         {/* Windows section */}
         <div className="mb-5">

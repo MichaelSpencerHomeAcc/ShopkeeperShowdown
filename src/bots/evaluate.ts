@@ -1,5 +1,6 @@
-import type { BotDifficulty, GameState, Player, RepTokens, RepType, ResourceCard, ResourceType } from '../types'
+import type { BotDifficulty, GameState, Player, RepTokens, RepType, ResourceCard, ResourceType, WorkOrderCard } from '../types'
 import { parseRequirements } from '../utils/requirements'
+import { turnOrder } from '../store/gameStore'
 import { repPoints, repSets, scorePlayer, SET_BONUS } from '../utils/scoring'
 
 /**
@@ -53,7 +54,7 @@ export function bestRepType(rep: RepTokens, difficulty: BotDifficulty): RepType 
 /** Sell phases still to come for `playerId` (round turns plus the final sell). */
 export function sellPhasesLeft(s: GameState, playerId: string): number {
   if (s.endgame) return s.endgame.phase === 'final-sell' && s.endgame.playerQueue.includes(playerId) ? 1 : 0
-  const order = s.players.map(p => p.id)
+  const order = turnOrder(s).map(p => p.id)
   const me = order.indexOf(playerId)
   const cur = order.indexOf(s.currentTurnPlayerId)
   let left = Math.max(0, 6 - s.round) + 1 // future rounds + final sell
@@ -72,11 +73,9 @@ export interface ValueContext {
   capacity: number
   /** Cards currently held (hoard + windows) */
   stock: number
-  /** Work Order still-missing counts by type */
+  /** Still-missing counts by type for the public Work Order this bot is working towards */
   orderNeeds: Record<ResourceType, number> | null
   orderUnitValue: number
-  /** 0..1 — how much a spare card can still be liquidated (auction/fence) in later turns */
-  liquidity: number
 }
 
 export function demandedTypes(s: GameState): Record<ResourceType, number> {
@@ -93,30 +92,64 @@ export function heldCards(p: Player): ResourceCard[] {
   return [...p.hoard, ...p.windows.flatMap(w => (w.card ? [w.card] : []))]
 }
 
+function typeCounts(p: Player): Record<ResourceType, number> {
+  const have: Record<ResourceType, number> = { ARM: 0, CON: 0, TRI: 0, TRG: 0 }
+  for (const c of heldCards(p)) have[c.type]++
+  return have
+}
+
+/** Cards still needed for a Work Order given what the player holds (ignoring Forge discounts). */
+export function missingForOrder(p: Player, order: WorkOrderCard): number {
+  const req = parseRequirements(order.recipe)
+  const have = typeCounts(p)
+  let spare = 0
+  let missing = 0
+  for (const t of RESOURCE_TYPES) {
+    missing += Math.max(0, req[t] - have[t])
+    spare += Math.max(0, have[t] - req[t])
+  }
+  return missing + Math.max(0, req.ANY - spare)
+}
+
+/**
+ * The public Work Order this bot is building towards: the best reward for the fewest
+ * missing cards. Orders far out of reach are ignored (someone else will probably take them).
+ */
+export function targetWorkOrder(s: GameState, me: Player, difficulty: BotDifficulty): WorkOrderCard | null {
+  let best: WorkOrderCard | null = null
+  let bestScore = -Infinity
+  for (const wo of s.activeWorkOrders) {
+    if (!wo) continue
+    const missing = missingForOrder(me, wo)
+    if (missing > 3) continue
+    let score = wo.price - missing * (difficulty === 'easy' ? 2 : 6)
+    // Hard bots avoid racing for an order a rival is closer to finishing
+    if (difficulty === 'hard' && s.players.some(p => p.id !== me.id && missingForOrder(p, wo) < missing)) score -= 8
+    if (score > bestScore) { best = wo; bestScore = score }
+  }
+  return best
+}
+
 export function buildContext(s: GameState, me: Player, difficulty: BotDifficulty): ValueContext {
   const stock = heldCards(me).length
   const phases = sellPhasesLeft(s, me.id)
   const visitors = s.activeVisitors.filter(Boolean).length || 1
   // Roughly 1.6 sales per sell phase (one card per Visitor, demand permitting)
-  const capacity = phases * Math.min(visitors, 3) * 0.55 + (me.workOrder ? 3 : 0)
+  const target = targetWorkOrder(s, me, difficulty)
+  const capacity = phases * Math.min(visitors, 3) * 0.55 + (target ? 3 : 0)
 
   let orderNeeds: ValueContext['orderNeeds'] = null
   let orderUnitValue = 0
-  if (me.workOrder) {
-    const req = parseRequirements(me.workOrder.recipe)
-    const have: Record<ResourceType, number> = { ARM: 0, CON: 0, TRI: 0, TRG: 0 }
-    for (const c of heldCards(me)) have[c.type]++
+  if (target) {
+    const req = parseRequirements(target.recipe)
+    const have = typeCounts(me)
     orderNeeds = { ARM: 0, CON: 0, TRI: 0, TRG: 0 }
     for (const t of RESOURCE_TYPES) orderNeeds[t] = Math.max(0, req[t] - have[t])
     const size = RESOURCE_TYPES.reduce((n, t) => n + req[t], 0) + req.ANY
-    orderUnitValue = size > 0 ? me.workOrder.price / size : 0
+    orderUnitValue = size > 0 ? target.price / size : 0
   }
 
-  // Hard bots know a card left in the hoard after their last turn is worth nothing
-  const turnsAfterThis = Math.max(0, 6 - s.round) + (s.endgame ? -1 : 0)
-  const liquidity = difficulty === 'hard' ? clamp(turnsAfterThis / 2, 0, 1) : 1
-
-  return { me, difficulty, demanded: demandedTypes(s), capacity, stock, orderNeeds, orderUnitValue, liquidity }
+  return { me, difficulty, demanded: demandedTypes(s), capacity, stock, orderNeeds, orderUnitValue }
 }
 
 /** What a card would earn if sold to a Visitor right now (coins + Reputation). */
@@ -130,10 +163,10 @@ export function cardWorth(card: ResourceCard, ctx: ValueContext, extraStock = 0)
   const demandFactor = ctx.demanded[card.type] > 0 ? 1 : 0.6
   const capacityFactor = clamp(ctx.capacity / Math.max(1, ctx.stock + extraStock), 0.2, 1)
   let w = saleValue(card, ctx) * demandFactor * capacityFactor
-  if (ctx.orderNeeds && ctx.orderNeeds[card.type] > 0) w += ctx.orderUnitValue * (ctx.difficulty === 'hard' ? 0.9 : 0.45)
+  if (ctx.orderNeeds && ctx.orderNeeds[card.type] > 0) w += ctx.orderUnitValue * 0.45
   if (isCounterfeit(card) && ctx.me.classId !== 'rogue') w *= 0.8
-  // Floor: a card can always be auctioned for ~3.5 coins if an action is spare
-  const liquidation = (3.5 + card.repTokens * repValue(ctx.me.rep, card.type, ctx.difficulty)) * 0.4 * ctx.liquidity
+  // Floor: a card can always be auctioned (~3.5 coins) or crafted if an action is spare
+  const liquidation = (3.5 + card.repTokens * repValue(ctx.me.rep, card.type, ctx.difficulty)) * 0.4
   return Math.max(w, liquidation)
 }
 

@@ -36,7 +36,7 @@ export const CLASSES: ClassCard[] = [
     tagline: 'Honour in every transaction',
     imageFile: '/cards/player-boards/Paladin.png',
     status: 'BETA',
-    passive: 'Honourable Trade — Gain 1 additional Reputation token whenever you: Resolve a Negotiate at the Guildhall, or use Report the Crime at the Barracks to repair at least one Broken window. Starts with a hand of 4 Renown Cards (drawn from a 10-card personal deck).',
+    passive: 'Honourable Trade — Gain 1 additional Reputation token whenever you: Resolve a Negotiate at the Guildhall, complete a Work Order (gain the recipe\'s main type), or use Report the Crime at the Barracks to repair at least one Broken window. Starts with a hand of 4 Renown Cards (drawn from a 10-card personal deck).',
     actives: [
       'Righteous Duel — Name a player and declare a stake. Both roll d6; the Paladin adds their current Renown card count to their roll. Highest total wins both stakes. Tie: both returned.',
       'Tales of Old (off-turn) — Discard 1 Renown Card from your hand and immediately resolve its Spend effect. Renown is never replenished — once spent, it\'s gone.',

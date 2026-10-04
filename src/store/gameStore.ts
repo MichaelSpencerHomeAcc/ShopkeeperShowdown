@@ -1,10 +1,11 @@
 import { create } from 'zustand'
 import type {
-  GameState, Player, ResourceCard, WorkOrderCard, VisitorCard, CounterfeitCard,
+  GameState, Player, ResourceCard, VisitorCard, CounterfeitCard,
   ClassId, Location, WindowStatus, LogEntry, RepType, ShamanPatienceEffects, AmbushCard,
-  DemandMap, PlayerSetup, BotDifficulty,
+  DemandMap, PlayerSetup, BotDifficulty, ResourceType, VisitorPrizeKind, VisitorPrize,
+  VisitorContribution, PendingVisitorPrize, VisitorPrizeChoice,
 } from '../types'
-import { parseRequirements } from '../utils/requirements'
+import { canCraft, parseRequirements, recipeMainType } from '../utils/requirements'
 import { RESOURCE_CARDS } from '../data/resources'
 import { VISITOR_CARDS } from '../data/visitors'
 import { PROFESSIONAL_CARDS } from '../data/professionals'
@@ -19,6 +20,17 @@ export const FEARSOME_CHAMPION_MAX = 2
 export const CLAN_TOLL = 1
 /** Shaman Elemental dice that have been used recharge at the start of this round. */
 export const SHAMAN_DICE_RECHARGE_ROUND = 4
+/** Face-up Work Orders on the board that any player may complete with Craft.
+ *  A completed order's slot stays empty until the next round begins. */
+export const PUBLIC_WORK_ORDERS = 2
+
+/** This round's turn order: the player list rotated so the round's first player comes first. */
+export function turnOrder(s: Pick<GameState, 'players' | 'startPlayerOffset'>): Player[] {
+  const n = s.players.length
+  if (n === 0) return []
+  const k = ((s.startPlayerOffset % n) + n) % n
+  return [...s.players.slice(k), ...s.players.slice(0, k)]
+}
 
 function shuffle<T>(arr: T[]): T[] {
   const a = [...arr]
@@ -84,7 +96,6 @@ function makePlayer(id: string, name: string, classId: ClassId, bot?: BotDifficu
     activeTokens: classId === 'monk' ? 0 : 2,
     windows,
     hoard: [],
-    workOrder: null,
     renownCards,
     counterfeitCards,
     counterfeitHand,
@@ -163,6 +174,8 @@ function buildInitialGameState(players: Player[]): GameState {
   const resourceDeck = shuffle(RESOURCE_CARDS)
   const visitorDeck = shuffle(VISITOR_CARDS)
   const workOrderDeck = shuffle(WORK_ORDER_CARDS)
+  // Public Work Orders: dealt face-up on the board for anyone to Craft
+  const activeWorkOrders = workOrderDeck.splice(0, PUBLIC_WORK_ORDERS)
 
   // Flea market: 5 face-up resource cards
   const fleaMarket = resourceDeck.splice(0, 5)
@@ -203,6 +216,7 @@ function buildInitialGameState(players: Player[]): GameState {
     activeVisitors: [...activeVisitors, null, null].slice(0, 3),
     professionalSlots,
     workOrderDeck,
+    activeWorkOrders: [...activeWorkOrders, ...Array(PUBLIC_WORK_ORDERS).fill(null)].slice(0, PUBLIC_WORK_ORDERS),
     actionLog: [logEntry(draftCards.length > 0 ? 'Starting resource snake draft began.' : 'Game started. Good luck, shopkeepers!')],
     lastGuildFencedCard: null,
     lastGuildFenceType: null,
@@ -212,6 +226,11 @@ function buildInitialGameState(players: Player[]): GameState {
     foragePeek: null,
     lastDrawnCards: null,
     visitorDemandRemaining,
+    visitorPrizes: withVisitorPrizes({}, activeVisitors),
+    visitorContributions: {},
+    contributionSeq: 0,
+    visitorPrizeQueue: [],
+    startPlayerOffset: 0,
     currentTurnPlayerId: draftOrder[0] ?? players[0]?.id ?? '',
     turnActionsUsed: 0,
     locationsUsedThisTurn: [],
@@ -256,8 +275,6 @@ export interface GameStore extends GameState {
   // Deck actions
   drawResource: (playerId: string, toHoard?: boolean) => void
   discardResource: (playerId: string, cardId: string, fromZone: 'hoard' | 'window', windowIdx?: number) => void
-  drawWorkOrders: (playerId: string) => void
-  chooseWorkOrder: (playerId: string, cardId: string) => void
 
   // Window actions
   placeInWindow: (playerId: string, cardId: string, windowIdx: number) => void
@@ -304,7 +321,14 @@ export interface GameStore extends GameState {
   gather: (playerId: string) => void
   forage: (playerId: string) => void
   completeForage: (playerId: string, keepCardIds: string[]) => void
-  auction: (playerId: string, cardId: string, fromZone: 'hoard' | 'window', windowIdx?: number) => void
+  /** Auction a card for a d6 roll; with `visitorIdx` the card is sold into that Visitor (counts toward it) */
+  auction: (playerId: string, cardId: string, fromZone: 'hoard' | 'window', windowIdx?: number, visitorIdx?: number) => void
+  /** Workshop "Sell to a Visitor": up to 2 hoard/window cards into one Visitor for their printed value. Returns cards sold. */
+  marketSale: (playerId: string, visitorIdx: number, picks: { cardId: string; zone: 'hoard' | 'window'; windowIdx?: number }[]) => number
+  /** Resolve the first queued Visitor prize with the winner's choice */
+  resolveVisitorPrize: (choice: VisitorPrizeChoice) => void
+  /** Pass on the first queued Visitor prize */
+  skipVisitorPrize: () => void
   appraise: (playerId: string, count: number) => void
   tradeWithFleaMarket: (playerId: string, playerCardIds: string[], fleaSlotIndices: number[]) => void
   steal: (byPlayerId: string, fromPlayerId: string) => void
@@ -323,7 +347,8 @@ export interface GameStore extends GameState {
   hireBodyguard: (playerId: string) => void
   repairAllWindows: (playerId: string, repType?: import('../types').RepType) => void
   reportCrimeB: (byPlayerId: string, targetPlayerId: string, stolenCardId: string, repType: RepType) => void
-  completeCraft: (playerId: string, cardIds: string[]) => void
+  /** Complete public Work Order `orderIdx` by spending `cardIds` (hoard, windows, or Rogue counterfeits) */
+  completeCraft: (playerId: string, orderIdx: number, cardIds: string[]) => void
   pitchCamp: (playerId: string) => void
   peekTownCrier: (playerId: string) => void
   completeTownCrier: (playerId: string, placeCardId: string, replaceSlotIdx: number) => void
@@ -338,7 +363,6 @@ export interface GameStore extends GameState {
   shadySaboteur: (byPlayerId: string, targetPlayerId: string, windowIdx: number) => void
   skilfulStocker: (playerId: string) => void
   peekAppraise: (playerId: string) => void
-  peekWorkshopAppraise: (playerId: string) => void
   completeAppraise: (playerId: string, keepCardIds: string[]) => void
   bountyHunterCoins: (byPlayerId: string, fromPlayerId: string) => void
   bountyHunterResource: (byPlayerId: string, fromPlayerId: string, cardId: string) => void
@@ -449,6 +473,7 @@ const INITIAL: GameState = {
   activeVisitors: [null, null, null],
   professionalSlots: [],
   workOrderDeck: [],
+  activeWorkOrders: Array(PUBLIC_WORK_ORDERS).fill(null),
   actionLog: [],
   lastGuildFencedCard: null,
   lastGuildFenceType: null,
@@ -458,6 +483,11 @@ const INITIAL: GameState = {
   foragePeek: null,
   lastDrawnCards: null,
   visitorDemandRemaining: {},
+  visitorPrizes: {},
+  visitorContributions: {},
+  contributionSeq: 0,
+  visitorPrizeQueue: [],
+  startPlayerOffset: 0,
   currentTurnPlayerId: '',
   turnActionsUsed: 0,
   locationsUsedThisTurn: [],
@@ -518,11 +548,336 @@ function negotiateRefundNote(s: GameState, deal: { actionCharged?: boolean; clan
   return barb ? ` Guildhall action and ${barb.name}'s Clan toll refunded.` : ' Guildhall action refunded.'
 }
 
+// ── Visitor sales, contributions and prizes ─────────────────────────────────
+
+/** Most cards one player may sell into a single Visitor in one sell phase or Market sale. */
+export const MAX_SALES_PER_VISITOR = 2
+
+export const VISITOR_PRIZE_KINDS: VisitorPrizeKind[] = ['coins', 'rep', 'refresh', 'take', 'draw', 'steal', 'break']
+
+/** Prize sizes as [1st place, 2nd place] for each Visitor size. */
+export const VISITOR_PRIZE_AMOUNTS: Record<VisitorPrizeKind, Record<VisitorCard['size'], [number, number]>> = {
+  coins:   { Small: [4, 2], Large: [6, 3] },
+  rep:     { Small: [1, 1], Large: [2, 1] },
+  refresh: { Small: [1, 1], Large: [2, 1] },
+  take:    { Small: [1, 1], Large: [2, 1] },
+  draw:    { Small: [2, 1], Large: [3, 2] },
+  steal:   { Small: [1, 1], Large: [2, 1] },
+  break:   { Small: [1, 1], Large: [2, 1] },
+}
+
+/** Rough coin value of one unit of each prize — only used so 2nd place never beats 1st. */
+const PRIZE_UNIT_WORTH: Record<VisitorPrizeKind, number> = {
+  coins: 1, rep: 3.5, refresh: 1.5, take: 2.5, draw: 2, steal: 2.5, break: 1.5,
+}
+
+export function prizeWorth(prize: VisitorPrize): number {
+  return PRIZE_UNIT_WORTH[prize.kind] * prize.amount
+}
+
+function dealVisitorPrizes(v: VisitorCard): { first: VisitorPrize; second: VisitorPrize } {
+  const pick = () => VISITOR_PRIZE_KINDS[Math.floor(Math.random() * VISITOR_PRIZE_KINDS.length)]
+  const firstKind = pick()
+  const first = { kind: firstKind, amount: VISITOR_PRIZE_AMOUNTS[firstKind][v.size][0] }
+  // Re-deal 2nd place until it's worth no more than 1st (the same kind always qualifies)
+  for (;;) {
+    const kind = pick()
+    const second = { kind, amount: VISITOR_PRIZE_AMOUNTS[kind][v.size][1] }
+    if (prizeWorth(second) <= prizeWorth(first)) return { first, second }
+  }
+}
+
+/** Deal prizes to any face-up Visitor that doesn't have them yet. */
+function withVisitorPrizes(
+  prizes: GameState['visitorPrizes'],
+  visitors: (VisitorCard | null)[],
+): GameState['visitorPrizes'] {
+  const next = { ...prizes }
+  for (const v of visitors) if (v && !next[v.id]) next[v.id] = dealVisitorPrizes(v)
+  return next
+}
+
+/** Can a card of `type` still be sold into a Visitor with this remaining demand? */
+export function fitsDemand(remaining: DemandMap, type: ResourceType): boolean {
+  return remaining[type] > 0 || (remaining.ANY ?? 0) > 0
+}
+
+function takeDemand(remaining: DemandMap, type: ResourceType): DemandMap {
+  const next = { ...remaining }
+  if (next[type] > 0) next[type]--
+  else if ((next.ANY ?? 0) > 0) next.ANY--
+  return next
+}
+
+/** Player ids ordered by cards contributed (most first); ties go to whoever got there first. */
+export function rankContributors(contribs: Record<string, VisitorContribution> | undefined): string[] {
+  return Object.entries(contribs ?? {})
+    .sort(([, a], [, b]) => b.count - a.count || a.at - b.at)
+    .map(([id]) => id)
+}
+
+export function describePrize(prize: VisitorPrize): string {
+  const n = prize.amount
+  switch (prize.kind) {
+    case 'coins': return `${n} coin${n !== 1 ? 's' : ''}`
+    case 'rep': return `${n} Rep of your choice`
+    case 'refresh': return `Refresh ${n}`
+    case 'take': return `Take ${n} from the Flea Market`
+    case 'draw': return `Draw ${n}`
+    case 'steal': return `Steal ${n}`
+    case 'break': return `Break ${n}`
+  }
+}
+
+interface VisitorSale {
+  visitorIdx: number
+  cardId: string
+  zone: 'hoard' | 'window'
+  windowIdx?: number
+  /** Coins paid for this card (printed value, or the Auction roll) */
+  coins: number
+}
+
+/**
+ * Sell cards into face-up Visitors: pays coins + the card's Rep, reduces the Visitor's demand,
+ * records the seller's contribution and, when a Visitor is completed, pays out its prizes to the
+ * top two contributors. Cards that don't fit the Visitor's remaining demand are skipped.
+ * Returns how many cards were sold.
+ */
+function sellIntoVisitors(
+  get: () => GameStore,
+  set: (partial: Partial<GameStore> | ((s: GameStore) => Partial<GameStore>)) => void,
+  playerId: string,
+  sales: VisitorSale[],
+  describe: (soldLines: string[], coins: number) => string,
+  extra: Partial<GameStore> = {},
+): number {
+  const s0 = get()
+  const player = s0.players.find(p => p.id === playerId)
+  if (!player) return 0
+
+  const demand = { ...s0.visitorDemandRemaining }
+  const contributions = { ...s0.visitorContributions }
+  let seq = s0.contributionSeq
+  let coins = 0
+  const rep: Partial<Record<RepType, number>> = {}
+  const soldIds = new Set<string>()
+  const soldWindows = new Set<number>()
+  const discarded: ResourceCard[] = []
+  const counterfeits: CounterfeitCard[] = []
+  const completedIdx: number[] = []
+  const lines: string[] = []
+
+  for (const sale of sales) {
+    const v = s0.activeVisitors[sale.visitorIdx]
+    if (!v || completedIdx.includes(sale.visitorIdx)) continue
+    const win = sale.zone === 'window' ? player.windows[sale.windowIdx ?? -1] : null
+    const card = sale.zone === 'hoard' ? player.hoard.find(c => c.id === sale.cardId) : win?.card
+    if (!card || card.id !== sale.cardId || soldIds.has(card.id)) continue
+    if (win && win.status === 'broken') continue
+    const rem = demand[v.id] ?? parseRequirements(v.demand)
+    if (!fitsDemand(rem, card.type)) continue
+
+    const nextRem = takeDemand(rem, card.type)
+    demand[v.id] = nextRem
+    seq++
+    contributions[v.id] = {
+      ...(contributions[v.id] ?? {}),
+      [playerId]: { count: (contributions[v.id]?.[playerId]?.count ?? 0) + 1, at: seq },
+    }
+    soldIds.add(card.id)
+    if (win) soldWindows.add(sale.windowIdx!)
+    coins += sale.coins
+    if (card.repTokens > 0) rep[card.type] = (rep[card.type] ?? 0) + card.repTokens
+    if (isCounterfeitCard(card)) counterfeits.push(card)
+    else discarded.push(card)
+    lines.push(`${card.name} → ${v.name}`)
+    if (Object.values(nextRem).every(n => n === 0)) completedIdx.push(sale.visitorIdx)
+  }
+  if (soldIds.size === 0) return 0
+
+  // Completed Visitors pay their prizes to the top two contributors
+  const completed = completedIdx.map(i => s0.activeVisitors[i]!)
+  const prizes = { ...s0.visitorPrizes }
+  const awards: PendingVisitorPrize[] = []
+  for (const v of completed) {
+    const ranking = rankContributors(contributions[v.id])
+    const pz = prizes[v.id]
+    if (pz && ranking[0]) awards.push({ playerId: ranking[0], visitorName: v.name, place: 1, prize: pz.first })
+    if (pz && ranking[1]) awards.push({ playerId: ranking[1], visitorName: v.name, place: 2, prize: pz.second })
+    delete contributions[v.id]
+    delete demand[v.id]
+    delete prizes[v.id]
+  }
+
+  // King's Errand (rn07): +1 coin per Visitor this Paladin completes
+  const rn07 = player.classId === 'paladin' && player.renownCards.some(c => c.id === 'rn07') ? completed.length : 0
+
+  set(s => ({
+    ...extra,
+    resourceDiscard: [...discarded, ...s.resourceDiscard],
+    visitorDemandRemaining: demand,
+    visitorContributions: contributions,
+    contributionSeq: seq,
+    visitorPrizes: prizes,
+    activeVisitors: s.activeVisitors.map((v, i) => (completedIdx.includes(i) ? null : v)),
+    visitorDiscard: [...completed, ...s.visitorDiscard],
+    players: s.players.map(p => {
+      if (p.id !== playerId) return p
+      const newRep = { ...p.rep }
+      for (const [t, n] of Object.entries(rep)) newRep[t as RepType] += n
+      return {
+        ...p,
+        coins: p.coins + coins + rn07,
+        rep: newRep,
+        hoard: p.hoard.filter(c => !soldIds.has(c.id)),
+        stolenHoardCardIds: p.stolenHoardCardIds.filter(id => !soldIds.has(id)),
+        windows: p.windows.map((w, i) => (soldWindows.has(i) ? { ...w, card: null, stolen: false } : w)),
+      }
+    }),
+    actionLog: [
+      logEntry(
+        describe(lines, coins) +
+        (Object.keys(rep).length ? ` +rep (${Object.entries(rep).map(([t, n]) => `${n} ${t}`).join(', ')})` : '') +
+        (completed.length ? ` — ${completed.map(v => v.name).join(', ')} satisfied!` : '') +
+        (rn07 > 0 ? ` King's Errand +${rn07} coin(s)` : '') + '.',
+        playerId,
+      ),
+      ...s.actionLog.slice(0, 49),
+    ],
+  }))
+
+  if (counterfeits.length > 0) get().returnCounterfeitsToRogue(counterfeits, playerId, 'sold')
+  if (completed.length > 0) {
+    get().refillVisitors()
+    // Ranger passive: Trade 1 per Visitor completed (not during the final sell)
+    const ranger = get().players.find(p => p.classId === 'ranger')
+    if (ranger && !get().endgame) set({ rangerVisitorTradePending: { rangerId: ranger.id, tradesRemaining: completed.length } })
+    awardVisitorPrizes(get, set, awards)
+  }
+  return soldIds.size
+}
+
+/** Pay out won prizes: coins, draws and refreshes happen at once; the rest wait for a choice. */
+function awardVisitorPrizes(
+  get: () => GameStore,
+  set: (partial: Partial<GameStore> | ((s: GameStore) => Partial<GameStore>)) => void,
+  awards: PendingVisitorPrize[],
+) {
+  for (const award of awards) {
+    const winner = get().players.find(p => p.id === award.playerId)
+    if (!winner) continue
+    const { kind, amount } = award.prize
+    const head = `🏆 ${winner.name} wins ${award.place === 1 ? '1st' : '2nd'} prize at ${award.visitorName}`
+    if (kind === 'coins') {
+      set(s => ({
+        players: s.players.map(p => (p.id === winner.id ? { ...p, coins: p.coins + amount } : p)),
+        actionLog: [logEntry(`${head}: +${amount} coins.`, winner.id), ...s.actionLog.slice(0, 49)],
+      }))
+    } else if (kind === 'draw') {
+      const st = get()
+      const { drawn, deck, discard } = drawCards(st.resourceDeck, st.resourceDiscard, amount, 0, Infinity)
+      set(s => ({
+        resourceDeck: deck,
+        resourceDiscard: discard,
+        players: s.players.map(p => (p.id === winner.id ? { ...p, hoard: [...p.hoard, ...drawn] } : p)),
+        actionLog: [logEntry(`${head}: drew ${drawn.length} resource${drawn.length !== 1 ? 's' : ''}.`, winner.id), ...s.actionLog.slice(0, 49)],
+      }))
+    } else if (kind === 'refresh') {
+      set(s => ({
+        players: s.players.map(p => {
+          if (p.id !== winner.id) return p
+          // Monks have no Active tokens — they gain Momentum instead
+          return p.classId === 'monk'
+            ? { ...p, momentumTokens: Math.min(8, p.momentumTokens + amount) }
+            : { ...p, activeTokens: Math.min(2, p.activeTokens + amount) }
+        }),
+        actionLog: [logEntry(`${head}: refreshed ${amount} Active token${amount !== 1 ? 's' : ''}.`, winner.id), ...s.actionLog.slice(0, 49)],
+      }))
+    } else {
+      set(s => ({
+        visitorPrizeQueue: [...s.visitorPrizeQueue, award],
+        actionLog: [logEntry(`${head}: ${describePrize(award.prize)} (choosing…).`, winner.id), ...s.actionLog.slice(0, 49)],
+      }))
+    }
+  }
+}
+
+/** Players a Steal prize can hit: anyone else with cards in hoard and no Night Watcher. */
+export function prizeStealTargets(s: Pick<GameState, 'players'>, playerId: string): Player[] {
+  return s.players.filter(p => p.id !== playerId && !p.hasNightWatcher && p.hoard.length > 0)
+}
+
+/** Windows a Break prize can hit: another player's breakable, unbroken windows (no Night Watcher). */
+export function prizeBreakTargets(s: Pick<GameState, 'players'>, playerId: string): { player: Player; windowIdx: number }[] {
+  return s.players.flatMap(p => (p.id === playerId || p.hasNightWatcher
+    ? []
+    : p.windows.flatMap((w, i) => (isBreakableWindowIndex(i) && w.status === 'normal' ? [{ player: p, windowIdx: i }] : []))))
+}
+
+/** The final sell waits on prize choices; once the last one is made, move to the next seller. */
+function resumeFinalSellAfterPrizes(get: () => GameStore) {
+  const st = get()
+  if (st.endgame?.phase === 'final-sell' && st.visitorPrizeQueue.length === 0) st.advanceFinalSell()
+}
+
+/**
+ * Finish an Auction once its roll is final. With a Visitor chosen (and the card fits its demand)
+ * the card is sold into that Visitor for the roll; otherwise it's a plain auction to the discard.
+ */
+function payAuction(
+  get: () => GameStore,
+  set: (partial: Partial<GameStore> | ((s: GameStore) => Partial<GameStore>)) => void,
+  a: {
+    playerId: string
+    cardId?: string
+    fromZone?: 'hoard' | 'window'
+    windowIdx?: number
+    visitorIdx?: number
+    roll: number
+    note: string
+    extra?: Partial<GameStore>
+  },
+) {
+  const player = get().players.find(p => p.id === a.playerId)
+  if (!player || !a.cardId) { if (a.extra) set(a.extra); return }
+  const card = a.fromZone === 'hoard'
+    ? player.hoard.find(c => c.id === a.cardId)
+    : player.windows[a.windowIdx ?? 0]?.card
+  if (!card || card.id !== a.cardId) { if (a.extra) set(a.extra); return }
+
+  if (a.visitorIdx !== undefined) {
+    const sold = sellIntoVisitors(get, set, a.playerId, [{
+      visitorIdx: a.visitorIdx, cardId: card.id, zone: a.fromZone ?? 'hoard', windowIdx: a.windowIdx, coins: a.roll,
+    }], lines => `${player.name} auctioned ${lines.join(', ')} — rolled ${a.roll}${a.note}, gained ${a.roll} coins`, a.extra)
+    if (sold > 0) return
+  }
+
+  const repGain = card.repTokens > 0 ? card.repTokens : 0
+  set(s => ({
+    ...(a.extra ?? {}),
+    resourceDiscard: isCounterfeitCard(card) ? s.resourceDiscard : [card, ...s.resourceDiscard],
+    players: s.players.map(p => {
+      if (p.id !== a.playerId) return p
+      const withCoinsRep = {
+        ...p,
+        coins: p.coins + a.roll,
+        rep: repGain > 0 ? { ...p.rep, [card.type]: p.rep[card.type] + repGain } : p.rep,
+      }
+      return a.fromZone === 'hoard'
+        ? { ...withCoinsRep, hoard: p.hoard.filter(c => c.id !== card.id), stolenHoardCardIds: p.stolenHoardCardIds.filter(id => id !== card.id) }
+        : { ...withCoinsRep, windows: p.windows.map((w, i) => (i === a.windowIdx ? { ...w, card: null, stolen: false } : w)) }
+    }),
+    actionLog: [logEntry(`${player.name} auctioned ${card.name} — rolled ${a.roll}${a.note}, gained ${a.roll} coins${repGain > 0 ? ` +${repGain} rep` : ''}.`, a.playerId), ...s.actionLog.slice(0, 49)],
+  }))
+  if (isCounterfeitCard(card)) get().returnCounterfeitsToRogue([card], a.playerId, 'auctioned')
+}
+
 // Shared helper: execute the underlying action (gather/auction/mascot) with a given final roll.
 // Called by both useTrickShot and passTrickShot after the Trick Shot decision is made.
 function _applyTrickShotRoll(
   get: () => GameStore,
-  set: (partial: Partial<GameStore>) => void,
+  set: (partial: Partial<GameStore> | ((s: GameStore) => Partial<GameStore>)) => void,
   rollType: 'gather' | 'auction' | 'mascot',
   playerId: string,
   finalRoll: number,
@@ -530,6 +885,7 @@ function _applyTrickShotRoll(
   auctionCardId?: string,
   auctionFromZone?: 'hoard' | 'window',
   auctionWindowIdx?: number,
+  auctionVisitorIdx?: number,
 ) {
   const { players, resourceDeck, resourceDiscard } = get()
   const player = players.find(p => p.id === playerId)
@@ -550,29 +906,9 @@ function _applyTrickShotRoll(
   }
 
   if (rollType === 'auction') {
-    const card = auctionCardId
-      ? (auctionFromZone === 'hoard'
-        ? player.hoard.find(c => c.id === auctionCardId)
-        : player.windows[auctionWindowIdx ?? 0]?.card)
-      : null
-    if (!card) return
-    const repGain = card.repTokens > 0 ? card.repTokens : 0
-    set({
-      resourceDiscard: [card, ...resourceDiscard],
-      players: players.map(p => {
-        if (p.id !== playerId) return p
-        const withCoinsRep = {
-          ...p,
-          coins: p.coins + finalRoll,
-          rep: repGain > 0 ? { ...p.rep, [card.type]: p.rep[card.type] + repGain } : p.rep,
-        }
-        if (auctionFromZone === 'hoard') {
-          return { ...withCoinsRep, hoard: p.hoard.filter(c => c.id !== auctionCardId) }
-        } else {
-          return { ...withCoinsRep, windows: p.windows.map((w, i) => i === auctionWindowIdx ? { ...w, card: null, stolen: false } : w) }
-        }
-      }),
-      actionLog: [logEntry(`${player.name} auctioned ${card.name} — rolled ${finalRoll}${rerollNote}, gained ${finalRoll} coins${repGain > 0 ? ` +${repGain} rep` : ''}.`, playerId), ...get().actionLog.slice(0, 49)],
+    payAuction(get, set, {
+      playerId, cardId: auctionCardId, fromZone: auctionFromZone, windowIdx: auctionWindowIdx,
+      visitorIdx: auctionVisitorIdx, roll: finalRoll, note: rerollNote,
     })
     return
   }
@@ -849,44 +1185,6 @@ export const useGameStore = create<GameStore>((set, get) => ({
     if (discardedCard && isCounterfeitCard(discardedCard)) {
       get().returnCounterfeitsToRogue([discardedCard], playerId, 'discarded')
     }
-  },
-
-  drawWorkOrders(playerId) {
-    const { workOrderDeck, players } = get()
-    if (workOrderDeck.length < 2) return
-    const player = players.find(p => p.id === playerId)
-    if (!player) return
-    // Give player 2 options stored temporarily; they pick one
-    const [a, b, ...rest] = workOrderDeck
-    set(s => ({
-      workOrderDeck: rest,
-      // Store both as a pending choice on the player — we simplify by just showing the first
-      players: s.players.map(p =>
-        p.id === playerId ? { ...p, _pendingWorkOrders: [a, b] as WorkOrderCard[] } : p
-      ) as Player[],
-      actionLog: [logEntry(`${player.name} drew 2 Work Orders.`, playerId), ...s.actionLog.slice(0, 49)],
-    }))
-  },
-
-  chooseWorkOrder(playerId, cardId) {
-    const { players } = get()
-    const player = players.find(p => p.id === playerId) as (Player & { _pendingWorkOrders?: WorkOrderCard[] }) | undefined
-    if (!player) return
-    const pending = player._pendingWorkOrders ?? []
-    const chosen = pending.find(c => c.id === cardId)
-    const returned = pending.find(c => c.id !== cardId)
-    if (!chosen) return
-
-    set(s => ({
-      workOrderDeck: returned ? [...s.workOrderDeck, returned] : s.workOrderDeck,
-      players: s.players.map(p => {
-        if (p.id !== playerId) return p
-        const pp = p as Player & { _pendingWorkOrders?: WorkOrderCard[] }
-        const { _pendingWorkOrders: _, ...rest } = pp
-        return { ...rest, workOrder: chosen }
-      }),
-      actionLog: [logEntry(`${player.name} took Work Order: ${chosen.name}.`, playerId), ...s.actionLog.slice(0, 49)],
-    }))
   },
 
   placeInWindow(playerId, cardId, windowIdx) {
@@ -1265,7 +1563,10 @@ export const useGameStore = create<GameStore>((set, get) => ({
     })
     const newDemand = { ...get().visitorDemandRemaining }
     newSlots.forEach(v => { if (v && !newDemand[v.id]) newDemand[v.id] = parseRequirements(v.demand) })
-    set({ activeVisitors: newSlots, visitorDeck: deck, visitorDiscard: discard, visitorDemandRemaining: newDemand })
+    set({
+      activeVisitors: newSlots, visitorDeck: deck, visitorDiscard: discard, visitorDemandRemaining: newDemand,
+      visitorPrizes: withVisitorPrizes(get().visitorPrizes, newSlots),
+    })
   },
 
   rollDice(playerId) {
@@ -1290,7 +1591,7 @@ export const useGameStore = create<GameStore>((set, get) => ({
     const { rn04RerollPending, players, resourceDeck, resourceDiscard } = get()
     if (!rn04RerollPending) return
 
-    const { playerId, rollType, originalRoll, auctionCardId, auctionFromZone, auctionWindowIdx } = rn04RerollPending
+    const { playerId, rollType, originalRoll, auctionCardId, auctionFromZone, auctionWindowIdx, auctionVisitorIdx } = rn04RerollPending
     const player = players.find(p => p.id === playerId)
     if (!player) return
 
@@ -1306,7 +1607,7 @@ export const useGameStore = create<GameStore>((set, get) => ({
           diceResult: finalRoll,
           rn04RerollPending: null,
           players: useIt ? s.players.map(p => p.id === playerId ? { ...p, rn04RerollUsed: true } : p) : s.players,
-          trickShotPending: { rangerId: trickShotRangerRn04.id, targetPlayerId: playerId, originalRoll: finalRoll, rollType, auctionCardId, auctionFromZone, auctionWindowIdx },
+          trickShotPending: { rangerId: trickShotRangerRn04.id, targetPlayerId: playerId, originalRoll: finalRoll, rollType, auctionCardId, auctionFromZone, auctionWindowIdx, auctionVisitorIdx },
         }))
         return
       }
@@ -1344,37 +1645,12 @@ export const useGameStore = create<GameStore>((set, get) => ({
     }
 
     if (rollType === 'auction') {
-      const card = auctionCardId
-        ? (auctionFromZone === 'hoard'
-          ? player.hoard.find(c => c.id === auctionCardId)
-          : player.windows[auctionWindowIdx ?? 0]?.card)
-        : null
-      if (!card) { set({ rn04RerollPending: null }); return }
-
-      const gained = finalRoll
-      const repGain = card.repTokens > 0 ? card.repTokens : 0
-
-      set(s => ({
-        diceResult: finalRoll,
-        rn04ForcedRoll: useIt ? { roll: finalRoll, playerId } : null,
-        rn04RerollPending: null,
-        resourceDiscard: [card, ...s.resourceDiscard],
-        players: s.players.map(p => {
-          if (p.id !== playerId) return p
-          const withCoinsRep = {
-            ...p,
-            coins: p.coins + gained,
-            rn04RerollUsed: useIt ? true : p.rn04RerollUsed,
-            rep: repGain > 0 ? { ...p.rep, [card.type]: p.rep[card.type] + repGain } : p.rep,
-          }
-          if (auctionFromZone === 'hoard') {
-            return { ...withCoinsRep, hoard: p.hoard.filter(c => c.id !== auctionCardId), stolenHoardCardIds: p.stolenHoardCardIds.filter(id => id !== auctionCardId) }
-          } else {
-            return { ...withCoinsRep, windows: p.windows.map((w, i) => i === auctionWindowIdx ? { ...w, card: null, stolen: false } : w) }
-          }
-        }),
-        actionLog: [logEntry(`${player.name} auctioned ${card.name} — rolled ${finalRoll}${rerollNote}, gained ${gained} coins${repGain > 0 ? ` +${repGain} rep` : ''}.`, playerId), ...s.actionLog.slice(0, 49)],
-      }))
+      if (useIt) set(s => ({ players: s.players.map(p => (p.id === playerId ? { ...p, rn04RerollUsed: true } : p)) }))
+      payAuction(get, set, {
+        playerId, cardId: auctionCardId, fromZone: auctionFromZone, windowIdx: auctionWindowIdx,
+        visitorIdx: auctionVisitorIdx, roll: finalRoll, note: rerollNote,
+        extra: { diceResult: finalRoll, rn04ForcedRoll: useIt ? { roll: finalRoll, playerId } : null, rn04RerollPending: null },
+      })
       return
     }
 
@@ -1435,14 +1711,35 @@ export const useGameStore = create<GameStore>((set, get) => ({
       const rechargeLogs = recharge
         ? updatedPlayers.filter(p => p.elementalDice.some(d => d.used)).map(p => logEntry(`${p.name}'s Elemental dice recharge — all 4 are ready again.`, p.id))
         : []
+      const startPlayerOffset = s.players.length > 0 ? (s.startPlayerOffset + 1) % s.players.length : 0
+      const starter = turnOrder({ players: s.players, startPlayerOffset })[0]
       return {
         round: newRound,
+        startPlayerOffset,
         players: playersWithReopened,
-        actionLog: [...rechargeLogs, logEntry(`--- Round ${newRound} begins ---`), ...s.actionLog.slice(0, 49 - rechargeLogs.length)],
+        actionLog: [...rechargeLogs, logEntry(`--- Round ${newRound} begins — ${starter?.name ?? 'Someone'} goes first ---`), ...s.actionLog.slice(0, 49 - rechargeLogs.length)],
       }
     })
     get().refillVisitors()
     get().refillFleaMarket()
+    // Public Work Orders completed last round are restocked now
+    set(s => {
+      let deck = s.workOrderDeck
+      const posted: string[] = []
+      const activeWorkOrders = s.activeWorkOrders.map(o => {
+        if (o || deck.length === 0) return o
+        const [next, ...rest] = deck
+        deck = rest
+        posted.push(next.name)
+        return next
+      })
+      if (posted.length === 0) return {}
+      return {
+        activeWorkOrders,
+        workOrderDeck: deck,
+        actionLog: [logEntry(`New Work Order${posted.length !== 1 ? 's' : ''} posted: ${posted.join(', ')}.`), ...s.actionLog.slice(0, 49)],
+      }
+    })
     // Each player draws 1 resource per round; pitch camp players draw 2 extra
     if (newRound <= 6) {
       const { players } = get()
@@ -1526,7 +1823,7 @@ export const useGameStore = create<GameStore>((set, get) => ({
     }))
   },
 
-  auction(playerId, cardId, fromZone, windowIdx) {
+  auction(playerId, cardId, fromZone, windowIdx, visitorIdx) {
     const { players } = get()
     const player = players.find(p => p.id === playerId)
     if (!player) return
@@ -1543,56 +1840,17 @@ export const useGameStore = create<GameStore>((set, get) => ({
     const hasReroll = player.renownCards.some(c => c.id === 'rn04') && !player.rn04RerollUsed
 
     if (hasReroll) {
-      set({ diceResult: roll, rn04RerollPending: { playerId, rollType: 'auction', originalRoll: roll, auctionCardId: cardId, auctionFromZone: fromZone, auctionWindowIdx: windowIdx } })
+      set({ diceResult: roll, rn04RerollPending: { playerId, rollType: 'auction', originalRoll: roll, auctionCardId: cardId, auctionFromZone: fromZone, auctionWindowIdx: windowIdx, auctionVisitorIdx: visitorIdx } })
       return
     }
 
     const trickShotRangerAuction = players.find(p => p.classId === 'ranger' && p.id !== playerId && p.trickShotAvailable && p.activeTokens > 0)
     if (trickShotRangerAuction) {
-      set({ diceResult: roll, trickShotPending: { rangerId: trickShotRangerAuction.id, targetPlayerId: playerId, originalRoll: roll, rollType: 'auction', auctionCardId: cardId, auctionFromZone: fromZone, auctionWindowIdx: windowIdx } })
+      set({ diceResult: roll, trickShotPending: { rangerId: trickShotRangerAuction.id, targetPlayerId: playerId, originalRoll: roll, rollType: 'auction', auctionCardId: cardId, auctionFromZone: fromZone, auctionWindowIdx: windowIdx, auctionVisitorIdx: visitorIdx } })
       return
     }
 
-    const gained = roll
-    const repGain = card.repTokens > 0 ? card.repTokens : 0
-
-    set(s => {
-      const updatedPlayers = s.players.map(p => {
-        if (p.id !== playerId) return p
-        if (fromZone === 'hoard') {
-          return {
-            ...p,
-            hoard: p.hoard.filter(c => c.id !== cardId),
-            stolenHoardCardIds: p.stolenHoardCardIds.filter(id => id !== cardId),
-            coins: p.coins + gained,
-            rep: repGain > 0 && card
-              ? { ...p.rep, [card.type]: p.rep[card.type] + repGain }
-              : p.rep,
-          }
-        } else {
-          const newWindows = p.windows.map((w, i) =>
-            i === windowIdx ? { ...w, card: null, stolen: false } : w
-          )
-          return {
-            ...p,
-            windows: newWindows,
-            coins: p.coins + gained,
-            rep: repGain > 0 && card
-              ? { ...p.rep, [card.type]: p.rep[card.type] + repGain }
-              : p.rep,
-          }
-        }
-      })
-      return {
-        players: updatedPlayers,
-        resourceDiscard: card ? [card, ...s.resourceDiscard] : s.resourceDiscard,
-        diceResult: roll,
-        actionLog: [
-          logEntry(`${player.name} auctioned ${card?.name ?? 'card'} — rolled ${roll}, gained ${gained} coins${repGain > 0 ? ` +${repGain} rep` : ''}.`, playerId),
-          ...s.actionLog.slice(0, 49),
-        ],
-      }
-    })
+    payAuction(get, set, { playerId, cardId, fromZone, windowIdx, visitorIdx, roll, note: '', extra: { diceResult: roll } })
   },
 
   appraise(playerId, count) {
@@ -2233,67 +2491,64 @@ export const useGameStore = create<GameStore>((set, get) => ({
     }))
   },
 
-  completeCraft(playerId, cardIds) {
-    const { players } = get()
+  completeCraft(playerId, orderIdx, cardIds) {
+    const { players, activeWorkOrders } = get()
     const player = players.find(p => p.id === playerId)
-    if (!player || !player.workOrder) return
+    const order = activeWorkOrders[orderIdx]
+    if (!player || !order) return
 
     const cardIdSet = new Set(cardIds)
 
-    // Cards can come from hoard, windows, or Rogue's drawn counterfeit hand
+    // Cards can come from hoard, non-broken windows, or the Rogue's counterfeit hand
     const fromHoard = player.hoard.filter(c => cardIdSet.has(c.id))
-
     const fromWindows = player.windows.flatMap(w =>
-      w.card && cardIdSet.has(w.card.id) ? [w.card] : []
+      w.card && w.status !== 'broken' && cardIdSet.has(w.card.id) ? [w.card] : []
     )
-
     const fromCounterfeitHand =
       player.classId === 'rogue'
         ? player.counterfeitHand.filter(c => cardIdSet.has(c.id))
         : []
+    const spentCards = [...fromHoard, ...fromWindows, ...fromCounterfeitHand]
 
-    const spentCards = [
-      ...fromHoard,
-      ...fromWindows,
-      ...fromCounterfeitHand,
-    ]
+    if (!canCraft(spentCards, order.recipe, player.craftDiscount)) {
+      set(s => ({
+        actionLog: [logEntry(`${player.name} can't complete "${order.name}" — those resources don't match the recipe.`, playerId), ...s.actionLog.slice(0, 49)],
+      }))
+      return
+    }
 
     const counterfeitCards = spentCards.filter(isCounterfeitCard)
     const discardedCards = spentCards.filter(c => !isCounterfeitCard(c))
-    const removedCounterfeitCount = counterfeitCards.length
-
-    const baseGain = player.workOrder.price
+    const spentIds = new Set(spentCards.map(c => c.id))
 
     // Forge of Ironpeak (rn02) passive: +3 bonus coins on craft completion
     const rn02Bonus =
       player.classId === 'paladin' && player.renownCards.some(c => c.id === 'rn02')
         ? 3
         : 0
-
-    const gained = baseGain + rn02Bonus
+    const gained = order.price + rn02Bonus
+    // Paladin Honourable Trade: +1 Rep of the recipe's main type
+    const honourType = player.classId === 'paladin' ? recipeMainType(order.recipe) : null
     const discountUsed = player.craftDiscount > 0
+
 
     set(s => ({
       resourceDiscard: [...discardedCards, ...s.resourceDiscard],
+      // The slot stays empty until next round; the completed order goes to the bottom of the deck
+      activeWorkOrders: s.activeWorkOrders.map((o, i) => (i === orderIdx ? null : o)),
+      workOrderDeck: [...s.workOrderDeck, order],
       players: s.players.map(p =>
         p.id === playerId
           ? {
               ...p,
-              workOrder: null,
               craftDiscount: 0,
               coins: p.coins + gained,
-
-              // Remove spent normal cards from hoard
-              hoard: p.hoard.filter(c => !cardIdSet.has(c.id)),
-
-              // Remove spent drawn counterfeits from Rogue's hand
-              counterfeitHand: p.counterfeitHand.filter(c => !cardIdSet.has(c.id)),
-
-              stolenHoardCardIds: p.stolenHoardCardIds.filter(id => !cardIdSet.has(id)),
-
-              // Remove spent window cards
+              rep: honourType ? { ...p.rep, [honourType]: p.rep[honourType] + 1 } : p.rep,
+              hoard: p.hoard.filter(c => !spentIds.has(c.id)),
+              counterfeitHand: p.counterfeitHand.filter(c => !spentIds.has(c.id)),
+              stolenHoardCardIds: p.stolenHoardCardIds.filter(id => !spentIds.has(id)),
               windows: p.windows.map(w =>
-                w.card && cardIdSet.has(w.card.id)
+                w.card && w.status !== 'broken' && spentIds.has(w.card.id)
                   ? { ...w, card: null, stolen: false }
                   : w
               ),
@@ -2301,11 +2556,12 @@ export const useGameStore = create<GameStore>((set, get) => ({
           : p
       ),
       actionLog: [logEntry(
-        `${player.name} completed Work Order "${player.workOrder!.name}" — spent ${spentCards.length} cards, gained ${gained} coins.` +
+        `${player.name} completed Work Order "${order.name}" — spent ${spentCards.length} cards, gained ${gained} coins.` +
         (discountUsed ? ' (Forge of Ironpeak discount applied)' : '') +
         (rn02Bonus > 0 ? ` ◆ Forge of Ironpeak — +${rn02Bonus} bonus coins.` : '') +
-        (removedCounterfeitCount > 0
-          ? ` ${removedCounterfeitCount} Counterfeit card${removedCounterfeitCount !== 1 ? 's were' : ' was'} returned to the Rogue.`
+        (honourType ? ` ◆ Honourable Trade — +1 ${honourType} Rep.` : '') +
+        (counterfeitCards.length > 0
+          ? ` ${counterfeitCards.length} Counterfeit card${counterfeitCards.length !== 1 ? 's were' : ' was'} returned to the Rogue.`
           : ''),
         playerId
       ), ...s.actionLog.slice(0, 49)],
@@ -2364,7 +2620,14 @@ export const useGameStore = create<GameStore>((set, get) => ({
       i === replaceSlotIdx ? placedCard : v
     )
 
-    set(s => ({
+    const replaced = activeVisitors[replaceSlotIdx]
+    set(s => {
+      const contributions = { ...s.visitorContributions }
+      const prizes = { ...s.visitorPrizes }
+      if (replaced) { delete contributions[replaced.id]; delete prizes[replaced.id] }
+      return {
+      visitorContributions: contributions,
+      visitorPrizes: withVisitorPrizes(prizes, [placedCard]),
       visitorDeck: deck,
       visitorDiscard: discard,
       activeVisitors: newActiveVisitors,
@@ -2374,7 +2637,8 @@ export const useGameStore = create<GameStore>((set, get) => ({
         [placedCard.id]: s.visitorDemandRemaining[placedCard.id] ?? parseRequirements(placedCard.demand),
       },
       actionLog: [logEntry(`Town Crier: placed ${placedCard.name} in visitor slot ${replaceSlotIdx + 1}.`, playerId), ...s.actionLog.slice(0, 49)],
-    }))
+      }
+    })
   },
 
   takeFromFleaMarket(playerId, slotIdx) {
@@ -2589,13 +2853,6 @@ export const useGameStore = create<GameStore>((set, get) => ({
     const cards = resourceDeck.slice(0, 4)
     if (cards.length === 0) return
     set({ appraisePeek: { playerId, cards, maxKeep: 3 } })
-  },
-
-  peekWorkshopAppraise(playerId) {
-    const { resourceDeck } = get()
-    const cards = resourceDeck.slice(0, 4)
-    if (cards.length === 0) return
-    set({ appraisePeek: { playerId, cards, maxKeep: 2 } })
   },
 
   completeAppraise(playerId, keepCardIds) {
@@ -3496,7 +3753,11 @@ export const useGameStore = create<GameStore>((set, get) => ({
           if (p.id === targetId) {
             return paidCoins
               ? { ...p, coins: Math.max(0, p.coins - 2) }
-              : { ...p, hoard: p.hoard.filter(c => c.id !== declineDiscardId) }
+              : {
+                  ...p,
+                  hoard: p.hoard.filter(c => c.id !== declineDiscardId),
+                  stolenHoardCardIds: p.stolenHoardCardIds.filter(id => id !== declineDiscardId),
+                }
           }
           return p
         }),
@@ -3513,9 +3774,13 @@ export const useGameStore = create<GameStore>((set, get) => ({
         // Set appraise peek for Paladin — they keep 1, rest go to bottom of deck
         appraisePeek: appraise4.length > 0 ? { playerId: challengerId, cards: appraise4, maxKeep: 1 } : null,
         resourceDeck: deck,
-        resourceDiscard: discard,
+        // The declining player's discarded card goes to the discard pile (counterfeits go home below)
+        resourceDiscard: discardedCard && !isCounterfeitCard(discardedCard) ? [discardedCard, ...discard] : discard,
         actionLog: [logEntry(logMsg, challengerId), ...s.actionLog.slice(0, 49)],
       }))
+      if (discardedCard && isCounterfeitCard(discardedCard)) {
+        get().returnCounterfeitsToRogue([discardedCard], targetId, 'discarded')
+      }
       return
     }
 
@@ -3672,11 +3937,11 @@ export const useGameStore = create<GameStore>((set, get) => ({
           logMsg += 'Trade cancelled — no valid selection.'
           break
         }
-        case 'rn02': { // Complete Crafting Order for 1 less resource
+        case 'rn02': { // Next Craft needs 1 less resource
           updatedPlayers = updatedPlayers.map(p =>
             p.id !== playerId ? p : { ...p, craftDiscount: p.craftDiscount + 1 }
           )
-          logMsg += 'Forge of Ironpeak — next Work Order can be completed with 1 fewer resource.'
+          logMsg += 'Forge of Ironpeak — their next Craft needs 1 fewer resource.'
           break
         }
         case 'rn03': { // Close 2 middle windows until your next turn; gain 1 Rep each
@@ -3827,12 +4092,13 @@ export const useGameStore = create<GameStore>((set, get) => ({
   },
 
   _advanceTurn() {
-    const { players, currentTurnPlayerId, round } = get()
-    const idx = players.findIndex(p => p.id === currentTurnPlayerId)
+    const { currentTurnPlayerId, round } = get()
+    const order = turnOrder(get())
+    const idx = order.findIndex(p => p.id === currentTurnPlayerId)
     const nextIdx = idx + 1
 
     // Helper: shutter windows 0 and 4 of the player whose turn just ended
-    const shutterEndingPlayer = (allPlayers: typeof players, endingId: string) =>
+    const shutterEndingPlayer = (allPlayers: Player[], endingId: string) =>
       allPlayers.map(p =>
         p.id !== endingId ? p : {
           ...p,
@@ -3844,7 +4110,7 @@ export const useGameStore = create<GameStore>((set, get) => ({
 
     // Helper: unshutter windows 0 and 4 (turn-mechanic windows) for the player whose turn is starting.
     // rn03 roundShuttered windows also reopen here — they last until the player's own next turn.
-    const unshutterStartingPlayer = (allPlayers: typeof players, startingId: string) =>
+    const unshutterStartingPlayer = (allPlayers: Player[], startingId: string) =>
       allPlayers.map(p =>
         p.id !== startingId ? p : {
           ...p,
@@ -3859,7 +4125,7 @@ export const useGameStore = create<GameStore>((set, get) => ({
     // Helper: expire Clan marker for a player whose new turn is starting (if not just relocated via Raiding Party)
     // The Clan was placed last turn — it expires now unless refreshed by Raiding Party this turn.
     // We mark it for expiry; the actual clear happens here since turns are sequential.
-    const expireClan = (allPlayers: typeof players, startingId: string) =>
+    const expireClan = (allPlayers: Player[], startingId: string) =>
       allPlayers.map(p =>
         p.id !== startingId || p.classId !== 'barbarian' ? p : { ...p, clanLocation: null }
       )
@@ -3926,9 +4192,10 @@ export const useGameStore = create<GameStore>((set, get) => ({
 
 
 
-    if (nextIdx >= players.length) {
+    if (nextIdx >= order.length) {
       if (round >= 6) {
-        const queue = players.map(p => p.id)
+        // Final sell follows the last round's turn order
+        const queue = order.map(p => p.id)
         set(s => {
           let updated = shutterEndingPlayer(s.players, currentTurnPlayerId)
           updated = unshutterStartingPlayer(updated, queue[0])
@@ -3949,8 +4216,8 @@ export const useGameStore = create<GameStore>((set, get) => ({
       }
       set(s => ({ players: shutterEndingPlayer(s.players, currentTurnPlayerId) }))
       get().nextRound()
-      const freshPlayers = get().players
-      const firstId = freshPlayers[0]?.id ?? ''
+      // nextRound passed the first-player role one seat to the left
+      const firstId = turnOrder(get())[0]?.id ?? ''
       set(s => ({
         players: expireClan(unshutterStartingPlayer(s.players, firstId), firstId),
         currentTurnPlayerId: firstId,
@@ -3974,7 +4241,7 @@ export const useGameStore = create<GameStore>((set, get) => ({
       applyRangerPassive(firstId)
       applyRogueLowCounterfeitPassive(firstId)
     } else {
-      const next = players[nextIdx]
+      const next = order[nextIdx]
       set(s => ({
         players: expireClan(unshutterStartingPlayer(shutterEndingPlayer(s.players, currentTurnPlayerId), next.id), next.id),
         currentTurnPlayerId: next.id,
@@ -4016,7 +4283,8 @@ export const useGameStore = create<GameStore>((set, get) => ({
       rogueCounterfeitEffectPending ||
       rogueCounterfeitEffectQueue.length > 0 ||
       rn04RerollPending ||
-      trickShotPending
+      trickShotPending ||
+      get().visitorPrizeQueue.length > 0
     ) {
       return
     }
@@ -4036,104 +4304,79 @@ export const useGameStore = create<GameStore>((set, get) => ({
   },
 
   sellPhaseAssign(playerId, assignments) {
-    const { players, activeVisitors, visitorDemandRemaining, visitorDiscard, endgame } = get()
-    const player = players.find(p => p.id === playerId)
+    const player = get().players.find(p => p.id === playerId)
     if (!player) return
-
-    const discarded: ResourceCard[] = []
-    let totalCoins = 0
-    const repGains: Partial<Record<RepType, number>> = {}
-    const usedWindowIdxs = new Set(assignments.map(a => a.windowIdx))
-
-    // Updated demand remaining after this sell phase
-    const newDemandRemaining = { ...visitorDemandRemaining }
-    // Visitors whose demand hit zero — to be claimed
-    const claimedVisitorIdxs: number[] = []
-
+    // Up to MAX_SALES_PER_VISITOR cards into each Visitor, each window at most once
+    const perVisitor = new Map<number, number>()
+    const usedWindows = new Set<number>()
+    const sales: VisitorSale[] = []
     for (const { visitorIdx, windowIdx } of assignments) {
-      const win = player.windows[windowIdx]
-      const visitor = activeVisitors[visitorIdx]
-      if (!win?.card || !visitor) continue
-
-      const card = win.card
-      discarded.push(card)
-      totalCoins += card.value
-
-      // Rep only from the card's own repTokens, not from demand matching
-      if (card.repTokens > 0) {
-        repGains[card.type] = (repGains[card.type] ?? 0) + card.repTokens
-      }
-
-      // Reduce remaining demand for this visitor
-      const remaining = { ...(newDemandRemaining[visitor.id] ?? parseRequirements(visitor.demand)) }
-      if (remaining[card.type] > 0) remaining[card.type]--
-      else if ((remaining.ANY ?? 0) > 0) remaining.ANY--
-      newDemandRemaining[visitor.id] = remaining
-
-      // Check if fully satisfied
-      if (Object.values(remaining).every(n => n === 0)) {
-        claimedVisitorIdxs.push(visitorIdx)
-      }
+      const card = player.windows[windowIdx]?.card
+      if (!card || usedWindows.has(windowIdx)) continue
+      const n = perVisitor.get(visitorIdx) ?? 0
+      if (n >= MAX_SALES_PER_VISITOR) continue
+      perVisitor.set(visitorIdx, n + 1)
+      usedWindows.add(windowIdx)
+      sales.push({ visitorIdx, cardId: card.id, zone: 'window', windowIdx, coins: card.value })
     }
+    sellIntoVisitors(get, set, playerId, sales,
+      (_lines, coins) => `${player.name} sell phase — sold ${sales.length} item(s) for ${coins} coins`)
+  },
 
-    const claimedVisitors = claimedVisitorIdxs.map(i => activeVisitors[i]).filter(Boolean) as VisitorCard[]
-    const counterfeitSold = discarded.filter(isCounterfeitCard)
-    const normalSold = discarded.filter(c => !isCounterfeitCard(c))
-
-    // King's Errand (rn07): +1 coin per completed public Visitor
-    const rn07CoinBonus = claimedVisitorIdxs.length > 0 && player.classId === 'paladin'
-      && player.renownCards.some(c => c.id === 'rn07')
-      ? claimedVisitorIdxs.length
-      : 0
-
-    set(s => {
-      const newRep = { ...player.rep }
-      for (const [t, n] of Object.entries(repGains)) newRep[t as RepType] = (newRep[t as RepType] ?? 0) + n
-
-      // Remove claimed visitors from demand map
-      for (const v of claimedVisitors) delete newDemandRemaining[v.id]
-
-      return {
-        resourceDiscard: [...normalSold, ...s.resourceDiscard],
-        visitorDemandRemaining: newDemandRemaining,
-        activeVisitors: s.activeVisitors.map((v, i) =>
-          claimedVisitorIdxs.includes(i) ? null : v
-        ),
-        visitorDiscard: [...claimedVisitors, ...visitorDiscard],
-        players: s.players.map(p => {
-          if (p.id !== playerId) return p
-          return {
-            ...p,
-            coins: p.coins + totalCoins + rn07CoinBonus,
-            rep: newRep,
-            windows: p.windows.map((w, i) =>
-              usedWindowIdxs.has(i) ? { ...w, card: null, stolen: false } : w
-            ),
-          }
-        }),
-        actionLog: [
-          logEntry(
-            `${player.name} sell phase — sold ${discarded.length} item(s) for ${totalCoins} coins` +
-            (Object.keys(repGains).length ? ` +rep (${Object.entries(repGains).map(([t, n]) => `${n} ${t}`).join(', ')})` : '') +
-            (claimedVisitors.length ? ` — ${claimedVisitors.map(v => v.name).join(', ')} satisfied!` : '') +
-            (rn07CoinBonus > 0 ? ` King's Errand +${rn07CoinBonus} coin(s).` : '') + '.',
-            playerId
-          ),
-          ...s.actionLog.slice(0, 49),
-        ],
-      }
-    })
-
-    get().returnCounterfeitsToRogue(counterfeitSold, playerId, 'sold')
-
-    // Auto-replace any claimed visitors with new ones from the deck
-    if (claimedVisitorIdxs.length > 0) get().refillVisitors()
-
-    // Ranger passive: Trade 1 per Visitor completed
-    if (!endgame && claimedVisitorIdxs.length > 0) {
-      const ranger = get().players.find(p => p.classId === 'ranger')
-      if (ranger) set({ rangerVisitorTradePending: { rangerId: ranger.id, tradesRemaining: claimedVisitorIdxs.length } })
+  marketSale(playerId, visitorIdx, picks) {
+    const player = get().players.find(p => p.id === playerId)
+    if (!player) return 0
+    const sales: VisitorSale[] = []
+    for (const pick of picks.slice(0, MAX_SALES_PER_VISITOR)) {
+      const card = pick.zone === 'hoard'
+        ? player.hoard.find(c => c.id === pick.cardId)
+        : player.windows[pick.windowIdx ?? -1]?.card
+      if (!card || card.id !== pick.cardId) continue
+      sales.push({ visitorIdx, cardId: card.id, zone: pick.zone, windowIdx: pick.windowIdx, coins: card.value })
     }
+    return sellIntoVisitors(get, set, playerId, sales,
+      (lines, coins) => `${player.name} sold at the market — ${lines.join(', ')} for ${coins} coins`)
+  },
+
+  resolveVisitorPrize(choice) {
+    const pending = get().visitorPrizeQueue[0]
+    if (!pending) return
+    const { playerId, prize } = pending
+    const winner = get().players.find(p => p.id === playerId)
+    // Steal/Break take one hit at a time; anything else is used up in one go.
+    // Update the queue first so effects that resolve synchronously see what's next.
+    const oneHit = (prize.kind === 'steal' || prize.kind === 'break') && prize.amount > 1
+    set(s => ({
+      visitorPrizeQueue: oneHit
+        ? [{ ...pending, prize: { ...prize, amount: prize.amount - 1 } }, ...s.visitorPrizeQueue.slice(1)]
+        : s.visitorPrizeQueue.slice(1),
+    }))
+    if (!winner) return
+    if (prize.kind === 'rep' && choice.repType) {
+      const t = choice.repType
+      set(s => ({
+        players: s.players.map(p => (p.id === playerId ? { ...p, rep: { ...p.rep, [t]: p.rep[t] + prize.amount } } : p)),
+        actionLog: [logEntry(`${winner.name} takes ${prize.amount} ${t} Rep (${pending.visitorName} prize).`, playerId), ...s.actionLog.slice(0, 49)],
+      }))
+    } else if (prize.kind === 'take' && choice.fleaSlotIdxs?.length) {
+      get().takeManyFromFleaMarket(playerId, choice.fleaSlotIdxs.slice(0, prize.amount))
+    } else if (prize.kind === 'steal' && choice.targetId) {
+      get().steal(playerId, choice.targetId)
+    } else if (prize.kind === 'break' && choice.targetId && choice.windowIdx !== undefined) {
+      get().breakWindow(playerId, choice.targetId, choice.windowIdx)
+    }
+    resumeFinalSellAfterPrizes(get)
+  },
+
+  skipVisitorPrize() {
+    const pending = get().visitorPrizeQueue[0]
+    if (!pending) return
+    const winner = get().players.find(p => p.id === pending.playerId)
+    set(s => ({
+      visitorPrizeQueue: s.visitorPrizeQueue.slice(1),
+      actionLog: [logEntry(`${winner?.name ?? 'A player'} passed on their ${pending.visitorName} prize.`, pending.playerId), ...s.actionLog.slice(0, 49)],
+    }))
+    resumeFinalSellAfterPrizes(get)
   },
 
   // ---- Ranger class abilities ----
@@ -4318,7 +4561,7 @@ export const useGameStore = create<GameStore>((set, get) => ({
   useTrickShot() {
     const { trickShotPending, players } = get()
     if (!trickShotPending) return
-    const { rangerId, targetPlayerId, originalRoll, rollType, auctionCardId, auctionFromZone, auctionWindowIdx } = trickShotPending
+    const { rangerId, targetPlayerId, originalRoll, rollType, auctionCardId, auctionFromZone, auctionWindowIdx, auctionVisitorIdx } = trickShotPending
     const ranger = players.find(p => p.id === rangerId)
     const target = players.find(p => p.id === targetPlayerId)
     if (!ranger || !target) return
@@ -4345,15 +4588,15 @@ export const useGameStore = create<GameStore>((set, get) => ({
 
     // Execute the underlying action immediately with the new roll
     const rerollNote = ` (Trick Shot: ${originalRoll}→${newRoll})`
-    _applyTrickShotRoll(get, set, rollType, targetPlayerId, newRoll, rerollNote, auctionCardId, auctionFromZone, auctionWindowIdx)
+    _applyTrickShotRoll(get, set, rollType, targetPlayerId, newRoll, rerollNote, auctionCardId, auctionFromZone, auctionWindowIdx, auctionVisitorIdx)
   },
 
   passTrickShot() {
     const { trickShotPending } = get()
     if (!trickShotPending) return
-    const { targetPlayerId, originalRoll, rollType, auctionCardId, auctionFromZone, auctionWindowIdx } = trickShotPending
+    const { targetPlayerId, originalRoll, rollType, auctionCardId, auctionFromZone, auctionWindowIdx, auctionVisitorIdx } = trickShotPending
     set({ trickShotPending: null })
-    _applyTrickShotRoll(get, set, rollType, targetPlayerId, originalRoll, '', auctionCardId, auctionFromZone, auctionWindowIdx)
+    _applyTrickShotRoll(get, set, rollType, targetPlayerId, originalRoll, '', auctionCardId, auctionFromZone, auctionWindowIdx, auctionVisitorIdx)
   },
 
   resolveTrickShotBonus(choice, windowId) {

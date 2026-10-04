@@ -4,6 +4,25 @@ The board has 6 locations. On each of their 3 actions per turn, a player visits 
 
 ---
 
+## Selling to Visitors
+
+Three Visitors are face-up at all times. Each wants a set of resources (e.g. "2 ARM, 1 ANY") and offers two **contribution prizes**, dealt at random when the Visitor appears:
+
+- **1st prize** goes to the player who sold the most resources into that Visitor.
+- **2nd prize** goes to the runner-up.
+- Ties go to whoever reached that number of sales first.
+- Prizes are paid the moment the Visitor's demand is fully met. The Visitor is then discarded and replaced.
+
+Prizes are drawn from Coins, Rep (your choice of type), Refresh, Take (from the Flea Market), Draw, Steal and Break. Large Visitors pay bigger prizes than Small ones, and a 2nd prize is never worth more than the 1st. Steal 2 and Break 2 are resolved one at a time, so you can hit two different players.
+
+There are three ways to sell into a Visitor. Each card must match something the Visitor still needs:
+
+1. **Sell Phase** (start of your turn, from round 2): sell any of your window cards, **up to 2 per Visitor**. You get each card's printed value plus any Rep on it.
+2. **Auction** (Tavern): roll d6 for one hoard or window card and, if it fits, sell it into a Visitor of your choice.
+3. **Sell to a Visitor** (Workshop): sell up to 2 hoard or window cards into one Visitor at their printed value.
+
+---
+
 ## Guildhall
 
 **Hire a Professional**
@@ -23,7 +42,7 @@ Trade 1 resource directly with a willing player. Both players must agree. No Sto
 Ready all your expended Active tokens (flip them face-up).
 
 **Auction 1**
-Choose 1 resource. Roll d6. Sell the resource to the discard pile for that coin value. If the resource has a Reputation icon, gain the matching Rep token.
+Choose 1 resource from your hoard or windows, and optionally a Visitor that still needs it. Roll d6 and gain that many coins. If the resource has a Reputation icon, gain the matching Rep token. If you chose a Visitor, the resource is sold into it and counts toward its contribution prizes; otherwise it goes to the discard pile.
 
 **Trade 3**
 Swap up to 3 of your resources (from windows or hoard) with the same number of resources from the Flea Market.
@@ -60,15 +79,14 @@ Look at the top 3 Visitor cards. Place 1 of them into play, replacing a current 
 
 ## Workshop
 
-**Take**
-Take 1 resource currently displayed in the Flea Market into your hand or windows. The Flea Market refills from the deck immediately.
+**Take 2**
+Take up to 2 resources from the Flea Market into your hoard. The Flea Market refills from the deck immediately.
 
 **Craft**
-- If your Workbench is empty: draw 2 Work Order cards. Choose 1 to place face-up on your Workbench. Return the other to the bottom of the Work Order deck.
-- If your Workbench is active and you have the required resources: spend the listed resources from your windows/hoard and complete the Work Order. Flip the card to reveal the crafted item and gain the printed coin value immediately. The Work Order leaves play.
+Two Work Orders are face-up on the board, and any player may complete either of them. Choose one public Work Order whose recipe you can meet, spend the listed resources from your windows/hoard, and gain the printed coin value immediately. The completed Work Order goes to the bottom of the Work Order deck. Its slot stays empty for the rest of the round and is refilled from the top of the deck at the start of the next round.
 
-**Appraise 4**
-Look at the top 4 resources of the resource deck. Keep all 4. Return any unwanted cards in any order on top.
+**Sell to a Visitor**
+Choose 1 Visitor. Sell up to 2 resources from your hoard and/or windows that it still needs, for their printed coin value plus any Rep on them. The sales count toward the Visitor's contribution prizes. (This replaces Appraise.)
 
 ---
 

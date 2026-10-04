@@ -1,6 +1,6 @@
 import { useState, useEffect, useRef } from 'react'
 import { createPortal } from 'react-dom'
-import { useGameStore } from '../store/gameStore'
+import { useGameStore, turnOrder } from '../store/gameStore'
 import { PlayerArea } from '../components/PlayerArea'
 import { SharedBoard } from '../components/SharedBoard'
 import { ActionLog } from '../components/ActionLog'
@@ -73,11 +73,13 @@ interface Props {
 
 export function Game({ localPlayerName, roomId, isHost, onLeave }: Props) {
   const {
-    players, round, resetGame,
+    players, round, resetGame, startPlayerOffset,
     currentTurnPlayerId, startingDraft, completeStartingDraftPick,
   } = useGameStore()
 
   const isOnline = !!localPlayerName && !!roomId
+  // The first-player role passes left each round
+  const firstThisRound = startingDraft ? null : turnOrder({ players, startPlayerOffset })[0]
 
   // Bots are played by exactly one client: this screen offline, or the host online.
   const [botSpeed, setBotSpeed] = useState<BotSpeed>(loadBotSpeed)
@@ -375,6 +377,11 @@ export function Game({ localPlayerName, roomId, isHost, onLeave }: Props) {
                     {p.bot && (
                       <div className="mt-0.5 rounded-full bg-sky-900/70 border border-sky-400/50 px-2 py-px text-[9px] font-black uppercase tracking-wide text-sky-100">
                         🤖 {BOT_DIFFICULTY_LABEL[p.bot]} bot
+                      </div>
+                    )}
+                    {firstThisRound?.id === p.id && (
+                      <div className="mt-0.5 rounded-full bg-gold-900/70 border border-gold-400/60 px-2 py-px text-[9px] font-black uppercase tracking-wide text-gold-100" title="The first-player role passes left each round">
+                        ▶ First this round
                       </div>
                     )}
                   </div>

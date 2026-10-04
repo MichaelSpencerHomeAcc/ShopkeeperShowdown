@@ -1075,7 +1075,7 @@ function PaladinAbilities({ player, isActiveTurn }: { player: Player; isActiveTu
           <span className="text-sm font-bold text-parchment-300 uppercase tracking-wide">Passive · Honourable Trade</span>
         </div>
         <div className="px-3 py-2 text-sm text-parchment-400 leading-relaxed">
-          +1 Rep when you resolve a Negotiate at the Guildhall, or when Report the Crime repairs at least one broken window.
+          +1 Rep when you resolve a Negotiate at the Guildhall, complete a Work Order (the recipe's main type), or when Report the Crime repairs at least one broken window.
           {totalClashBonus > 0 && (
             <> <span className="text-gold-400 font-semibold">+{totalClashBonus} to Righteous Duel rolls</span> (current Renown card count).</>
           )}
@@ -1326,7 +1326,7 @@ function PaladinAbilities({ player, isActiveTurn }: { player: Player; isActiveTu
                       )}
                       {card.id === 'rn02' && (
                         <div className="text-xs text-amber-300">
-                          Your next Work Order completion requires 1 fewer resource. Head to the Workshop to craft.
+                          Your next Craft needs 1 fewer resource. Head to the Workshop to complete a public Work Order.
                         </div>
                       )}
                       {/* rn03: choose up to 2 of your own windows to close */}
