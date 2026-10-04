@@ -8,6 +8,7 @@ Browser playtest tool for the Shopkeeper Showdown board game (Vite + React + Typ
 npm install
 npm run dev        # http://localhost:5173
 npm run typecheck  # tsc — the Vite build does not type-check
+npm test           # Vitest: rules, balance, card integrity and full bot games
 npm run build
 ```
 

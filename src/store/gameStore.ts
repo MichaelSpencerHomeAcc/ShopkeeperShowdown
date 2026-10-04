@@ -3475,7 +3475,11 @@ export const useGameStore = create<GameStore>((set, get) => ({
           if (p.id === targetId) {
             return paidCoins
               ? { ...p, coins: Math.max(0, p.coins - 2) }
-              : { ...p, hoard: p.hoard.filter(c => c.id !== declineDiscardId) }
+              : {
+                  ...p,
+                  hoard: p.hoard.filter(c => c.id !== declineDiscardId),
+                  stolenHoardCardIds: p.stolenHoardCardIds.filter(id => id !== declineDiscardId),
+                }
           }
           return p
         }),
@@ -3492,9 +3496,13 @@ export const useGameStore = create<GameStore>((set, get) => ({
         // Set appraise peek for Paladin — they keep 1, rest go to bottom of deck
         appraisePeek: appraise4.length > 0 ? { playerId: challengerId, cards: appraise4, maxKeep: 1 } : null,
         resourceDeck: deck,
-        resourceDiscard: discard,
+        // The declining player's discarded card goes to the discard pile (counterfeits go home below)
+        resourceDiscard: discardedCard && !isCounterfeitCard(discardedCard) ? [discardedCard, ...discard] : discard,
         actionLog: [logEntry(logMsg, challengerId), ...s.actionLog.slice(0, 49)],
       }))
+      if (discardedCard && isCounterfeitCard(discardedCard)) {
+        get().returnCounterfeitsToRogue([discardedCard], targetId, 'discarded')
+      }
       return
     }
 
