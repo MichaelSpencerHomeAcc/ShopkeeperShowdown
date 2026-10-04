@@ -71,6 +71,16 @@ export type ClassId =
 
 export type ClassStatus = 'WIP' | 'BETA' | 'LIVE'
 
+/** Computer-controlled seat strength. Absent on human players. */
+export type BotDifficulty = 'easy' | 'medium' | 'hard'
+
+/** One seat passed to startGame — `bot` set means the seat is computer-controlled. */
+export interface PlayerSetup {
+  name: string
+  classId: ClassId
+  bot?: BotDifficulty
+}
+
 export interface ClassCard {
   id: ClassId
   name: string
@@ -106,6 +116,8 @@ export interface Player {
   id: string
   name: string
   classId: ClassId
+  /** Set when this seat is played by a bot (driven by useBotDriver on the host/local client) */
+  bot?: BotDifficulty
   coins: number
   rep: RepTokens
   activeTokens: number
@@ -269,6 +281,10 @@ export interface GameState {
     offeredCardId: string
     /** Paladin only — which Rep type to gain on successful trade */
     paladinRepType?: RepType
+    /** True when proposing spent the Guildhall action — refunded if the trade is denied */
+    actionCharged?: boolean
+    /** Barbarian who was paid a Clan toll for this Guildhall visit — repaid if the trade is denied */
+    clanTollPaidTo?: string
   } | null
   /** Set once the target has chosen a counter-card; shown to the proposer to accept or decline */
   negotiateReview: {
@@ -277,6 +293,8 @@ export interface GameState {
     offeredCardId: string
     counterCardId: string
     paladinRepType?: RepType
+    actionCharged?: boolean
+    clanTollPaidTo?: string
   } | null
   /** Shaman: set while waiting for target to choose 2 hoard cards to discard */
   shamanCallLightning: { shamanId: string; targetId: string } | null

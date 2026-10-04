@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react'
+import { useState } from 'react'
 import { useGameStore } from './store/gameStore'
 import { Lobby } from './pages/Lobby'
 import { Game } from './pages/Game'
@@ -6,90 +6,79 @@ import { MultiplayerLobby } from './pages/MultiplayerLobby'
 import { WaitingRoom } from './pages/WaitingRoom'
 import { useImagePreloader } from './hooks/useImagePreloader'
 import { useGameSync } from './hooks/useGameSync'
-import { useAuth } from './hooks/useAuth'
-import type { ClassId } from './types'
+import { isOnlineAvailable } from './lib/supabase'
+import type { PlayerSetup } from './types'
 
-type AppMode = 'home' | 'local-lobby' | 'multiplayer-lobby' | 'waiting-room' | 'playing-local' | 'playing-online'
+type Screen = 'home' | 'local-setup' | 'online-lobby' | 'waiting-room'
+type LocalPreset = 'solo' | 'pass-and-play'
 
-interface RoomInfo {
+export interface OnlineSession {
   roomId: string
   roomCode: string
   isHost: boolean
   playerName: string
+  userId: string
 }
 
 export default function App() {
   useImagePreloader()
-  const { phase, startGame } = useGameStore()
-  const { user } = useAuth()
-  const [mode, setMode] = useState<AppMode>(phase === 'playing' ? 'playing-local' : 'home')
-  const [roomInfo, setRoomInfo] = useState<RoomInfo | null>(null)
+  const phase = useGameStore(s => s.phase)
+  const startGame = useGameStore(s => s.startGame)
+  const resetGame = useGameStore(s => s.resetGame)
+  const [screen, setScreen] = useState<Screen>('home')
+  const [preset, setPreset] = useState<LocalPreset>('solo')
+  const [online, setOnline] = useState<OnlineSession | null>(null)
 
-  // Sync game state across clients while in an online game
-  const isOnline = mode === 'playing-online' || mode === 'waiting-room'
-  useGameSync(isOnline ? (roomInfo?.roomId ?? null) : null, user?.id ?? null)
+  // Keep the store in sync with the room for the whole online session (waiting room + game)
+  useGameSync(online?.roomId ?? null, online?.userId ?? null)
 
-  // Fallback: if useGameSync delivers a 'playing' state while we're still in the
-  // waiting room (Postgres Changes didn't fire for this client), transition now.
-  useEffect(() => {
-    if (mode === 'waiting-room' && phase === 'playing') {
-      setMode('playing-online')
-    }
-  }, [phase, mode])
-
-  // Local game in progress (phase driven by store)
-  if (mode === 'playing-local' && phase === 'playing') {
-    return <Game onLeave={() => setMode('home')} />
+  function goHome() {
+    resetGame()
+    setOnline(null)
+    setScreen('home')
   }
 
-  // Local lobby — player setup
-  if (mode === 'local-lobby' || (mode === 'home' && phase === 'playing')) {
-    if (phase === 'playing') return <Game onLeave={() => setMode('home')} />
-    return <Lobby onBack={() => setMode('home')} />
+  // Any started game — local, bots or online — renders the table. For online
+  // non-hosts this flips automatically when the host's start state syncs in.
+  if (phase === 'playing') {
+    return (
+      <Game
+        localPlayerName={online?.playerName}
+        roomId={online?.roomId}
+        isHost={online?.isHost}
+        onLeave={goHome}
+      />
+    )
   }
 
-  if (mode === 'multiplayer-lobby') {
+  if (screen === 'local-setup') {
+    return <Lobby key={preset} preset={preset} onBack={() => setScreen('home')} />
+  }
+
+  if (screen === 'online-lobby') {
     return (
       <MultiplayerLobby
-        onRoomJoined={(roomId, roomCode, isHost, playerName) => {
-          setRoomInfo({ roomId, roomCode, isHost, playerName })
-          setMode('waiting-room')
-        }}
-        onBack={() => setMode('home')}
+        onRoomJoined={session => { setOnline(session); setScreen('waiting-room') }}
+        onBack={() => setScreen('home')}
       />
     )
   }
 
-  if (mode === 'waiting-room' && roomInfo) {
+  if (screen === 'waiting-room' && online) {
     return (
       <WaitingRoom
-        roomId={roomInfo.roomId}
-        roomCode={roomInfo.roomCode}
-        isHost={roomInfo.isHost}
-        playerName={roomInfo.playerName}
-        onGameStart={(players: { name: string; classId: ClassId }[]) => {
-          // Only the host initialises the game — non-host players receive the
-          // canonical state via the useGameSync broadcast within ~300 ms.
-          if (roomInfo?.isHost) startGame(players)
-          setMode('playing-online')
+        roomId={online.roomId}
+        roomCode={online.roomCode}
+        isHost={online.isHost}
+        onGameStart={(seats: PlayerSetup[]) => {
+          // Only the host builds the game; everyone else receives it via useGameSync.
+          if (online.isHost) startGame(seats)
         }}
-        onLeave={() => {
-          setRoomInfo(null)
-          setMode('multiplayer-lobby')
-        }}
+        onLeave={() => { setOnline(null); setScreen('online-lobby') }}
       />
     )
   }
 
-  if (mode === 'playing-online') {
-    return <Game
-      localPlayerName={roomInfo?.playerName}
-      roomId={roomInfo?.roomId}
-      onLeave={() => { setRoomInfo(null); setMode('home') }}
-    />
-  }
-
-  // Home screen
   return (
     <div className="min-h-screen flex flex-col items-center justify-center p-8">
       <div className="text-center mb-10">
@@ -101,17 +90,32 @@ export default function App() {
 
       <div className="panel p-8 w-full max-w-sm space-y-4">
         <button
-          onClick={() => setMode('multiplayer-lobby')}
+          onClick={() => { setPreset('solo'); setScreen('local-setup') }}
           className="btn-primary w-full py-4 text-base"
+        >
+          🤖 Play vs Bots
+        </button>
+        <button
+          onClick={() => { setPreset('pass-and-play'); setScreen('local-setup') }}
+          className="btn-secondary w-full py-4 text-base"
+        >
+          🖥️ Pass &amp; Play
+        </button>
+        <button
+          onClick={() => setScreen('online-lobby')}
+          disabled={!isOnlineAvailable}
+          className="btn-secondary w-full py-4 text-base disabled:opacity-50 disabled:cursor-not-allowed"
         >
           🌐 Play Online
         </button>
-        <button
-          onClick={() => setMode('local-lobby')}
-          className="btn-secondary w-full py-4 text-base"
-        >
-          🖥️ Local / Pass &amp; Play
-        </button>
+        {!isOnlineAvailable && (
+          <p className="text-xs text-parchment-500 text-center leading-snug">
+            Online play needs Supabase settings in <code className="text-parchment-300">.env.local</code> (see <code className="text-parchment-300">.env.example</code>).
+          </p>
+        )}
+        <p className="text-xs text-parchment-600 text-center leading-snug pt-1">
+          Any seat can be a bot — in local games and in online rooms you host.
+        </p>
       </div>
     </div>
   )

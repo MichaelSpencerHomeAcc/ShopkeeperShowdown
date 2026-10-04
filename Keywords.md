@@ -72,7 +72,7 @@ Used by: Wilderness (main action), Ranger passive (half roll, round down), Marve
 
 Draw X resources from the top of the resource deck. Mark them all as Stolen.
 
-Used by: Thieves' Guild (Launder 2), Resourceful Recruiter Professional, Sorcerer (Reality Ripple), Counterfeit "Fake Ring" return effect.
+Used by: Thieves' Guild (Launder 3), Resourceful Recruiter Professional, Sorcerer (Reality Ripple), Counterfeit "Fake Ring" return effect.
 
 ---
 
@@ -108,7 +108,7 @@ Used by: Thieves' Guild (Steal 1), Counterfeit "Fake Fur Harness" return effect,
 
 Swap X of your resources (from windows or hoard) with the same number of resources from the Flea Market. Your resources go to where the Flea Market resources came from, and vice versa.
 
-Used by: Tavern (Trade 2), Polite Promoter, Alluring Alchemist, Counterfeit "Back Door Key" return effect, Shaman Elemental Die result 2 (Trade 5), Monk Momentum spend (Trade 2).
+Used by: Tavern (Trade 3), Polite Promoter, Alluring Alchemist, Counterfeit "Back Door Key" return effect, Shaman Elemental Die result 2 (Trade 5), Monk Momentum spend (Trade 2).
 
 ---
 

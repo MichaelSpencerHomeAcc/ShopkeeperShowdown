@@ -1,7 +1,7 @@
 import { useState } from 'react'
-import type { Player, RepType, ShamanPatienceEffects, DuelStake, AmbushCard } from '../types'
-import { LOCATIONS } from './SharedBoard'
-import { useGameStore } from '../store/gameStore'
+import type { Player, RepType, ShamanPatienceEffects, DuelStake } from '../types'
+import { LOCATIONS } from '../data/locations'
+import { useGameStore, CLAN_TOLL, FEARSOME_CHAMPION_MAX, SHAMAN_DICE_RECHARGE_ROUND } from '../store/gameStore'
 import { ResourceCardMini } from './ResourceCardMini'
 import { CardPickerGrid } from './CardPickerGrid'
 import { DiceRollModal } from './DiceRollModal'
@@ -50,6 +50,8 @@ function BarbarianAbilities({ player, isActiveTurn }: { player: Player; isActive
   const canAct = isActiveTurn && player.activeTokens >= 1
   const swingUsed = classAbilitiesUsedThisTurn.includes('recklessSwing')
   const raidUsed = classAbilitiesUsedThisTurn.includes('raidingParty')
+  // Raiding Party's appraise: keep up to maxKeep (can't keep more cards than were peeked)
+  const raidKeep = appraisePeek ? Math.min(appraisePeek.maxKeep, appraisePeek.cards.length) : 1
 
   const myRep = player.rep.ARM + player.rep.CON + player.rep.TRI + player.rep.TRG
   const theirRep = targetPlayer
@@ -126,7 +128,7 @@ function BarbarianAbilities({ player, isActiveTurn }: { player: Player; isActive
           <span className="text-sm font-bold text-parchment-300 uppercase tracking-wide">Passive · Fearsome Champion</span>
         </div>
         <div className="px-3 py-2 text-sm text-parchment-400 leading-relaxed">
-          +2 to all Clash rolls. <span className="text-green-400">At turn start: gain 1 coin per broken window on the board (minimum 1 coin even if none broken).</span>
+          +2 to all Clash rolls. <span className="text-green-400">At turn start: gain 1 coin per broken window on the board (max {FEARSOME_CHAMPION_MAX}).</span>
           <br />Others may pay you 2 resources to make you retreat from a Clash (handled in Clash prompt).
           {player.clanLocation && (
             <div className="flex items-center gap-1 text-xs text-amber-400 font-semibold mt-1">
@@ -300,7 +302,7 @@ function BarbarianAbilities({ player, isActiveTurn }: { player: Player; isActive
             <div className="flex-1 min-w-0">
               <div className="text-base font-bold text-amber-300">Raiding Party</div>
               <div className="text-sm text-parchment-400 leading-snug">
-                {raidUsed ? '✓ Used this turn' : appraisePeek?.playerId === player.id ? 'Appraise pending…' : 'Place Clan marker · Appraise 2'}
+                {raidUsed ? '✓ Used this turn' : appraisePeek?.playerId === player.id ? 'Appraise pending…' : 'Place Clan marker · Appraise 1'}
               </div>
             </div>
             <TokenCost cost={1} current={player.activeTokens} />
@@ -329,7 +331,7 @@ function BarbarianAbilities({ player, isActiveTurn }: { player: Player; isActive
                   ))}
                 </div>
                 <div className="text-sm text-parchment-500">
-                  Any player who uses that location must pay you 2 coins first. After placing, Appraise 2 (look at top 4 cards, keep 2).
+                  Any player who uses that location must pay you {CLAN_TOLL} coin{CLAN_TOLL !== 1 ? 's' : ''} first. After placing, Appraise 1 (look at top 4 cards, keep 1).
                 </div>
                 <button
                   onClick={handleRaid}
@@ -340,10 +342,10 @@ function BarbarianAbilities({ player, isActiveTurn }: { player: Player; isActive
               </>
             )}
 
-            {/* Step 2: Appraise 2 — shown after Clan is placed */}
+            {/* Step 2: Appraise — shown after Clan is placed */}
             {appraisePeek?.playerId === player.id && (
               <div className="space-y-1.5">
-                <div className="text-xs font-semibold text-amber-300">Appraise 2 — choose 2 cards to keep:</div>
+                <div className="text-xs font-semibold text-amber-300">Appraise {raidKeep} — choose {raidKeep} card{raidKeep !== 1 ? 's' : ''} to keep:</div>
                 <div className="flex flex-wrap gap-1.5">
                   {appraisePeek.cards.map(c => (
                     <ResourceCardMini
@@ -354,7 +356,7 @@ function BarbarianAbilities({ player, isActiveTurn }: { player: Player; isActive
                       onClick={() => setAppraiseSelected(prev =>
                         prev.includes(c.id)
                           ? prev.filter(x => x !== c.id)
-                          : prev.length < 2 ? [...prev, c.id] : [c.id]
+                          : prev.length < raidKeep ? [...prev, c.id] : [c.id]
                       )}
                     />
                   ))}
@@ -365,10 +367,10 @@ function BarbarianAbilities({ player, isActiveTurn }: { player: Player; isActive
                     setAppraiseSelected([])
                     setRaidOpen(false)
                   }}
-                  disabled={appraiseSelected.length < 2}
+                  disabled={appraiseSelected.length < raidKeep}
                   className="btn-primary text-xs px-2 py-0.5 w-full disabled:opacity-50"
                 >
-                  Keep {appraiseSelected.length}/2 → done
+                  Keep {appraiseSelected.length}/{raidKeep} → done
                 </button>
               </div>
             )}
@@ -531,7 +533,7 @@ function ShamanAbilities({ player, isActiveTurn }: { player: Player; isActiveTur
         : firstBrokenWindowIdx
       built.repair1 = { windowIdx }
     }
-    const tradeableCards = [...player.hoard, ...player.windows.flatMap((w, wi) => w.card && w.status !== 'broken' ? [w.card] : [])]
+    const tradeableCards = [...player.hoard, ...player.windows.flatMap(w => w.card && w.status !== 'broken' ? [w.card] : [])]
     if (patienceEffects.trade1 !== undefined) built.trade1 = { playerCardId: patienceTradeCardId || tradeableCards[0]?.id || '', fleaSlotIdx: patienceTradeFleaIdx }
     if (patienceEffects.forage2 && canPatienceForage) built.forage2 = true
     patienceOfStone(player.id, built)
@@ -578,7 +580,7 @@ function ShamanAbilities({ player, isActiveTurn }: { player: Player; isActiveTur
           <span className="text-sm font-bold text-parchment-300 uppercase tracking-wide">Passive · Dominion of the Elements</span>
         </div>
         <div className="px-3 py-2 text-sm text-parchment-400 leading-relaxed">
-          4 elemental dice rolled at game start — use each once on your turn for a free effect. <span className="text-gold-300 font-semibold">{unusedCount} of 4 remaining.</span>
+          4 elemental dice rolled at game start — use each once on your turn for a free effect. Used dice recharge at the start of round {SHAMAN_DICE_RECHARGE_ROUND}. <span className="text-gold-300 font-semibold">{unusedCount} of 4 remaining.</span>
         </div>
       </div>
 
@@ -859,7 +861,7 @@ function ShamanAbilities({ player, isActiveTurn }: { player: Player; isActiveTur
                 <span className="text-xs text-parchment-300 font-semibold">Trade 1</span>
               </label>
               {patienceEffects.trade1 !== undefined && (() => {
-                const patienceTradeCards = [...player.hoard, ...player.windows.flatMap((w, wi) => w.card && w.status !== 'broken' ? [w.card] : [])]
+                const patienceTradeCards = [...player.hoard, ...player.windows.flatMap(w => w.card && w.status !== 'broken' ? [w.card] : [])]
                 const patienceWindowBadges = Object.fromEntries(player.windows.flatMap((w, wi) => w.card && w.status !== 'broken' ? [[w.card.id, `🪟 W${wi+1}`]] : []))
                 return (
                 <div className="mt-1 pl-6 space-y-1">
@@ -928,8 +930,6 @@ function ShamanAbilities({ player, isActiveTurn }: { player: Player; isActiveTur
 
 // ---- Paladin ----
 
-const REP_TYPES_ALL: RepType[] = ['ARM', 'CON', 'TRI', 'TRG']
-
 const REP_BTN_SEL: Record<RepType, string> = {
   ARM: 'bg-orange-700/70 border-orange-400 text-orange-100',
   CON: 'bg-blue-700/70   border-blue-400   text-blue-100',
@@ -985,7 +985,6 @@ function PaladinAbilities({ player, isActiveTurn }: { player: Player; isActiveTu
   // rn01 passive: show second negotiate form when first is complete and no pending trade
   const hasRn01 = player.renownCards.some(c => c.id === 'rn01')
   const canSecondNegotiate = isActiveTurn && hasRn01 && negotiatesCompletedThisTurn === 1 && !negotiatePending
-  const neg2TargetPlayer = players.find(p => p.id === (neg2Target || otherPlayers[0]?.id))
   const neg2OfferCard = player.hoard.find(c => c.id === (neg2CardId || player.hoard[0]?.id))
 
   function clearTalesState() {
@@ -1076,7 +1075,7 @@ function PaladinAbilities({ player, isActiveTurn }: { player: Player; isActiveTu
           <span className="text-sm font-bold text-parchment-300 uppercase tracking-wide">Passive · Honourable Trade</span>
         </div>
         <div className="px-3 py-2 text-sm text-parchment-400 leading-relaxed">
-          +1 Rep when resolving Negotiate at Guildhall, using Report the Crime, or completing a public Visitor's order.
+          +1 Rep when you resolve a Negotiate at the Guildhall, or when Report the Crime repairs at least one broken window.
           {totalClashBonus > 0 && (
             <> <span className="text-gold-400 font-semibold">+{totalClashBonus} to Righteous Duel rolls</span> (current Renown card count).</>
           )}

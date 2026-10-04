@@ -1,10 +1,11 @@
-import { useEffect, useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import { useAuth } from '../hooks/useAuth'
 import { supabase } from '../lib/supabase'
 import { updatePlayerReady, startRoom, closeRoom } from '../lib/rooms'
 import { CLASSES } from '../data/classes'
 import { CardImage } from '../components/CardImage'
-import type { ClassCard, ClassId } from '../types'
+import type { BotDifficulty, ClassCard, ClassId, PlayerSetup } from '../types'
+import { BOT_DIFFICULTIES, BOT_DIFFICULTY_BLURB, BOT_DIFFICULTY_LABEL, botName } from '../bots/botConfig'
 
 interface RoomPlayer {
   id: string
@@ -19,8 +20,7 @@ interface Props {
   roomId: string
   roomCode: string
   isHost: boolean
-  playerName: string
-  onGameStart: (players: { name: string; classId: ClassId }[]) => void
+  onGameStart: (seats: PlayerSetup[]) => void
   onLeave: () => void
 }
 
@@ -150,7 +150,7 @@ function KickedScreen({ onDismiss }: { onDismiss: () => void }) {
 }
 
 // ---- Main component ----
-export function WaitingRoom({ roomId, roomCode, isHost, playerName, onGameStart, onLeave }: Props) {
+export function WaitingRoom({ roomId, roomCode, isHost, onGameStart, onLeave }: Props) {
   const { user } = useAuth()
   const [players, setPlayers] = useState<RoomPlayer[]>([])
   const [myClassId, setMyClassId] = useState<ClassId>('barbarian')
@@ -160,6 +160,13 @@ export function WaitingRoom({ roomId, roomCode, isHost, playerName, onGameStart,
   const [showLeaveWarning, setShowLeaveWarning] = useState(false)
   const [kicked, setKicked] = useState(false)
   const [copied, setCopied] = useState(false)
+
+  // Bot seats live on the host and are mirrored to everyone else over a broadcast channel.
+  const [bots, setBots] = useState<PlayerSetup[]>([])
+  const botsRef = useRef<PlayerSetup[]>([])
+  const botChannelRef = useRef<ReturnType<typeof supabase.channel> | null>(null)
+  const [newBotDifficulty, setNewBotDifficulty] = useState<BotDifficulty>('medium')
+  const [newBotClass, setNewBotClass] = useState<ClassId | ''>('')
 
   // Load players and subscribe to changes
   useEffect(() => {
@@ -186,7 +193,38 @@ export function WaitingRoom({ roomId, roomCode, isHost, playerName, onGameStart,
     return () => { supabase.removeChannel(sub) }
   }, [roomId])
 
+  // Bot seat sync: the host answers requests and broadcasts every change
+  useEffect(() => {
+    const channel = supabase.channel(`room-bots-${roomId}`, { config: { broadcast: { self: false } } })
+    channel
+      .on('broadcast', { event: 'bots' }, ({ payload }) => {
+        if (isHost) return
+        const next = Array.isArray(payload?.bots) ? (payload.bots as PlayerSetup[]) : []
+        botsRef.current = next
+        setBots(next)
+      })
+      .on('broadcast', { event: 'bots-request' }, () => {
+        if (isHost) channel.send({ type: 'broadcast', event: 'bots', payload: { bots: botsRef.current } })
+      })
+      .subscribe(status => {
+        if (status === 'SUBSCRIBED' && !isHost) channel.send({ type: 'broadcast', event: 'bots-request', payload: {} })
+      })
+    botChannelRef.current = channel
+    return () => {
+      botChannelRef.current = null
+      supabase.removeChannel(channel)
+    }
+  }, [roomId, isHost])
+
+  function updateBots(next: PlayerSetup[]) {
+    botsRef.current = next
+    setBots(next)
+    botChannelRef.current?.send({ type: 'broadcast', event: 'bots', payload: { bots: next } })
+  }
+
   // Watch for room status changes: 'playing' starts game, 'closed' kicks non-hosts
+  const onGameStartRef = useRef(onGameStart)
+  onGameStartRef.current = onGameStart
   useEffect(() => {
     const sub = supabase
       .channel(`room-status-${roomId}`)
@@ -203,7 +241,8 @@ export function WaitingRoom({ roomId, roomCode, isHost, playerName, onGameStart,
             .eq('room_id', roomId)
             .order('seat_index')
           if (data) {
-            onGameStart(data.map(p => ({ name: p.name, classId: (p.class_id ?? 'barbarian') as ClassId })))
+            const humans: PlayerSetup[] = data.map(p => ({ name: p.name, classId: (p.class_id ?? 'barbarian') as ClassId }))
+            onGameStartRef.current([...humans, ...botsRef.current])
           }
         } else if (payload.new.status === 'closed' && !isHost) {
           setKicked(true)
@@ -212,7 +251,7 @@ export function WaitingRoom({ roomId, roomCode, isHost, playerName, onGameStart,
       .subscribe()
 
     return () => { supabase.removeChannel(sub) }
-  }, [roomId, onGameStart, isHost])
+  }, [roomId, isHost])
 
   async function handleReady() {
     if (!user) return
@@ -261,9 +300,27 @@ export function WaitingRoom({ roomId, roomCode, isHost, playerName, onGameStart,
     return <KickedScreen onDismiss={onLeave} />
   }
 
-  const allReady = players.length >= 2 && players.every(p => p.is_ready)
+  const playableClasses = CLASSES.filter(c => c.status !== 'WIP')
+  const seatCount = players.length + bots.length
+  const allReady = seatCount >= 2 && players.length > 0 && players.every(p => p.is_ready)
   const me = players.find(p => p.player_id === user?.id)
-  const classTaken = players.some(p => p.player_id !== user?.id && p.is_ready && p.class_id === myClassId)
+  const classTaken =
+    players.some(p => p.player_id !== user?.id && p.is_ready && p.class_id === myClassId) ||
+    bots.some(b => b.classId === myClassId)
+
+  const takenForBots = new Set<string>([
+    ...players.map(p => (p.player_id === user?.id ? myClassId : p.class_id)).filter((c): c is string => !!c),
+    ...bots.map(b => b.classId),
+  ])
+  const botClassOptions = playableClasses.filter(c => !takenForBots.has(c.id))
+  const chosenBotClass = botClassOptions.find(c => c.id === newBotClass)?.id ?? botClassOptions[0]?.id
+
+  function addBot() {
+    if (!chosenBotClass || seatCount >= 6) return
+    const name = botName([...players.map(p => p.name), ...bots.map(b => b.name)])
+    updateBots([...bots, { name, classId: chosenBotClass, bot: newBotDifficulty }])
+    setNewBotClass('')
+  }
 
   return (
     <div className="min-h-screen flex flex-col items-center justify-center p-8">
@@ -307,7 +364,7 @@ export function WaitingRoom({ roomId, roomCode, isHost, playerName, onGameStart,
 
         {/* Player list */}
         <div>
-          <div className="zone-label mb-3">Players ({players.length}/6)</div>
+          <div className="zone-label mb-3">Players ({seatCount}/6)</div>
           <div className="space-y-2">
             {players.map(p => {
               const cls = CLASSES.find(c => c.id === p.class_id)
@@ -342,7 +399,67 @@ export function WaitingRoom({ roomId, roomCode, isHost, playerName, onGameStart,
                 </div>
               )
             })}
+            {bots.map((b, i) => {
+              const cls = CLASSES.find(c => c.id === b.classId)
+              return (
+                <div key={`${b.name}-${i}`} className="flex items-center gap-3 rounded-lg px-3 py-2.5 border border-sky-600/40 bg-sky-950/20">
+                  <div className="w-10 h-10 rounded-lg overflow-hidden border border-parchment-700/30 flex-shrink-0">
+                    {cls && <CardImage src={cls.imageFile} alt={cls.name} className="w-full h-full object-cover object-top" fallbackText={cls.name[0]} />}
+                  </div>
+                  <div className="flex-1 min-w-0">
+                    <div className="flex items-center gap-2">
+                      <span className="text-base font-semibold text-parchment-100">{b.name}</span>
+                      <span className="text-xs bg-sky-800/40 text-sky-200 px-1.5 py-0.5 rounded font-bold">
+                        🤖 {b.bot ? BOT_DIFFICULTY_LABEL[b.bot] : ''} BOT
+                      </span>
+                    </div>
+                    <div className="text-sm text-parchment-500">{cls?.name}</div>
+                  </div>
+                  {isHost ? (
+                    <button
+                      onClick={() => updateBots(bots.filter((_, j) => j !== i))}
+                      className="text-sm text-parchment-500 hover:text-red-300 px-2"
+                      title="Remove bot"
+                    >
+                      ✕
+                    </button>
+                  ) : (
+                    <div className="text-sm font-bold px-2 py-0.5 text-green-300">✓ Ready</div>
+                  )}
+                </div>
+              )
+            })}
           </div>
+
+          {/* Host: add a bot seat */}
+          {isHost && seatCount < 6 && (
+            <div className="mt-3 flex flex-wrap items-center gap-2 rounded-lg border border-dashed border-sky-700/40 px-3 py-2.5">
+              <span className="text-sm text-parchment-400">Add a bot:</span>
+              <select
+                value={newBotDifficulty}
+                onChange={e => setNewBotDifficulty(e.target.value as BotDifficulty)}
+                title={BOT_DIFFICULTY_BLURB[newBotDifficulty]}
+                className="bg-ink-900/60 border border-parchment-800/40 rounded-lg px-2 py-1.5 text-sm text-parchment-200"
+              >
+                {BOT_DIFFICULTIES.map(d => <option key={d} value={d}>{BOT_DIFFICULTY_LABEL[d]}</option>)}
+              </select>
+              <select
+                value={chosenBotClass ?? ''}
+                onChange={e => setNewBotClass(e.target.value as ClassId)}
+                className="bg-ink-900/60 border border-parchment-800/40 rounded-lg px-2 py-1.5 text-sm text-parchment-200"
+              >
+                {botClassOptions.map(c => <option key={c.id} value={c.id}>{c.name}</option>)}
+              </select>
+              <button
+                onClick={addBot}
+                disabled={!chosenBotClass}
+                className="btn-secondary text-sm px-3 py-1.5 disabled:opacity-50"
+              >
+                + Add
+              </button>
+              <span className="text-xs text-parchment-600 w-full">Bots run on the host's screen, so keep this tab open during the game.</span>
+            </div>
+          )}
         </div>
 
         {/* My class picker */}
@@ -353,7 +470,7 @@ export function WaitingRoom({ roomId, roomCode, isHost, playerName, onGameStart,
               <span className="text-parchment-600 font-normal normal-case text-xs ml-2">(hover a card and click i for details)</span>
             </div>
             <div className="grid grid-cols-4 gap-2">
-              {CLASSES.filter(c => c.status !== 'WIP').map(cls => (
+              {playableClasses.map(cls => (
                 <div key={cls.id} className="relative group">
                   <button
                     onClick={() => setMyClassId(cls.id as ClassId)}
@@ -393,7 +510,7 @@ export function WaitingRoom({ roomId, roomCode, isHost, playerName, onGameStart,
             <>
               {classTaken && (
                 <div className="flex-1 text-sm text-red-400 font-semibold text-center self-center">
-                  Another player has already chosen this class
+                  Another seat has already taken this class
                 </div>
               )}
               <button
@@ -420,7 +537,11 @@ export function WaitingRoom({ roomId, roomCode, isHost, playerName, onGameStart,
               disabled={!allReady}
               className="btn-primary px-5 py-2.5 text-sm disabled:opacity-40 disabled:cursor-not-allowed bg-green-700 hover:bg-green-600 border-green-500"
             >
-              {allReady ? 'Start' : `Waiting (${players.filter(p => p.is_ready).length}/${players.length})`}
+              {allReady
+                ? 'Start'
+                : seatCount < 2
+                  ? 'Need 2+ seats'
+                  : `Waiting (${players.filter(p => p.is_ready).length}/${players.length})`}
             </button>
           )}
         </div>

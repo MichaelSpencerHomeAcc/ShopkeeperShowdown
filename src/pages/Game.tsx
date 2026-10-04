@@ -8,6 +8,8 @@ import { CLASSES } from '../data/classes'
 import { supabase } from '../lib/supabase'
 import { abandonRoom } from '../lib/rooms'
 import { CheatSheetModal } from '../components/CheatSheetModal'
+import { useBotDriver } from '../bots/useBotDriver'
+import { BOT_DIFFICULTY_LABEL, BOT_SPEED_LABEL, loadBotSpeed, saveBotSpeed, type BotSpeed } from '../bots/botConfig'
 import type { Player, ResourceCard } from '../types'
 
 const PAWN_COLORS = ['bg-red-500','bg-blue-500','bg-green-500','bg-yellow-400','bg-purple-500','bg-pink-500']
@@ -50,19 +52,6 @@ const WINDOW_STATUS_STYLE: Record<string, string> = {
   TRI: 'border-green-400/80 bg-green-600 text-white',
   TRG: 'border-pink-400/80 bg-pink-600 text-white',
 }
-const REP_SCORE_TABLE = [0, 1, 3, 5, 8, 11, 14, 18, 22]
-
-function repScore(tokens: number) {
-  return REP_SCORE_TABLE[Math.min(tokens, REP_SCORE_TABLE.length - 1)]
-}
-
-function liveScore(player: Player) {
-  const coins = player.coins + (player.classId === 'monk' ? player.momentumTokens : 0)
-  const repPoints = repScore(player.rep.ARM) + repScore(player.rep.CON) + repScore(player.rep.TRI) + repScore(player.rep.TRG)
-  const sets = Math.min(player.rep.ARM, player.rep.CON, player.rep.TRI, player.rep.TRG)
-  return coins + repPoints + sets * 6
-}
-
 function classStatus(player: Player) {
   if (player.classId === 'paladin') return `Renown ${player.renownCards.length}`
   if (player.classId === 'rogue') return `CF ${player.counterfeitHand.length}`
@@ -76,11 +65,13 @@ interface Props {
   localPlayerName?: string
   /** Room ID — required in online mode for abandon signalling. */
   roomId?: string
+  /** Online only: the host's client plays the bot seats for the whole room. */
+  isHost?: boolean
   /** Called after the player confirms leaving — navigates back to lobby/home. */
   onLeave?: () => void
 }
 
-export function Game({ localPlayerName, roomId, onLeave }: Props) {
+export function Game({ localPlayerName, roomId, isHost, onLeave }: Props) {
   const {
     players, round, resetGame,
     currentTurnPlayerId, startingDraft, completeStartingDraftPick,
@@ -88,9 +79,19 @@ export function Game({ localPlayerName, roomId, onLeave }: Props) {
 
   const isOnline = !!localPlayerName && !!roomId
 
-  const localPlayer = localPlayerName ? players.find(p => p.name === localPlayerName) : null
-  const isMyTurn = !localPlayerName || (localPlayer?.id === currentTurnPlayerId)
-  const currentPlayer = players.find(p => p.id === currentTurnPlayerId) ?? players[0]
+  // Bots are played by exactly one client: this screen offline, or the host online.
+  const [botSpeed, setBotSpeed] = useState<BotSpeed>(loadBotSpeed)
+  const hasBots = players.some(p => p.bot)
+  useBotDriver(hasBots && (!isOnline || !!isHost), botSpeed)
+
+  // A local game with a single human seat uses the focused one-player layout (like online).
+  const humans = players.filter(p => !p.bot)
+  const soloHuman = !isOnline && humans.length === 1 ? humans[0] : null
+  const boardPlayerName = isOnline ? localPlayerName : soloHuman?.name
+  const currentIsBot = !!players.find(p => p.id === currentTurnPlayerId)?.bot
+
+  const localPlayer = boardPlayerName ? players.find(p => p.name === boardPlayerName) : null
+  const isMyTurn = isOnline ? localPlayer?.id === currentTurnPlayerId : !currentIsBot
   const [viewingPlayerId, setViewingPlayerId] = useState<string | null>(null)
   const [hoveredTopWindowCard, setHoveredTopWindowCard] = useState<{ name: string; imageFile: string; x: number; y: number } | null>(null)
   const centrePlayer = viewingPlayerId ? players.find(p => p.id === viewingPlayerId) : localPlayer
@@ -198,11 +199,12 @@ export function Game({ localPlayerName, roomId, onLeave }: Props) {
   if (startingDraft) {
     const currentDrafterId = startingDraft.pickOrder[startingDraft.pickIndex]
     const currentDrafter = players.find(p => p.id === currentDrafterId)
-    const canDraft = !localPlayerName || localPlayer?.id === currentDrafterId
+    const canDraft = !currentDrafter?.bot && (!boardPlayerName || localPlayer?.id === currentDrafterId)
     return (
       <StartingDraftScreen
         players={players}
-        localPlayerName={localPlayerName}
+        localPlayerName={boardPlayerName}
+        drafterIsBot={!!currentDrafter?.bot}
         currentDrafterId={currentDrafterId}
         currentDrafterName={currentDrafter?.name ?? 'Player'}
         canDraft={canDraft}
@@ -260,7 +262,20 @@ export function Game({ localPlayerName, roomId, onLeave }: Props) {
             <div className="text-[10px] uppercase tracking-widest text-parchment-500 font-bold">Round {round} / 6</div>
           </div>
           <div className="flex items-center gap-2">
-
+            {hasBots && (!isOnline || isHost) && (
+              <div className="flex items-center gap-1 rounded-lg border border-parchment-700/40 bg-ink-900/60 px-2 py-1" title="How fast the bots take their turns">
+                <span className="text-[10px] uppercase tracking-widest text-parchment-500 font-bold mr-1">Bots</span>
+                {(['slow', 'normal', 'fast'] as const).map(sp => (
+                  <button
+                    key={sp}
+                    onClick={() => { setBotSpeed(sp); saveBotSpeed(sp) }}
+                    className={`text-xs px-2 py-0.5 rounded ${botSpeed === sp ? 'bg-gold-500/30 text-gold-200' : 'text-parchment-400 hover:text-parchment-200'}`}
+                  >
+                    {BOT_SPEED_LABEL[sp]}
+                  </button>
+                ))}
+              </div>
+            )}
             <button
               onClick={() => setShowCheatSheet(true)}
               className="btn-secondary text-xs px-3 py-2"
@@ -357,6 +372,11 @@ export function Game({ localPlayerName, roomId, onLeave }: Props) {
                     <div className="max-w-[120px] truncate text-center text-[10px] font-bold text-white/80">
                       {CLASSES.find(c => c.id === p.classId)?.name ?? p.classId}
                     </div>
+                    {p.bot && (
+                      <div className="mt-0.5 rounded-full bg-sky-900/70 border border-sky-400/50 px-2 py-px text-[9px] font-black uppercase tracking-wide text-sky-100">
+                        🤖 {BOT_DIFFICULTY_LABEL[p.bot]} bot
+                      </div>
+                    )}
                   </div>
 
                   <div className="rounded-md bg-black/20 border border-white/10 px-2 py-1.5 min-h-[74px] flex flex-col items-center justify-center gap-1">
@@ -509,14 +529,14 @@ export function Game({ localPlayerName, roomId, onLeave }: Props) {
       </div>
 
       {/* Board — full width */}
-      <SharedBoard canAct={isMyTurn} localPlayerName={localPlayerName} />
+      <SharedBoard canAct={isMyTurn} localPlayerName={boardPlayerName} />
 
       {/* Lower section */}
       <div className="flex gap-3 items-stretch">
         {/* Left column: shared decks + action log */}
         <div className="flex flex-col gap-3 flex-shrink-0" style={{ width: 320 }}>
           <div className="flex-1 min-h-52">
-            <ActionLog players={players} localPlayerName={localPlayerName} />
+            <ActionLog players={players} localPlayerName={boardPlayerName} />
           </div>
         </div>
 
@@ -549,7 +569,7 @@ export function Game({ localPlayerName, roomId, onLeave }: Props) {
             players.length <= 4 ? 'grid-cols-2' : 'grid-cols-3'
           }`}>
             {players.map((player, i) => (
-              <PlayerArea key={player.id} player={player} playerIndex={i} isOwn={true} />
+              <PlayerArea key={player.id} player={player} playerIndex={i} isOwn={!player.bot} />
             ))}
           </div>
         )}
@@ -565,6 +585,7 @@ export function Game({ localPlayerName, roomId, onLeave }: Props) {
 function StartingDraftScreen({
   players,
   localPlayerName,
+  drafterIsBot,
   currentDrafterId,
   currentDrafterName,
   canDraft,
@@ -574,6 +595,7 @@ function StartingDraftScreen({
 }: {
   players: Player[]
   localPlayerName?: string
+  drafterIsBot: boolean
   currentDrafterId: string
   currentDrafterName: string
   canDraft: boolean
@@ -616,7 +638,9 @@ function StartingDraftScreen({
           <div className={`rounded-lg border px-3 py-2 text-sm ${canDraft ? 'border-green-500/50 bg-green-950/30 text-green-200' : 'border-amber-500/40 bg-amber-950/20 text-amber-200'}`}>
             {canDraft
               ? 'Choose one card from the draft pool.'
-              : localPlayerName
+              : drafterIsBot
+                ? `${currentDrafterName} (bot) is choosing…`
+                : localPlayerName
                 ? `Waiting for ${currentDrafterName} to pick.`
                 : `${currentDrafterName} is up.`
             }

@@ -1,7 +1,7 @@
 import type { ReactNode } from 'react'
 
-export const KEYWORD_DEFS: Record<string, string> = {
-  'Appraise': 'Draw the top N cards from the resource deck directly to your hoard.',
+const KEYWORD_DEFS: Record<string, string> = {
+  'Appraise': 'Look at the top 4 cards of the resource deck and keep the stated number; the rest go to the bottom of the deck.',
   'Auction': 'Roll a d6 and sell a card from your hoard or window for that many coins.',
   'Break': 'Mark one of a target player\'s shop windows as broken.',
   'Distribute': 'Spread resources among players or zones as specified by the card or action.',
@@ -9,11 +9,11 @@ export const KEYWORD_DEFS: Record<string, string> = {
   'Fence': "Sell a stolen card for its coin value; the type must differ from the last card fenced at the Thieves' Guild.",
   'Forage': 'Look at the top 4 cards of the resource discard pile and keep up to 2.',
   'Gather': 'Roll a d6 and draw that many resources from the deck to your hoard.',
-  'Launder': 'Draw 2 resource cards from the deck, marking both as stolen, and add them to your hoard.',
+  'Launder': 'Draw the stated number of resource cards from the deck into your hoard, marking them all as stolen.',
   'Refresh': 'Restore used active tokens back to their ready state.',
   'Repair': 'Restore one or all broken shop windows to their normal status.',
   'Steal': 'Take a random resource card from another player\'s hoard and mark it as stolen.',
-  'Trade': 'Swap selected cards from your hoard with cards in the Flea Market.',
+  'Trade': 'Swap up to the stated number of cards from your hoard or windows with cards in the Flea Market.',
   'Active token': 'A token that tracks how many actions you can still take this round.',
   'Hoard': 'Your private stockpile of resource cards, hidden from other players (max 8).',
   'Window': 'One of your 5 public shop display slots, visible to all players.',

@@ -19,16 +19,16 @@ Recommended starter classes for first-time play: **Barbarian, Ranger, Monk, Sorc
 ### Passive — Fearsome Champion
 - Add 2 to all Clash rolls.
 - Other players may give you 2 resources from their Hoard to make you retreat from any Clash you are part of (you forfeit the Clash; they don't have to roll).
-- Always on: At the start of your turn, gain 1 coin for each Broken window currently on the board (minimum 1).
+- Always on: At the start of your turn, gain 1 coin for each Broken window currently on the board (maximum 2).
 
 ### Active — Reckless Swing
 Break 1 of another player's windows. If that player has more Reputation tokens than you, Break 2 of their windows instead.
 
 ### Active — Raiding Party
-Place your Clan marker on any location. Draw 2 resources, keep 1, discard the other.
+Place your Clan marker on any location. Appraise 1 (look at the top 4 resources, keep 1, the rest go to the bottom of the deck).
 
 ### Class Feature — Clan
-- Any player who uses a location occupied by your Clan must give you 2 coins before resolving their action.
+- Any player who uses a location occupied by your Clan must give you 1 coin before resolving their action.
 - The Clan remains in place until the end of your next turn.
 - If not relocated on your next turn, the Clan returns to your player area.
 
@@ -67,7 +67,7 @@ Force a player to re-roll a die they just rolled.
 **Difficulty:** 2/5
 
 ### Passive — Dominion of the Elements
-At game start, roll all 4 Elemental dice. You may use each die's effect ONCE per game, on your turn, then discard that die. The result rolled determines the effect available (see Class Feature).
+At game start, roll all 4 Elemental dice. You may use each die's effect once, on your turn; all used dice recharge at the start of round 4. The result rolled determines the effect available (see Class Feature).
 
 ### Active — Call Lightning
 Choose 1 player. That player must discard 2 resources from their Hoard (their choice). Then Draw 1 resource.
@@ -84,7 +84,7 @@ You have 4 special d6 dice. Each one is rolled once at game start. The face roll
 - **5:** Appraise 1 (look at top 4 of deck, keep 1)
 - **6:** Gain 1 additional action this turn
 
-Use one Elemental die per turn maximum. Discard after use. Each die can only be used once per game.
+Use one Elemental die per turn maximum. A used die is set aside until the start of round 4, when every used die recharges (keeping its rolled face). Each die can therefore be used at most twice per game.
 
 **Custom components:** 4 Elemental dice (rolled once at game start; their face is the effect)
 
@@ -195,8 +195,7 @@ Place 1 Counterfeit from your hand into any window (yours or another player's). 
 ### Passive — Honourable Trade
 Gain 1 additional Reputation token whenever you:
 - Resolve a Negotiate action at the Guildhall
-- Use Report the Crime at the Barracks (either option)
-- Complete a public Visitor's order
+- Use Report the Crime at the Barracks to repair at least one Broken window
 
 ### Active — Righteous Duel
 Name a player and declare a stake (a resource or coin amount). They name their stake. Both players roll d6. The Paladin adds the number of Renown Cards currently in their hand to their roll. Highest total wins both stakes. Tie: both stakes returned, no effect.

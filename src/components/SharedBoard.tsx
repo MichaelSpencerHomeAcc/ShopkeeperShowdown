@@ -1,5 +1,5 @@
 import { useState, useEffect, useRef, type Dispatch, type SetStateAction } from 'react'
-import { useGameStore } from '../store/gameStore'
+import { useGameStore, CLAN_TOLL } from '../store/gameStore'
 import type { Location, Player, GameState, DuelStake, ResourceCard } from '../types'
 import { LocationActionPanel, DrawnCardsToast } from './LocationActionPanel'
 import { SellPhase } from './SellPhase'
@@ -7,6 +7,8 @@ import { ResourceCardMini } from './ResourceCardMini'
 import { RecipeDisplay, ResourceCardTile } from './ResourceCardTile'
 import { CardImage } from './CardImage'
 import { parseRequirements } from '../utils/requirements'
+import { scorePlayer } from '../utils/scoring'
+import { LOCATIONS } from '../data/locations'
 import { DiceRollModal } from './DiceRollModal'
 
 const DEMAND_COLORS: Record<string, string> = {
@@ -90,15 +92,6 @@ function playSfx(kind: 'turn' | 'coin' | 'steal' | 'break' | 'lightning') {
   }
 }
 
-export const LOCATIONS: { id: Location; label: string }[] = [
-  { id: 'guildhall',     label: 'Guildhall' },
-  { id: 'tavern',        label: 'Tavern' },
-  { id: 'wilderness',    label: 'Wilderness' },
-  { id: 'barracks',      label: 'Barracks' },
-  { id: 'workshop',      label: 'Workshop' },
-  { id: 'thieves-guild', label: "Thieves' Guild" },
-]
-
 function markerSrc(classId: string) {
   const name = classId.charAt(0).toUpperCase() + classId.slice(1)
   return `/cards/tokens/${name}.png`
@@ -140,15 +133,15 @@ function isCounterfeitResource(card: ResourceCard | null | undefined) {
 
 export function SharedBoard({ canAct = true, localPlayerName }: SharedBoardProps) {
   const {
-    players, pawns, movePawn,
+    players, pawns,
     currentTurnPlayerId, turnActionsUsed, locationsUsedThisTurn,
     bonusActionsThisTurn,
-    endTurn, sellPhaseDone, round, clashResult, dismissClash, acknowledgeClash,
+    endTurn, sellPhaseDone, round, clashResult, acknowledgeClash,
     rogueShadowsPending, rogueShadowsPromptedForTurn, requestRogueShadowsInterrupt, skipRogueShadowsInterrupt,
     rogueCounterfeitEffectPending, clearRogueCounterfeitEffect,
-    barbarianClashOptOut, submitBarbarianClashChoice, resolveBarbarianClashOptOut,
+    barbarianClashOptOut, submitBarbarianClashChoice,
     shamanCallLightning, resolveCallLightning,
-    negotiatePending, negotiateReview, counterNegotiate, resolveNegotiate,
+    negotiatePending, negotiateReview, counterNegotiate, resolveNegotiate, declineNegotiate,
     righteousDuelPending, resolveRighteousDuel,
     righteousDuelResult, dismissDuelResult,
     appraisePeek, completeAppraise, foragePeek, completeForage,
@@ -157,13 +150,13 @@ export function SharedBoard({ canAct = true, localPlayerName }: SharedBoardProps
     resetGame, addLog,
     rn04RerollPending, resolveRn04Reroll, rn04ForcedRoll, dismissRn04ForcedRoll,
     ambushPending, ambushResult, springAmbush, passAmbush, acknowledgeAmbush,
-    trickShotPending, useTrickShot, passTrickShot, trickShotForcedRoll, dismissTrickShotForcedRoll,
+    trickShotPending, useTrickShot: fireTrickShot, passTrickShot, trickShotForcedRoll, dismissTrickShotForcedRoll,
     trickShotBonusPending, resolveTrickShotBonus,
     rangerVisitorTradePending, dismissRangerVisitorTrade, resolveRangerVisitorTrade,
     nightWatcherChoicePending, assignNightWatcher,
-    fleaMarket, buyFromFleaMarket, refillFleaMarket,
+    fleaMarket,
     auction, tradeWithFleaMarket, breakWindow,
-    resourceDeck, resourceDiscard, drawResource,
+    resourceDeck, resourceDiscard,
     workOrderDeck,
     townCrierPeek, completeTownCrier, activeVisitors, visitorDemandRemaining,
     professionalSlots,
@@ -171,17 +164,20 @@ export function SharedBoard({ canAct = true, localPlayerName }: SharedBoardProps
     steal, heist,
   } = useGameStore()
 
-  /** Returns true in local/pass-and-play (no localPlayerName) or when the player whose
-   *  id is `id` has the same name as the local player.  Name-based comparison is more
-   *  robust than ID comparison because the name is a stable user-entered string. */
+  /** Returns true when this screen controls player `id`: every human seat in local/pass-and-play
+   *  (no localPlayerName), or the seat whose name matches the local player.  Bot seats are never
+   *  "me" — their prompts are answered by useBotDriver and humans see a waiting overlay instead.
+   *  Name-based comparison is more robust than ID comparison because the name is a stable
+   *  user-entered string. */
   function isMe(id: string | undefined) {
-    if (!localPlayerName) return true  // pass-and-play: everyone is "me"
-    if (!id) return false
-    return players.find(p => p.id === id)?.name === localPlayerName
+    if (!id) return !localPlayerName
+    const p = players.find(pl => pl.id === id)
+    if (p?.bot) return false
+    if (!localPlayerName) return true  // pass-and-play: every human is "me"
+    return p?.name === localPlayerName
   }
 
   const [selectedLocation, setSelectedLocation] = useState<Location | null>(null)
-  const [showCheatSheet, setShowCheatSheet] = useState(false)
   const [sellPhaseOpen, setSellPhaseOpen] = useState(false)
   const [draggedCounterfeit, setDraggedCounterfeit] = useState<DraggedCounterfeit>(null)
 
@@ -228,8 +224,6 @@ export function SharedBoard({ canAct = true, localPlayerName }: SharedBoardProps
     cardName: string
     cardImageFile: string | null
   }>>([])
-  // Separate log-id ref for coin toast (avoids sharing state with steal-toast ref)
-  const prevCoinLogRef = useRef<string | null>(null)
   const prevRogueLogRef = useRef<string | null>(null)
   const prevCoinsRef = useRef<Record<string, number> | null>(null)
   const prevLightningRef = useRef<string | null>(null)
@@ -462,7 +456,7 @@ export function SharedBoard({ canAct = true, localPlayerName }: SharedBoardProps
     setNightWatcherToast({ recipientName: newHolder.name, recipientClassId: newHolder.classId })
     const t = setTimeout(() => setNightWatcherToast(null), 4000)
     return () => clearTimeout(t)
-  }, [players]) // eslint-disable-line react-hooks/exhaustive-deps
+  }, [players])  
 
   useEffect(() => {
     const key = shamanCallLightning ? `${shamanCallLightning.shamanId}-${shamanCallLightning.targetId}` : null
@@ -470,41 +464,6 @@ export function SharedBoard({ canAct = true, localPlayerName }: SharedBoardProps
     prevLightningRef.current = key
     playSfx('lightning')
   }, [shamanCallLightning])
-
-  // Coin gain toast: fires whenever a player gains coins from any source.
-  // Uses its own ref (prevCoinLogRef) to avoid conflicts with the steal-toast ref.
-  useEffect(() => {
-    // Coin changes are handled by the player-state diff below so batched/multi-player gains are reliable.
-    return
-    if (actionLog.length === 0) return
-    const latest = actionLog[0]
-    if (latest.id === prevCoinLogRef.current) return
-    prevCoinLogRef.current = latest.id
-    const msg = latest.message
-    // Skip entries that have dedicated overlays or represent outgoing coins
-    if (/\bstole\b/i.test(msg) || msg.includes('Night Watcher')) return
-    if (/\bpaid\b.+\bcoins?\b/i.test(msg) || /\btoll\b/i.test(msg)) return
-    if (/\bsold\b/i.test(msg) || msg.includes('Sell Phase') || msg.includes('final sell')) return
-
-    const coinPatterns: Array<{ re: RegExp; source: string }> = [
-      { re: /Reckoning at Duskreach.*gained (\d+) coin/i,   source: 'Reckoning at Duskreach' },
-      { re: /Shadow of Vel'sha.*gained (\d+) coin/i,        source: "Shadow of Vel'sha" },
-      { re: /Fearsome Champion.*gained (\d+) coin/i,         source: 'Fearsome Champion' },
-      { re: /Merchant of Saltholm.*?\+(\d+) coin/i,          source: 'Merchant of Saltholm' },
-      { re: /gained (\d+) coins?/i,                          source: '' },
-      { re: /earned (\d+) coins?/i,                          source: '' },
-    ]
-    for (const { re, source } of coinPatterns) {
-      const m = msg.match(re)
-      if (!m) continue
-      const amount = parseInt(m[1], 10)
-      if (amount <= 0) continue
-      const recipient = latest.playerId ? players.find(p => p.id === latest.playerId) : null
-      if (!recipient) continue
-      const displaySource = source || (msg.length > 60 ? msg.slice(0, 58) + '…' : msg)
-      pushCoinToast({ playerName: recipient.name, playerClassId: recipient.classId, amount, source: displaySource })
-    }
-  }, [actionLog]) // eslint-disable-line react-hooks/exhaustive-deps
 
   useEffect(() => {
     const previous = prevCoinsRef.current
@@ -541,7 +500,7 @@ export function SharedBoard({ canAct = true, localPlayerName }: SharedBoardProps
     const player = players.find(p => p.id === currentTurnPlayerId)
     if (player) pushActivity(`✨ ${player.name}'s turn`)
     // Show prominent "Your Turn" prompt for the player using this screen.
-    if (player && (!localPlayerName || player.name === localPlayerName)) {
+    if (player && !player.bot && (!localPlayerName || player.name === localPlayerName)) {
       setYourTurnPromptId(player.id)
       playSfx('turn')
     }
@@ -582,7 +541,7 @@ export function SharedBoard({ canAct = true, localPlayerName }: SharedBoardProps
     else if (/sold|earned \d+ coins/.test(msg)) display = `🪙 ${msg}`
 
     pushActivity(display.length > 100 ? display.slice(0, 98) + '…' : display)
-  }, [actionLog]) // eslint-disable-line react-hooks/exhaustive-deps
+  }, [actionLog])  
 
   const currentPlayer = players.find(p => p.id === currentTurnPlayerId) ?? players[0]
   const maxActions = 3 + bonusActionsThisTurn
@@ -592,10 +551,6 @@ export function SharedBoard({ canAct = true, localPlayerName }: SharedBoardProps
   const stealToast = stealToasts[0] ?? null
   const passiveCoinToast = coinToasts[0] ?? null
   const currentTheme = currentPlayer ? (CLASS_THEME[currentPlayer.classId] ?? DEFAULT_CLASS_THEME) : DEFAULT_CLASS_THEME
-
-  function playerIdx(playerId: string) {
-    return players.findIndex(p => p.id === playerId)
-  }
 
   function handleLocationClick(locId: Location) {
     if (!canAct) return
@@ -617,7 +572,7 @@ export function SharedBoard({ canAct = true, localPlayerName }: SharedBoardProps
 
   return (
     <>
-      <DrawnCardsToast localPlayerId={localPlayerId} />
+      <DrawnCardsToast localPlayerId={localPlayerId} suppress={!!currentPlayer?.bot} />
 
       {/* Window-break shatter overlay */}
       {shatterInfo && (
@@ -849,10 +804,6 @@ export function SharedBoard({ canAct = true, localPlayerName }: SharedBoardProps
         </div>
       )}
 
-      {showCheatSheet && (
-        <CheatSheetModal onClose={() => setShowCheatSheet(false)} />
-      )}
-
       {rogueShadowsPending && (
         isMe(rogueShadowsPending.rogueId)
           ? <RogueShadowsInterruptModal
@@ -1045,11 +996,6 @@ export function SharedBoard({ canAct = true, localPlayerName }: SharedBoardProps
         )}
         </div>
 
-        {false && !canAct && (
-          <div className="text-xs text-parchment-600 italic px-3 py-1.5">
-            {players.find(p => p.id === currentTurnPlayerId)?.name ?? '...'}'s turn
-          </div>
-        )}
       </div>
 
       <div className="flex gap-2 items-stretch">
@@ -1164,7 +1110,7 @@ export function SharedBoard({ canAct = true, localPlayerName }: SharedBoardProps
 
                   {/* Clan marker */}
                   {clanOwner && (
-                    <div className="absolute top-7 left-1.5 z-10" title={`${clanOwner.name}'s Clan — costs 2 coins to use`}>
+                    <div className="absolute top-7 left-1.5 z-10" title={`${clanOwner.name}'s Clan — costs ${CLAN_TOLL} coin${CLAN_TOLL !== 1 ? 's' : ''} to use`}>
                       <div className="relative">
                         <div className="absolute inset-0 rounded-full animate-ping bg-red-500/30" />
                         <div className="relative flex items-center gap-1 bg-red-950/90 border-2 border-red-500 rounded-full pl-0.5 pr-2 py-0.5 shadow-lg shadow-red-900/60">
@@ -1181,11 +1127,6 @@ export function SharedBoard({ canAct = true, localPlayerName }: SharedBoardProps
           </div>
         </div>
 
-        {false && turnOver && (
-          <div className="text-center text-xs text-parchment-500 py-1">
-            All actions used — click <span className="text-gold-400 font-semibold">End Turn →</span> above
-          </div>
-        )}
       </div>
 
       {/* Visitor sidebar */}
@@ -1328,6 +1269,7 @@ export function SharedBoard({ canAct = true, localPlayerName }: SharedBoardProps
             onClick={e => e.stopPropagation()}
           >
             <LocationActionPanel
+              key={selectedLocation}
               location={selectedLocation}
               onClose={() => { setSelectedLocation(null); setPendingClanToll(null) }}
               onAction={() => {
@@ -1336,9 +1278,9 @@ export function SharedBoard({ canAct = true, localPlayerName }: SharedBoardProps
                 if (pendingClanToll) {
                   const visitor = players.find(p => p.id === currentTurnPlayerId)
                   const barb = players.find(p => p.id === pendingClanToll.barbarianId)
-                  adjustCoins(currentTurnPlayerId, -2)
-                  adjustCoins(pendingClanToll.barbarianId, 2)
-                  addLog(`${visitor?.name} paid ${barb?.name}'s Clan toll at ${pendingClanToll.locLabel} — 2 coins transferred.`, currentTurnPlayerId)
+                  adjustCoins(currentTurnPlayerId, -CLAN_TOLL)
+                  adjustCoins(pendingClanToll.barbarianId, CLAN_TOLL)
+                  addLog(`${visitor?.name} paid ${barb?.name}'s Clan toll at ${pendingClanToll.locLabel} — ${CLAN_TOLL} coin${CLAN_TOLL !== 1 ? 's' : ''} transferred.`, currentTurnPlayerId)
                   setPendingClanToll(null)
                 }
                 useGameStore.getState().useTurnAction(loc)
@@ -1349,9 +1291,9 @@ export function SharedBoard({ canAct = true, localPlayerName }: SharedBoardProps
                 if (pendingClanToll) {
                   const visitor = players.find(p => p.id === currentTurnPlayerId)
                   const barb = players.find(p => p.id === pendingClanToll.barbarianId)
-                  adjustCoins(currentTurnPlayerId, -2)
-                  adjustCoins(pendingClanToll.barbarianId, 2)
-                  addLog(`${visitor?.name} paid ${barb?.name}'s Clan toll at ${pendingClanToll.locLabel} — 2 coins transferred.`, currentTurnPlayerId)
+                  adjustCoins(currentTurnPlayerId, -CLAN_TOLL)
+                  adjustCoins(pendingClanToll.barbarianId, CLAN_TOLL)
+                  addLog(`${visitor?.name} paid ${barb?.name}'s Clan toll at ${pendingClanToll.locLabel} — ${CLAN_TOLL} coin${CLAN_TOLL !== 1 ? 's' : ''} transferred.`, currentTurnPlayerId)
                   setPendingClanToll(null)
                 }
                 useGameStore.getState().useTurnAction(selectedLocation)
@@ -1417,7 +1359,7 @@ export function SharedBoard({ canAct = true, localPlayerName }: SharedBoardProps
               pending={negotiatePending}
               players={players}
               onCounter={counterNegotiate}
-              onDecline={() => resolveNegotiate(false)}
+              onDecline={declineNegotiate}
             />
           : <WaitingOverlay name={players.find(p => p.id === negotiatePending.targetId)?.name} action="choosing their counter-offer" classId={players.find(p => p.id === negotiatePending.targetId)?.classId} />
       )}
@@ -1667,7 +1609,7 @@ export function SharedBoard({ canAct = true, localPlayerName }: SharedBoardProps
                 </div>
                 <div className="flex gap-2">
                   <button
-                    onClick={() => useTrickShot()}
+                    onClick={() => fireTrickShot()}
                     className="btn-primary flex-1 text-sm px-2 py-1.5"
                   >🎲 Force re-roll</button>
                   <button onClick={passTrickShot} className="btn-secondary flex-1 text-sm px-2 py-1.5">Skip</button>
@@ -1925,25 +1867,8 @@ export function SharedBoard({ canAct = true, localPlayerName }: SharedBoardProps
 
       {/* Scoring screen */}
       {endgame?.phase === 'scoring' && (() => {
-        const REP_TABLE = [0, 1, 3, 5, 8, 11, 14, 18, 22]
-        const repPts = (n: number) => REP_TABLE[Math.min(n, 8)]
-
         const scored = [...players]
-          .map(p => {
-            const isMono = p.classId === 'monk'
-            const coins = p.coins + (isMono ? p.momentumTokens : 0)
-            const armPts = repPts(p.rep.ARM)
-            const conPts = repPts(p.rep.CON)
-            const triPts = repPts(p.rep.TRI)
-            const trgPts = repPts(p.rep.TRG)
-            const repPoints = armPts + conPts + triPts + trgPts
-            const sets = Math.min(p.rep.ARM, p.rep.CON, p.rep.TRI, p.rep.TRG)
-            const setBonus = sets * 6
-            const total = coins + repPoints + setBonus
-            const totalRepTokens = p.rep.ARM + p.rep.CON + p.rep.TRI + p.rep.TRG
-            const brokenWindows = p.windows.filter(w => w.status === 'broken').length
-            return { p, coins, armPts, conPts, triPts, trgPts, repPoints, sets, setBonus, total, totalRepTokens, brokenWindows }
-          })
+          .map(p => ({ p, ...scorePlayer(p) }))
           .sort((a, b) => {
             if (b.total !== a.total) return b.total - a.total
             if (b.totalRepTokens !== a.totalRepTokens) return b.totalRepTokens - a.totalRepTokens
@@ -2314,7 +2239,7 @@ function ClashRollOffOverlay({
                       <div key={r.playerId} className={`flex items-center gap-1 text-xs px-2 py-0.5 rounded-full border ${
                         done ? 'border-green-500/60 text-green-400 bg-green-900/20' : 'border-parchment-700/40 text-parchment-500'
                       }`}>
-                        {done ? 'âœ“' : 'â³'} {p?.name.split(' ')[0]}
+                        {done ? '✓' : '⏳'} {p?.name.split(' ')[0]}
                       </div>
                     )
                   })}
@@ -2480,7 +2405,7 @@ function BarbarianClashOptOutOverlay({
             const isPicking = pending.length > 0 && !decided
             const isExpandedPicker = expanded === id
             // Show interactive controls if pass-and-play OR this is my row in multiplayer
-            const canInteract = isPassAndPlay || id === localPlayerId
+            const canInteract = (isPassAndPlay || id === localPlayerId) && !player.bot
             const canPay = player.hoard.length >= 2
 
             return (
@@ -2625,7 +2550,7 @@ function ClanTollModal({
   const barb = players.find(p => p.id === gate.barbarianId)
   const currentPlayer = players.find(p => p.id === currentPlayerId)
   const loc = LOCATIONS.find(l => l.id === gate.location)
-  const canAfford = (currentPlayer?.coins ?? 0) >= 2
+  const canAfford = (currentPlayer?.coins ?? 0) >= CLAN_TOLL
 
   return (
     <div className="fixed inset-0 z-[290] flex items-center justify-center bg-black/50">
@@ -2638,7 +2563,7 @@ function ClanTollModal({
             <span className="text-parchment-200 font-semibold">{loc?.label}</span>.
           </div>
           <div className="text-sm text-parchment-500 mt-2 leading-relaxed">
-            You must pay <span className="text-parchment-200 font-semibold">{barb?.name} 2 coins</span> to use
+            You must pay <span className="text-parchment-200 font-semibold">{barb?.name} {CLAN_TOLL} coin{CLAN_TOLL !== 1 ? 's' : ''}</span> to use
             this location. The toll is charged when you take an action — you can still back out for free.
           </div>
           {!canAfford && (
@@ -2654,7 +2579,7 @@ function ClanTollModal({
             disabled={!canAfford}
             className="btn-primary text-xs py-2 font-semibold disabled:opacity-40 disabled:cursor-not-allowed"
           >
-            Pay 2 coins &amp; use {loc?.label}
+            Pay {CLAN_TOLL} coin{CLAN_TOLL !== 1 ? 's' : ''} &amp; use {loc?.label}
           </button>
           <button
             onClick={onLeave}
@@ -4050,6 +3975,7 @@ function RogueCounterfeitActionModal({
   }
 
   function resolveAuction() {
+    if (!rogue) return
     const cardId = auctionZone === 'hoard' ? auctionCardId : (rogue.windows[auctionWindowIdx]?.card?.id ?? '')
     if (!cardId) return
     onAuction(cardId, auctionZone, auctionZone === 'window' ? auctionWindowIdx : undefined)

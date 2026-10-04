@@ -1,8 +1,9 @@
 import { useState } from 'react'
-import type { ClassId, ClassCard, ClassStatus } from '../types'
+import type { BotDifficulty, ClassId, ClassCard, ClassStatus, PlayerSetup } from '../types'
 import { CLASSES } from '../data/classes'
 import { useGameStore } from '../store/gameStore'
 import { CardImage } from '../components/CardImage'
+import { BOT_DIFFICULTIES, BOT_DIFFICULTY_BLURB, BOT_DIFFICULTY_LABEL, BOT_FRIENDLY_CLASSES, botName } from '../bots/botConfig'
 
 const STATUS_STYLES: Record<ClassStatus, { label: string; bg: string; text: string }> = {
   WIP:  { label: 'WIP',  bg: 'bg-red-900/80',    text: 'text-red-300' },
@@ -79,36 +80,82 @@ function ClassDetailModal({ cls, onClose }: { cls: ClassCard; onClose: () => voi
   )
 }
 
-interface PlayerDef {
+type Controller = 'human' | BotDifficulty
+
+interface Seat {
   name: string
   classId: ClassId
+  controller: Controller
 }
 
-export function Lobby({ onBack }: { onBack?: () => void }) {
-  const { startGame } = useGameStore()
-  const [playerCount, setPlayerCount] = useState(2)
-  const [selectedClass, setSelectedClass] = useState<ClassCard | null>(null)
-  const [players, setPlayers] = useState<PlayerDef[]>([
-    { name: 'Player 1', classId: 'barbarian' },
-    { name: 'Player 2', classId: 'rogue' },
-    { name: '', classId: 'monk' },
-    { name: '', classId: 'paladin' },
-    { name: '', classId: 'shaman' },
-    { name: '', classId: 'sorcerer' },
-  ])
+type LobbyPreset = 'solo' | 'pass-and-play'
 
-  function updatePlayer(index: number, field: keyof PlayerDef, value: string) {
-    setPlayers(prev => prev.map((p, i) => i === index ? { ...p, [field]: value } : p))
+const DEFAULT_CLASSES: ClassId[] = ['barbarian', 'rogue', 'paladin', 'ranger', 'shaman', 'monk']
+
+function initialSeats(preset: LobbyPreset): Seat[] {
+  const taken: string[] = ['Player 1']
+  return DEFAULT_CLASSES.map((classId, i) => {
+    if (i === 0 || preset === 'pass-and-play') return { name: `Player ${i + 1}`, classId, controller: 'human' as const }
+    const name = botName(taken)
+    taken.push(name)
+    return { name, classId, controller: 'medium' as const }
+  })
+}
+
+const CONTROLLER_OPTIONS: { value: Controller; label: string }[] = [
+  { value: 'human', label: '👤 Human' },
+  ...BOT_DIFFICULTIES.map(d => ({ value: d as Controller, label: `🤖 ${BOT_DIFFICULTY_LABEL[d]} bot` })),
+]
+
+export function Lobby({ onBack, preset = 'solo' }: { onBack?: () => void; preset?: LobbyPreset }) {
+  const { startGame } = useGameStore()
+  const [playerCount, setPlayerCount] = useState(preset === 'solo' ? 3 : 2)
+  const [selectedClass, setSelectedClass] = useState<ClassCard | null>(null)
+  const [seats, setSeats] = useState<Seat[]>(() => initialSeats(preset))
+
+  const activeSeats = seats.slice(0, playerCount)
+
+  function updateSeat(index: number, patch: Partial<Seat>) {
+    setSeats(prev => prev.map((s, i) => (i === index ? { ...s, ...patch } : s)))
   }
+
+  function changeController(index: number, controller: Controller) {
+    setSeats(prev => prev.map((s, i) => {
+      if (i !== index) return s
+      const wasBot = s.controller !== 'human'
+      const isBotNow = controller !== 'human'
+      // Swap in a sensible default name when a seat flips between human and bot
+      let name = s.name
+      if (isBotNow && !wasBot) name = botName(prev.filter((_, j) => j !== i).map(p => p.name))
+      if (!isBotNow && wasBot) name = `Player ${i + 1}`
+      return { ...s, controller, name }
+    }))
+  }
+
+  function randomiseClass(index: number) {
+    const taken = new Set(activeSeats.filter((_, i) => i !== index).map(s => s.classId))
+    const pool = (seats[index].controller === 'human' ? CLASSES.map(c => c.id) : BOT_FRIENDLY_CLASSES)
+      .filter(id => !taken.has(id))
+    if (pool.length > 0) updateSeat(index, { classId: pool[Math.floor(Math.random() * pool.length)] })
+  }
+
+  const names = activeSeats.map(s => s.name.trim().toLowerCase())
+  const duplicateName = names.some((n, i) => n && names.indexOf(n) !== i)
+  const classes = activeSeats.map(s => s.classId)
+  const duplicateClass = classes.some((c, i) => classes.indexOf(c) !== i)
+  const missingName = activeSeats.some(s => !s.name.trim())
+  const humanCount = activeSeats.filter(s => s.controller === 'human').length
+  const canStart = !missingName && !duplicateName && !duplicateClass
 
   function handleStart() {
-    const activePlayers = players.slice(0, playerCount).filter(p => p.name.trim())
-    if (activePlayers.length < 1) return
-    startGame(activePlayers)
+    if (!canStart) return
+    const setup: PlayerSetup[] = activeSeats.map(s => ({
+      name: s.name.trim(),
+      classId: s.classId,
+      ...(s.controller !== 'human' ? { bot: s.controller } : {}),
+    }))
+    startGame(setup)
   }
-
-  const activePlayers = players.slice(0, playerCount)
-  const canStart = activePlayers.every(p => p.name.trim())
 
   return (
     <div className="min-h-screen flex flex-col items-center justify-center p-8">
@@ -121,58 +168,89 @@ export function Lobby({ onBack }: { onBack?: () => void }) {
       </div>
 
       <div className="panel p-8 w-full max-w-2xl space-y-6">
-        {/* Player count */}
-        <div>
-          <label className="zone-label block mb-2">Number of Players</label>
+        {/* Player count + quick presets */}
+        <div className="flex flex-wrap items-end justify-between gap-4">
+          <div>
+            <label className="zone-label block mb-2">Number of Players</label>
+            <div className="flex gap-2">
+              {[2, 3, 4, 5, 6].map(n => (
+                <button
+                  key={n}
+                  onClick={() => setPlayerCount(n)}
+                  className={`w-10 h-10 rounded-lg font-display font-bold text-sm transition-all
+                    ${playerCount === n
+                      ? 'bg-gold-500 text-ink-900 shadow-lg'
+                      : 'bg-parchment-800/30 text-parchment-300 hover:bg-parchment-800/50'}`}
+                >
+                  {n}
+                </button>
+              ))}
+            </div>
+          </div>
           <div className="flex gap-2">
-            {[2, 3, 4, 5, 6].map(n => (
-              <button
-                key={n}
-                onClick={() => setPlayerCount(n)}
-                className={`w-10 h-10 rounded-lg font-display font-bold text-sm transition-all
-                  ${playerCount === n
-                    ? 'bg-gold-500 text-ink-900 shadow-lg'
-                    : 'bg-parchment-800/30 text-parchment-300 hover:bg-parchment-800/50'}`}
-              >
-                {n}
-              </button>
-            ))}
+            <button onClick={() => setSeats(initialSeats('solo'))} className="btn-secondary text-xs px-3 py-2">🤖 You vs bots</button>
+            <button onClick={() => setSeats(initialSeats('pass-and-play'))} className="btn-secondary text-xs px-3 py-2">👥 All human</button>
           </div>
         </div>
 
-        {/* Player setup */}
+        {/* Seat setup */}
         <div className="space-y-3">
-          <label className="zone-label block">Player Setup</label>
-          {activePlayers.map((player, i) => (
-            <div key={i} className="flex items-center gap-3">
+          <label className="zone-label block">Seats</label>
+          {activeSeats.map((seat, i) => (
+            <div key={i} className="flex items-center gap-2">
               <div className="text-parchment-500 text-sm w-4">{i + 1}</div>
+              <select
+                value={seat.controller}
+                onChange={e => changeController(i, e.target.value as Controller)}
+                title={seat.controller === 'human' ? 'Played on this screen' : BOT_DIFFICULTY_BLURB[seat.controller]}
+                className="bg-ink-900/60 border border-parchment-800/40 rounded-lg px-2 py-2 text-sm text-parchment-200 focus:outline-none focus:border-gold-500/60"
+              >
+                {CONTROLLER_OPTIONS.map(o => <option key={o.value} value={o.value}>{o.label}</option>)}
+              </select>
               <input
                 type="text"
-                value={player.name}
-                onChange={e => updatePlayer(i, 'name', e.target.value)}
+                value={seat.name}
+                maxLength={20}
+                onChange={e => updateSeat(i, { name: e.target.value })}
                 placeholder={`Player ${i + 1} name`}
-                className="flex-1 bg-ink-900/60 border border-parchment-800/40 rounded-lg px-3 py-2 text-sm text-parchment-100 placeholder-parchment-600 focus:outline-none focus:border-gold-500/60"
+                className="flex-1 min-w-0 bg-ink-900/60 border border-parchment-800/40 rounded-lg px-3 py-2 text-sm text-parchment-100 placeholder-parchment-600 focus:outline-none focus:border-gold-500/60"
               />
               <select
-                value={player.classId}
-                onChange={e => updatePlayer(i, 'classId', e.target.value as ClassId)}
+                value={seat.classId}
+                onChange={e => updateSeat(i, { classId: e.target.value as ClassId })}
                 className="bg-ink-900/60 border border-parchment-800/40 rounded-lg px-2 py-2 text-sm text-parchment-200 focus:outline-none focus:border-gold-500/60"
               >
                 {CLASSES.map(cls => (
-                  <option key={cls.id} value={cls.id}>{cls.name}</option>
+                  <option key={cls.id} value={cls.id}>{cls.name}{cls.status === 'WIP' ? ' (WIP)' : ''}</option>
                 ))}
               </select>
+              <button
+                type="button"
+                onClick={() => randomiseClass(i)}
+                title="Random class"
+                className="w-8 h-8 rounded-lg bg-ink-900/60 border border-parchment-800/40 text-sm hover:border-gold-500/60 flex-shrink-0"
+              >
+                🎲
+              </button>
               {/* Class icon */}
               <div className="w-8 h-8 rounded overflow-hidden border border-parchment-800/30 flex-shrink-0">
                 <CardImage
-                  src={CLASSES.find(c => c.id === player.classId)?.imageFile ?? ''}
-                  alt={player.classId}
+                  src={CLASSES.find(c => c.id === seat.classId)?.imageFile ?? ''}
+                  alt={seat.classId}
                   className="w-full h-full"
-                  fallbackText={player.classId.charAt(0).toUpperCase()}
+                  fallbackText={seat.classId.charAt(0).toUpperCase()}
                 />
               </div>
             </div>
           ))}
+          <div className="text-xs leading-snug space-y-1">
+            {duplicateName && <div className="text-red-400">Every seat needs a different name.</div>}
+            {duplicateClass && <div className="text-red-400">Each class can only be played by one seat.</div>}
+            {activeSeats.some(s => s.controller !== 'human' && !BOT_FRIENDLY_CLASSES.includes(s.classId)) && (
+              <div className="text-amber-400/90">WIP classes have no ability UI yet, so bots playing them only use location actions.</div>
+            )}
+            {humanCount === 0 && <div className="text-parchment-500">No human seats: you will be watching the bots play.</div>}
+          </div>
         </div>
 
         {/* Class grid preview */}

@@ -4,7 +4,6 @@ import { VISITOR_CARDS } from '../data/visitors'
 import { PROFESSIONAL_CARDS } from '../data/professionals'
 import { WORK_ORDER_CARDS } from '../data/workorders'
 import { RENOWN_CARDS } from '../data/renown'
-import { AMBUSH_CARDS } from '../data/ambushCards'
 
 const STATIC_IMAGES = [
   '/cards/resources/Card Back.png',
@@ -28,7 +27,6 @@ function collectImageUrls(): string[] {
     ...VISITOR_CARDS.map(c => c.imageFile),
     ...STATIC_IMAGES,
     ...RENOWN_CARDS.map(c => c.imageFile),
-    ...AMBUSH_CARDS.map(c => c.imageFile),
     ...RESOURCE_CARDS.map(c => c.imageFile),
   ]
 }

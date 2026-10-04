@@ -3,7 +3,7 @@ import { useGameStore } from '../store/gameStore'
 import { ResourceCardMini } from './ResourceCardMini'
 import { RecipeDisplay } from './ResourceCardTile'
 import { parseRequirements } from '../utils/requirements'
-import type { ResourceCard, VisitorCard, DemandMap } from '../types'
+import type { ResourceCard, DemandMap } from '../types'
 
 // One window card (with its slot index) that the player can sell
 interface WindowOption {
@@ -55,9 +55,9 @@ export function SellPhase({ onDone }: { onDone?: () => void } = {}) {
 
   if (!player || round < 2) return null
 
-  const windowOptions: WindowOption[] = player.windows
-    .map((w, i) => ({ windowIdx: i, card: w.card, status: w.status }))
-    .filter((w): w is WindowOption & { status: string } => w.card !== null && w.status !== 'broken')
+  const windowOptions: WindowOption[] = player.windows.flatMap((w, i) =>
+    w.card && w.status !== 'broken' ? [{ windowIdx: i, card: w.card }] : []
+  )
 
   const usedWindowIdxs = new Set(assignments.values())
   const visitors = activeVisitors.map((v, i) => ({ v, i })).filter(({ v }) => v !== null)
