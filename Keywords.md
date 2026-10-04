@@ -8,13 +8,13 @@ Keywords are universal game terms that appear on cards and abilities throughout 
 
 Look at the top 4 resources of the resource deck. Keep X of them. Return the rest in any order on top of the deck.
 
-Used by: Workshop (Appraise 4), Spirited Summoner (Appraise 3), Monk Momentum spend, Sorcerer abilities.
+Used by: Spirited Summoner (Appraise 3), Barbarian Raiding Party (Appraise 1), Monk Momentum spend, Sorcerer abilities.
 
 ---
 
 ## Auction
 
-Choose 1 resource from your windows or hoard. Roll d6. Sell the chosen resource to the discard pile for the rolled coin value. If the resource has a Reputation icon, gain the matching Rep token.
+Choose 1 resource from your windows or hoard. Roll d6 and gain the rolled coin value. If the resource has a Reputation icon, gain the matching Rep token. You may sell it into a Visitor that still needs it, which counts toward that Visitor's contribution prizes. Otherwise it goes to the discard pile.
 
 Used by: Tavern (Auction 1), Counterfeit "Orcish Bitter" return effect.
 
@@ -121,7 +121,7 @@ Each player has 2 Active tokens. Spent to use Active class abilities or Reactive
 Off-board resource storage, maximum 8 cards. Resources here cannot be sold directly but can be crafted with, traded, fenced, or used for class abilities. Stolen resources go here face-up.
 
 ### Window
-One of 5 shop display slots per player. Resources placed here are available for selling during the Sell Phase. A window can be Shuttered (closed, immune to Steal/Break for one turn) or Broken (cannot be sold from until repaired).
+One of 5 shop display slots per player. Resources placed here are available for selling during the Sell Phase (up to 2 into each Visitor). A window can be Shuttered (closed, immune to Steal/Break for one turn) or Broken (cannot be sold from until repaired).
 
 ### Stolen marker
 A marker placed on a resource that was Stolen or Laundered. The resource sells normally to Visitors and at Auction (Stolen marker is removed on sale). At the Thieves' Guild, Stolen resources can be Fenced. At the Barracks, Report the Crime can force the discard of a Stolen resource. Counterfeits are inherently Stolen but cannot be discarded by Report the Crime.

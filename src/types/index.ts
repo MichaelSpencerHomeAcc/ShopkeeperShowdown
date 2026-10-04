@@ -9,6 +9,36 @@ export interface ResourceCard {
   imageFile: string
 }
 
+/** What a Visitor awards its top two contributors when it is completed. */
+export type VisitorPrizeKind = 'coins' | 'rep' | 'refresh' | 'take' | 'draw' | 'steal' | 'break'
+
+export interface VisitorPrize {
+  kind: VisitorPrizeKind
+  amount: number
+}
+
+/** Cards one player has sold into one Visitor; `at` orders ties (lower = got there first). */
+export interface VisitorContribution {
+  count: number
+  at: number
+}
+
+/** A won prize that needs the winner to choose something (Rep type, Flea Market cards, a target). */
+export interface PendingVisitorPrize {
+  playerId: string
+  visitorName: string
+  place: 1 | 2
+  prize: VisitorPrize
+}
+
+/** Steal and Break resolve one hit per choice (a prize of 2 asks twice, so targets can differ). */
+export interface VisitorPrizeChoice {
+  repType?: RepType
+  fleaSlotIdxs?: number[]
+  targetId?: string
+  windowIdx?: number
+}
+
 export interface VisitorCard {
   id: string
   name: string
@@ -210,6 +240,14 @@ export interface GameState {
   foragePeek: { playerId: string; cards: ResourceCard[]; source?: 'location' | 'patience' } | null
   lastDrawnCards: ResourceCard[] | null
   visitorDemandRemaining: Record<string, DemandMap>
+  /** 1st/2nd contribution prizes for each face-up Visitor, dealt when it appears */
+  visitorPrizes: Record<string, { first: VisitorPrize; second: VisitorPrize }>
+  /** Cards each player has sold into each face-up Visitor (visitorId → playerId → contribution) */
+  visitorContributions: Record<string, Record<string, VisitorContribution>>
+  /** Increments on every contribution so ties go to whoever got there first */
+  contributionSeq: number
+  /** Won prizes waiting for the winner to make a choice */
+  visitorPrizeQueue: PendingVisitorPrize[]
 
   // Turn management
   /** Seats the first player has moved left since round 1 — turn order rotates each round */
@@ -337,6 +375,8 @@ export interface GameState {
     auctionCardId?: string
     auctionFromZone?: 'hoard' | 'window'
     auctionWindowIdx?: number
+    /** Auction into this Visitor slot (counts toward its demand and your contribution) */
+    auctionVisitorIdx?: number
   } | null
   /** Ranger: after a successful Trick Shot (equal/lower result) — pick Break or Launder */
   trickShotBonusPending: {
@@ -355,6 +395,8 @@ export interface GameState {
     auctionCardId?: string
     auctionFromZone?: 'hoard' | 'window'
     auctionWindowIdx?: number
+    /** Auction into this Visitor slot (counts toward its demand and your contribution) */
+    auctionVisitorIdx?: number
   } | null
 
   /**

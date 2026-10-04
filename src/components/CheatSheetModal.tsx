@@ -34,7 +34,7 @@ export function CheatSheetModal({ onClose }: { onClose: () => void }) {
 
           <GuideSection title="Setting Up Windows">
             <ul className="space-y-1">
-              <li>Put resources in open windows so visitors can buy them during Sell Phase.</li>
+              <li>Put resources in open windows so visitors can buy them during Sell Phase. You can sell up to 2 into each Visitor.</li>
               <li>Try to cover active Visitor needs: ARM, CON, TRI, TRG, or ANY.</li>
               <li>Cards in windows are visible and useful, but they can be stolen, broken, or disrupted.</li>
               <li>Empty open windows cannot sell, so fill them before ending if you can.</li>
@@ -47,6 +47,8 @@ export function CheatSheetModal({ onClose }: { onClose: () => void }) {
               <li>Card value: higher values pay more coins when sold.</li>
               <li>Star rep: cards with rep icons give bonus rep when sold.</li>
               <li>Work Orders are public: anyone can Craft them at the Workshop, so finish a big one before a rival does.</li>
+              <li>Visitor prizes: when a Visitor is satisfied, whoever sold it the most cards wins its 1st prize and the runner-up wins 2nd. Ties go to whoever got there first.</li>
+              <li>You can also sell into Visitors outside the Sell Phase: Auction at the Tavern (d6 coins) or Sell to a Visitor at the Workshop (printed value, up to 2 cards).</li>
             </ul>
           </GuideSection>
 

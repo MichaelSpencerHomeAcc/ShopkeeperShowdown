@@ -1,7 +1,8 @@
 import { useState, useEffect } from 'react'
-import type { Location, RepType, Player, ResourceCard, WorkOrderCard } from '../types'
+import type { Location, RepType, Player, ResourceCard, WorkOrderCard, DemandMap } from '../types'
 import { canPlayerCraft } from '../utils/crafting'
-import { useGameStore } from '../store/gameStore'
+import { useGameStore, fitsDemand, MAX_SALES_PER_VISITOR } from '../store/gameStore'
+import { VisitorPrizeInfo } from './VisitorPrizes'
 import { Keyword } from './Keyword'
 import { ResourceCardMini } from './ResourceCardMini'
 import { CardPickerGrid } from './CardPickerGrid'
@@ -67,7 +68,7 @@ const LOCATION_ACTIONS: Record<Location, ActionOption[]> = {
   ],
   tavern: [
     { id: 'refresh', label: 'Refresh Actives', icon: '🔄', description: 'Reset all your active tokens to ready.' },
-    { id: 'auction', label: 'Auction 1',        icon: '🔨', description: 'Roll to sell a card from your hoard or a window.' },
+    { id: 'auction', label: 'Auction 1',        icon: '🔨', description: 'Roll d6 to sell a hoard or window card — into a Visitor, if it fits.' },
     { id: 'trade',   label: 'Trade 3',          icon: '↔️',  description: 'Swap up to 3 cards with the Flea Market.' },
   ],
   wilderness: [
@@ -83,7 +84,7 @@ const LOCATION_ACTIONS: Record<Location, ActionOption[]> = {
   workshop: [
     { id: 'take-2',   label: 'Take 2',     icon: '🛒', description: 'Take up to 2 cards from the Flea Market.' },
     { id: 'craft',    label: 'Craft',      icon: '⚒️', description: 'Complete one of the public Work Orders on the board for its reward.' },
-    { id: 'appraise', label: 'Appraise 2', icon: '🔍', description: 'Peek at 4 resource cards, keep up to 2.' },
+    { id: 'sell-visitor', label: 'Sell to a Visitor', icon: '🏷️', description: 'Sell up to 2 hoard or window cards into one Visitor for their printed value.' },
   ],
   'thieves-guild': [
     { id: 'steal-or-break', label: 'Steal 1 or Break 1', icon: '🗡️', description: "Target another player's window or resources." },
@@ -967,6 +968,70 @@ function AppraisePeekUI({ player, onDone }: { player: Player; onDone: () => void
 
 // ---- Tavern ----
 
+/** Remaining demand after these cards go in (specific type first, then Any). */
+function demandAfter(remaining: DemandMap, cards: ResourceCard[]): DemandMap {
+  const next = { ...remaining }
+  for (const c of cards) {
+    if (next[c.type] > 0) next[c.type]--
+    else if ((next.ANY ?? 0) > 0) next.ANY--
+  }
+  return next
+}
+
+/** Face-up Visitors with what they still need and their contribution prizes. */
+function VisitorChooser({ selectedIdx, onSelect, canTake, noneLabel }: {
+  selectedIdx: number | null
+  onSelect: (idx: number | null) => void
+  /** Can this Visitor (given its remaining demand) take what's being sold? */
+  canTake: (remaining: DemandMap) => boolean
+  /** Shows a "no Visitor" option with this label */
+  noneLabel?: string
+}) {
+  const { activeVisitors, visitorDemandRemaining } = useGameStore()
+  return (
+    <div className="space-y-1.5">
+      {noneLabel && (
+        <button
+          type="button"
+          onClick={() => onSelect(null)}
+          className={`w-full text-left rounded-lg border-2 px-3 py-1.5 text-xs ${selectedIdx === null ? 'border-gold-400 bg-gold-500/10 text-gold-200' : 'border-parchment-700/40 text-parchment-400 hover:border-parchment-400'}`}
+        >
+          {noneLabel}
+        </button>
+      )}
+      {activeVisitors.map((v, i) => {
+        if (!v) return null
+        const remaining = visitorDemandRemaining[v.id] ?? parseRequirements(v.demand)
+        const ok = canTake(remaining)
+        const needs = (Object.entries(remaining) as [string, number][]).filter(([, n]) => n > 0)
+        return (
+          <button
+            key={v.id}
+            type="button"
+            disabled={!ok}
+            onClick={() => onSelect(i)}
+            className={`w-full flex items-center gap-2 text-left rounded-lg border-2 p-1.5 transition-all ${
+              selectedIdx === i ? 'border-gold-400 bg-gold-500/10' : 'border-parchment-700/40 hover:border-parchment-400'
+            } disabled:opacity-40 disabled:cursor-not-allowed`}
+          >
+            <img src={v.imageFile} alt={v.name} className="w-10 h-10 rounded object-cover object-left flex-shrink-0" />
+            <div className="flex-1 min-w-0 space-y-0.5">
+              <div className="text-xs font-semibold text-parchment-100 truncate">
+                {v.name}
+                <span className="ml-1.5 text-[9px] font-normal text-parchment-500">
+                  needs {needs.map(([t, n]) => `${n} ${t === 'ANY' ? 'Any' : t}`).join(', ')}
+                </span>
+              </div>
+              <VisitorPrizeInfo visitorId={v.id} compact />
+            </div>
+            {!ok && <span className="text-[9px] text-parchment-600 flex-shrink-0">doesn&apos;t fit</span>}
+          </button>
+        )
+      })}
+    </div>
+  )
+}
+
 function TavernActions({ actionId, onAction, onBack }: { actionId: string; onAction: () => void; onBack: () => void }) {
   const { activePlayerId, players, fleaMarket, refreshActiveTokens, auction, tradeWithFleaMarket } = useGameStore()
   const player = players.find(p => p.id === activePlayerId) ?? players[0]
@@ -975,6 +1040,7 @@ function TavernActions({ actionId, onAction, onBack }: { actionId: string; onAct
   const [auctionZone, setAuctionZone] = useState<'hoard' | 'window'>('hoard')
   const [auctionWinIdx, setAuctionWinIdx] = useState(0)
   const [pendingAuctionRoll, setPendingAuctionRoll] = useState<number | null>(null)
+  const [auctionVisitorIdx, setAuctionVisitorIdx] = useState<number | null>(null)
 
   const [selectedHoardIds, setSelectedHoardIds] = useState<string[]>([])
   const [selectedFleaIdxs, setSelectedFleaIdxs] = useState<number[]>([])
@@ -1007,6 +1073,16 @@ function TavernActions({ actionId, onAction, onBack }: { actionId: string; onAct
   }
 
   if (actionId === 'auction') {
+    const auctionCard = auctionZone === 'hoard'
+      ? player.hoard.find(c => c.id === auctionCardId) ?? null
+      : player.windows[auctionWinIdx]?.status !== 'broken' ? player.windows[auctionWinIdx]?.card ?? null : null
+    const visitorFits = (remaining: DemandMap) => !!auctionCard && fitsDemand(remaining, auctionCard.type)
+    const { activeVisitors: av, visitorDemandRemaining: vdr } = useGameStore.getState()
+    const chosenVisitor = auctionVisitorIdx !== null ? av[auctionVisitorIdx] : null
+    // A Visitor picked for an earlier card might not take this one
+    const intoVisitor = chosenVisitor && visitorFits(vdr[chosenVisitor.id] ?? parseRequirements(chosenVisitor.demand))
+      ? auctionVisitorIdx
+      : null
     return (
       <div className="space-y-2">
         <BackButton onBack={onBack} />
@@ -1057,13 +1133,26 @@ function TavernActions({ actionId, onAction, onBack }: { actionId: string; onAct
           </div>
         )}
 
+        {auctionCard && (
+          <div className="space-y-1">
+            <div className="text-[10px] text-parchment-400">Sell into a Visitor? It counts toward their contribution prizes.</div>
+            <VisitorChooser
+              selectedIdx={intoVisitor}
+              onSelect={setAuctionVisitorIdx}
+              canTake={visitorFits}
+              noneLabel="No Visitor — plain auction"
+            />
+          </div>
+        )}
+
         <button
           type="button"
           onClick={() => {
             const cid = auctionZone === 'hoard' ? auctionCardId : (player.windows[auctionWinIdx]?.card?.id ?? '')
             if (!cid) return
-            auction(player.id, cid, auctionZone, auctionZone === 'window' ? auctionWinIdx : undefined)
+            auction(player.id, cid, auctionZone, auctionZone === 'window' ? auctionWinIdx : undefined, intoVisitor ?? undefined)
             setAuctionCardId('')
+            setAuctionVisitorIdx(null)
             const store = useGameStore.getState()
             // If a SharedBoard overlay (z-320+) will take over, close the panel immediately —
             // the overlay already displays the original roll; showing a dice modal inside
@@ -1082,7 +1171,7 @@ function TavernActions({ actionId, onAction, onBack }: { actionId: string; onAct
           disabled={auctionZone === 'hoard' ? !auctionCardId : !player.windows[auctionWinIdx]?.card}
           className="btn-primary text-xs px-2 py-0.5 disabled:opacity-50"
         >
-          Roll &amp; Sell
+          Roll &amp; Sell{intoVisitor !== null && av[intoVisitor] ? ` to ${av[intoVisitor]!.name}` : ''}
         </button>
       {pendingAuctionRoll !== null && (
         <DiceRollModal
@@ -1579,91 +1668,89 @@ function BarracksActions({ actionId, onAction, onBack }: { actionId: string; onA
 
 // ---- Workshop ----
 
-/** Appraise 2 — confirm gate, then draws top 4 from deck, pick up to 2, close */
-function AppraiseActionStep({ player, onAction, onBack }: { player: Player; onAction: () => void; onBack: () => void }) {
-  const { appraisePeek, peekWorkshopAppraise, completeAppraise } = useGameStore()
-  const [hasConfirmed, setHasConfirmed] = useState(false)
-  const [selected, setSelected] = useState<string[]>([])
-  const isActive = appraisePeek?.playerId === player.id
-  const maxKeep = appraisePeek?.maxKeep ?? 2
+/** Sell to a Visitor — pick a Visitor, then up to 2 hoard/window cards it still needs */
+function MarketSaleStep({ player, onAction, onBack }: { player: Player; onAction: () => void; onBack: () => void }) {
+  const { activeVisitors, visitorDemandRemaining, marketSale } = useGameStore()
+  const [visitorIdx, setVisitorIdx] = useState<number | null>(null)
+  const [picks, setPicks] = useState<{ cardId: string; zone: 'hoard' | 'window'; windowIdx?: number }[]>([])
 
-  // Phase 2: pick cards
-  if (hasConfirmed && isActive) {
+  const options: { card: ResourceCard; zone: 'hoard' | 'window'; windowIdx?: number }[] = [
+    ...player.hoard.map(card => ({ card, zone: 'hoard' as const })),
+    ...player.windows.flatMap((w, i) => (w.card && w.status !== 'broken' ? [{ card: w.card, zone: 'window' as const, windowIdx: i }] : [])),
+  ]
+  const anyFits = (remaining: DemandMap) => options.some(o => fitsDemand(remaining, o.card.type))
+
+  const visitor = visitorIdx !== null ? activeVisitors[visitorIdx] : null
+  if (!visitor) {
     return (
-      <>
-        <style>{`
-          @keyframes card-reveal {
-            from { opacity: 0; transform: translateY(14px) scale(0.86); }
-            to   { opacity: 1; transform: translateY(0)   scale(1);    }
-          }
-        `}</style>
-        <div className="space-y-2 text-[10px]">
-          <div className="text-parchment-400">Select up to {maxKeep} to keep:</div>
-          <div className="flex flex-wrap gap-2">
-            {appraisePeek!.cards.map((c, i) => (
-              <div
-                key={c.id}
-                style={{ animation: `card-reveal 0.28s ease-out ${i * 75}ms both` }}
-              >
-                <ResourceCardMini
-                  card={c}
-                  size="lg"
-                  selected={selected.includes(c.id)}
-                  onClick={() => setSelected(prev =>
-                    prev.includes(c.id) ? prev.filter(x => x !== c.id) : prev.length < maxKeep ? [...prev, c.id] : prev
-                  )}
-                />
-              </div>
-            ))}
-          </div>
-          <button
-            type="button"
-            onClick={() => {
-              completeAppraise(player.id, selected)
-              useGameStore.getState().clearDrawnCards() // completeAppraise sets lastDrawnCards; suppress toast
-              setSelected([])
-              onAction()
-            }}
-            className="btn-primary text-xs px-2 py-0.5"
-          >
-            Keep {selected.length}/{maxKeep} → done
-          </button>
-        </div>
-      </>
-    )
-  }
-
-  // Brief spinner while Zustand subscribers re-render
-  if (hasConfirmed && !isActive) {
-    return <div className="text-xs text-parchment-400 animate-pulse py-3 text-center">Drawing cards…</div>
-  }
-
-  // Confirm screen
-  if (!hasConfirmed) {
-    return (
-      <div className="space-y-3">
-        <p className="text-sm text-parchment-300 leading-relaxed">
-          Look at the top 4 cards of the resource deck and keep up to 2. The rest go to the bottom of the deck.
+      <div className="space-y-2">
+        <BackButton onBack={onBack} />
+        <div className="text-xs text-parchment-300 font-semibold">Choose a Visitor to sell to:</div>
+        <VisitorChooser selectedIdx={null} onSelect={i => { setVisitorIdx(i); setPicks([]) }} canTake={anyFits} />
+        <p className="text-[10px] text-parchment-500">
+          Up to {MAX_SALES_PER_VISITOR} cards at their printed value (plus any Rep on them). Each card counts toward this
+          Visitor&apos;s contribution prizes.
         </p>
-        <IrreversibleWarning />
-        <div className="flex gap-2 pt-1">
-          <button type="button" onClick={onBack} className="btn-secondary text-xs px-3 py-1.5">← Back</button>
-          <button
-            type="button"
-            onClick={() => {
-              peekWorkshopAppraise(player.id)
-              setHasConfirmed(true)
-            }}
-            className="btn-primary text-xs px-4 py-1.5"
-          >
-            Peek Top 4 →
-          </button>
-        </div>
       </div>
     )
   }
 
-  return null
+  const start = visitorDemandRemaining[visitor.id] ?? parseRequirements(visitor.demand)
+  const pickedCards = picks.flatMap(p => options.find(o => o.card.id === p.cardId)?.card ?? [])
+  const isPicked = (id: string) => picks.some(p => p.cardId === id)
+  const canAdd = (card: ResourceCard) =>
+    picks.length < MAX_SALES_PER_VISITOR && fitsDemand(demandAfter(start, pickedCards), card.type)
+  const coins = pickedCards.reduce((n, c) => n + c.value, 0)
+
+  function toggle(o: (typeof options)[number]) {
+    setPicks(prev => (prev.some(p => p.cardId === o.card.id)
+      ? prev.filter(p => p.cardId !== o.card.id)
+      : canAdd(o.card) ? [...prev, { cardId: o.card.id, zone: o.zone, windowIdx: o.windowIdx }] : prev))
+  }
+
+  return (
+    <div className="space-y-2">
+      <BackButton onBack={() => { setVisitorIdx(null); setPicks([]) }} />
+      <div className="flex items-center gap-2">
+        <img src={visitor.imageFile} alt={visitor.name} className="w-10 h-10 rounded object-cover object-left flex-shrink-0" />
+        <div className="min-w-0">
+          <div className="text-xs font-semibold text-parchment-100">{visitor.name}</div>
+          <VisitorPrizeInfo visitorId={visitor.id} compact />
+        </div>
+      </div>
+      <div className="text-[10px] text-parchment-500">Pick up to {MAX_SALES_PER_VISITOR} cards this Visitor still needs:</div>
+      <div className="flex flex-wrap gap-2">
+        {options.map(o => {
+          const picked = isPicked(o.card.id)
+          const usable = picked || canAdd(o.card)
+          return (
+            <div key={o.card.id} className={`relative flex-shrink-0 ${usable ? '' : 'opacity-35'}`}>
+              <ResourceCardMini card={o.card} size="lg" selected={picked} disabled={!usable} onClick={() => toggle(o)} />
+              {o.zone === 'window' && (
+                <div className="absolute bottom-0 inset-x-0 text-center text-[7px] bg-sky-600/90 text-white font-bold rounded-b leading-tight py-0.5 pointer-events-none">
+                  🪟 W{o.windowIdx! + 1}
+                </div>
+              )}
+            </div>
+          )
+        })}
+        {options.length === 0 && <div className="text-xs text-parchment-600 italic">No cards to sell</div>}
+      </div>
+      <button
+        type="button"
+        onClick={() => {
+          const sold = marketSale(player.id, visitorIdx!, picks)
+          setPicks([])
+          setVisitorIdx(null)
+          if (sold > 0) onAction()
+        }}
+        disabled={picks.length === 0}
+        className="btn-primary text-xs px-3 py-1 disabled:opacity-50 disabled:cursor-not-allowed"
+      >
+        Sell {picks.length > 0 ? `${picks.length} for $${coins}` : ''} → done
+      </button>
+    </div>
+  )
 }
 
 function WorkshopActions({ actionId, onAction, onBack }: { actionId: string; onAction: () => void; onBack: () => void }) {
@@ -1763,8 +1850,8 @@ function WorkshopActions({ actionId, onAction, onBack }: { actionId: string; onA
     )
   }
 
-  if (actionId === 'appraise') {
-    return <AppraiseActionStep player={player} onAction={onAction} onBack={onBack} />
+  if (actionId === 'sell-visitor') {
+    return <MarketSaleStep player={player} onAction={onAction} onBack={onBack} />
   }
 
   return null

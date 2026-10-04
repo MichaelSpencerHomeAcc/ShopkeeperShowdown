@@ -1,5 +1,5 @@
 import { useState, useEffect, useRef, type Dispatch, type SetStateAction } from 'react'
-import { useGameStore, CLAN_TOLL } from '../store/gameStore'
+import { useGameStore, CLAN_TOLL, describePrize } from '../store/gameStore'
 import type { Location, Player, GameState, DuelStake, ResourceCard } from '../types'
 import { LocationActionPanel, DrawnCardsToast } from './LocationActionPanel'
 import { SellPhase } from './SellPhase'
@@ -11,6 +11,7 @@ import { scorePlayer } from '../utils/scoring'
 import { LOCATIONS } from '../data/locations'
 import { DiceRollModal } from './DiceRollModal'
 import { PublicWorkOrdersRow, PublicWorkOrdersReference } from './PublicWorkOrders'
+import { VisitorPrizeInfo, VisitorPrizeModal } from './VisitorPrizes'
 
 const DEMAND_COLORS: Record<string, string> = {
   ARM: 'bg-orange-600 text-orange-100',
@@ -158,7 +159,7 @@ export function SharedBoard({ canAct = true, localPlayerName }: SharedBoardProps
     fleaMarket,
     auction, tradeWithFleaMarket, breakWindow,
     resourceDeck, resourceDiscard,
-    townCrierPeek, completeTownCrier, activeVisitors, visitorDemandRemaining,
+    townCrierPeek, completeTownCrier, activeVisitors, visitorDemandRemaining, visitorPrizeQueue,
     professionalSlots,
     actionLog, lastGuildFencedCard,
     steal, heist,
@@ -1166,6 +1167,7 @@ export function SharedBoard({ canAct = true, localPlayerName }: SharedBoardProps
                       </div>
                     </div>
                   )}
+                  <VisitorPrizeInfo visitorId={v.id} />
                 </div>
               </div>
             )
@@ -1655,6 +1657,15 @@ export function SharedBoard({ canAct = true, localPlayerName }: SharedBoardProps
               onBreak={(windowId) => resolveTrickShotBonus('break', windowId)}
             />
           : <WaitingOverlay name={ranger?.name} action="choosing Trick Shot bonus" classId={ranger?.classId} />
+      })()}
+
+      {/* Visitor contribution prize that needs a choice */}
+      {visitorPrizeQueue.length > 0 && (() => {
+        const pending = visitorPrizeQueue[0]
+        const winner = players.find(p => p.id === pending.playerId)
+        return isMe(pending.playerId)
+          ? <VisitorPrizeModal />
+          : <WaitingOverlay name={winner?.name} action={`choosing their ${pending.visitorName} prize (${describePrize(pending.prize)})`} classId={winner?.classId} />
       })()}
 
       {/* Ranger — Visitor Trade passive */}

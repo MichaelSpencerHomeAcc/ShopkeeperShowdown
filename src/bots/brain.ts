@@ -1,6 +1,8 @@
-import { useGameStore, CLAN_TOLL, FEARSOME_CHAMPION_MAX, type GameStore } from '../store/gameStore'
+import {
+  useGameStore, CLAN_TOLL, FEARSOME_CHAMPION_MAX, MAX_SALES_PER_VISITOR, rankContributors, type GameStore,
+} from '../store/gameStore'
 import type {
-  BotDifficulty, DuelStake, Location, Player, ResourceCard, ResourceType, VisitorCard, WorkOrderCard,
+  BotDifficulty, DemandMap, DuelStake, Location, Player, ResourceCard, ResourceType, VisitorCard, VisitorPrize, WorkOrderCard,
 } from '../types'
 import { parseRequirements, recipeMainType } from '../utils/requirements'
 import {
@@ -93,7 +95,7 @@ export function anythingPending(s: GameStore): boolean {
     s.negotiateReview || s.shamanCallLightning || s.ambushPending || s.ambushResult ||
     s.trickShotPending || s.trickShotBonusPending || s.rangerVisitorTradePending ||
     s.rn04RerollPending || s.nightWatcherChoicePending || s.townCrierPeek || s.appraisePeek ||
-    s.foragePeek || s.players.some(p => p.hoard.length > 8)
+    s.foragePeek || s.visitorPrizeQueue.length > 0 || s.players.some(p => p.hoard.length > 8)
   )
 }
 
@@ -291,6 +293,37 @@ function promptStep(s: GameStore): BotStep | null {
     })
   }
 
+  // A Visitor contribution prize that needs a choice
+  const prize = s.visitorPrizeQueue[0]
+  const prizeBot = botOf(s, prize?.playerId)
+  if (prize && prizeBot) {
+    const ctx = buildContext(s, prizeBot, prizeBot.bot!)
+    const key = `prize:${prize.visitorName}:${prize.place}:${prize.prize.amount}`
+    const skip = () => st().skipVisitorPrize()
+    switch (prize.prize.kind) {
+      case 'rep':
+        return step(key, prizeBot, 'think', () => st().resolveVisitorPrize({ repType: bestRepType(prizeBot.rep, ctx.difficulty) }))
+      case 'take': {
+        const flea = s.fleaMarket
+          .map((c, i) => ({ c, i }))
+          .filter((x): x is { c: ResourceCard; i: number } => x.c !== null)
+          .sort((a, b) => cardWorth(b.c, ctx, 1) - cardWorth(a.c, ctx, 1))
+          .slice(0, prize.prize.amount)
+        return step(key, prizeBot, 'think', () => (flea.length ? st().resolveVisitorPrize({ fleaSlotIdxs: flea.map(x => x.i) }) : skip()))
+      }
+      case 'steal': {
+        const target = bestStealTarget(s, prizeBot, ctx)
+        return step(key, prizeBot, 'think', () => (target ? st().resolveVisitorPrize({ targetId: target.id }) : skip()))
+      }
+      case 'break': {
+        const hit = bestBreak(s, prizeBot, ctx)
+        return step(key, prizeBot, 'think', () => (hit ? st().resolveVisitorPrize({ targetId: hit.target.id, windowIdx: hit.windowIdx }) : skip()))
+      }
+      default:
+        return step(key, prizeBot, 'quick', skip)
+    }
+  }
+
   // Leftover peeks that belong to a bot (e.g. Raiding Party appraise, declined duel appraise)
   const tc = s.townCrierPeek
   const tcBot = botOf(s, tc?.playerId)
@@ -367,8 +400,8 @@ function resolveCounterfeitEffect(rogueId: string, kind: string, amount: number)
     return
   }
   if (kind === 'auction') {
-    const pick = bestAuction(me, ctx)
-    if (pick) s.auction(me.id, pick.card.id, pick.zone, pick.windowIdx)
+    const pick = bestAuction(s, me, ctx)
+    if (pick) s.auction(me.id, pick.card.id, pick.zone, pick.windowIdx, pick.visitorIdx)
     return
   }
   if (kind === 'trade') {
@@ -428,7 +461,67 @@ function acknowledgeStep(s: GameStore): BotStep | null {
 // Selling
 // ─────────────────────────────────────────────────────────────────────────────
 
-/** Best set of (visitor, window) sales — one card per Visitor, demand permitting. */
+interface SaleOption { card: ResourceCard; zone: 'hoard' | 'window'; windowIdx?: number }
+
+function remainingOf(s: GameStore, v: VisitorCard): DemandMap {
+  return s.visitorDemandRemaining[v.id] ?? parseRequirements(v.demand)
+}
+
+/** Remaining demand after these cards go in (specific type first, then Any), or null if one doesn't fit. */
+function demandAfter(remaining: DemandMap, cards: ResourceCard[]): DemandMap | null {
+  const next = { ...remaining }
+  for (const c of cards) {
+    if (next[c.type] > 0) next[c.type]--
+    else if ((next.ANY ?? 0) > 0) next.ANY--
+    else return null
+  }
+  return next
+}
+
+function demandTotal(rem: DemandMap): number {
+  return RESOURCE_TYPES.reduce((n, t) => n + rem[t], 0) + (rem.ANY ?? 0)
+}
+
+/** Rough coin value of a Visitor prize to this bot. */
+function prizeWorth(s: GameStore, me: Player, ctx: ValueContext, prize: VisitorPrize): number {
+  const n = prize.amount
+  switch (prize.kind) {
+    case 'coins': return n
+    case 'rep': return n * repValue(me.rep, bestRepType(me.rep, ctx.difficulty), ctx.difficulty)
+    case 'refresh':
+      // Tokens spent before the Visitor completes come back, so even a full bot values it a little
+      return me.classId === 'monk' ? n * 0.8 : Math.max(0.3, Math.min(n, 2 - me.activeTokens)) * tokenValue(me) * 0.6
+    case 'take': {
+      const flea = s.fleaMarket.filter((c): c is ResourceCard => c !== null)
+      return flea.length ? n * averageWorth(flea, ctx, 1) * 1.1 : 0
+    }
+    case 'draw': return drawValue(n, 2.6, me)
+    case 'steal': return s.players.some(p => p.id !== me.id && p.hoard.length > 0) ? n * 2.8 : 0
+    case 'break': return n * 1.6 * (s.players.length - 1) * 0.6
+  }
+}
+
+/**
+ * Prize value of selling `added` more cards into Visitor `v`: the prize the bot would be in line
+ * for afterwards minus before. Certain when the sale completes the Visitor, discounted otherwise
+ * since rivals can still overtake. Easy bots ignore prizes.
+ */
+function contributionValue(s: GameStore, me: Player, ctx: ValueContext, v: VisitorCard, added: number, completes: boolean): number {
+  const prizes = s.visitorPrizes[v.id]
+  if (added === 0 || !prizes || ctx.difficulty === 'easy') return 0
+  const contribs = s.visitorContributions[v.id] ?? {}
+  const prizeFor = (c: typeof contribs) => {
+    const rank = rankContributors(c).indexOf(me.id)
+    return rank === 0 ? prizes.first : rank === 1 ? prizes.second : null
+  }
+  const worth = (p: VisitorPrize | null) => (p ? prizeWorth(s, me, ctx, p) : 0)
+  const before = prizeFor(contribs)
+  const after = prizeFor({ ...contribs, [me.id]: { count: (contribs[me.id]?.count ?? 0) + added, at: s.contributionSeq + added } })
+  const likely = ctx.difficulty === 'hard' ? 0.5 : 0.35
+  return worth(after) * (completes ? 1 : likely) - worth(before) * likely
+}
+
+/** Best set of (visitor, window) sales — up to MAX_SALES_PER_VISITOR per Visitor, demand permitting. */
 export function planSales(s: GameStore, me: Player, ctx: ValueContext): { visitorIdx: number; windowIdx: number }[] {
   const windows = me.windows
     .map((w, i) => ({ card: w.card, status: w.status, i }))
@@ -439,51 +532,84 @@ export function planSales(s: GameStore, me: Player, ctx: ValueContext): { visito
   if (windows.length === 0 || visitors.length === 0) return []
 
   const reserved = me.bot === 'easy' ? new Set<string>() : craftReservation(s, me, ctx)
-
-  const fits = (card: ResourceCard, v: VisitorCard) => {
-    const rem = s.visitorDemandRemaining[v.id] ?? parseRequirements(v.demand)
-    return rem[card.type] > 0 || (rem.ANY ?? 0) > 0
-  }
-  const completes = (card: ResourceCard, v: VisitorCard) => {
-    const rem = s.visitorDemandRemaining[v.id] ?? parseRequirements(v.demand)
-    const total = RESOURCE_TYPES.reduce((n, t) => n + rem[t], 0) + (rem.ANY ?? 0)
-    return total === 1 && fits(card, v)
-  }
-  const gain = (card: ResourceCard, v: VisitorCard) => {
-    let g = saleValue(card, ctx) - (reserved.has(card.id) ? cardWorth(card, ctx) + ctx.orderUnitValue : 0)
-    if (completes(card, v)) g += 1
-    return g
-  }
+  const gain = (card: ResourceCard) =>
+    saleValue(card, ctx) - (reserved.has(card.id) ? cardWorth(card, ctx) + ctx.orderUnitValue : 0)
 
   if (me.bot === 'easy') {
     const used = new Set<number>()
     const out: { visitorIdx: number; windowIdx: number }[] = []
     for (const { v, i } of visitors) {
-      const w = windows.find(w => !used.has(w.i) && fits(w.card, v))
-      if (w) { used.add(w.i); out.push({ visitorIdx: i, windowIdx: w.i }) }
+      const picked: ResourceCard[] = []
+      for (const w of windows) {
+        if (picked.length >= MAX_SALES_PER_VISITOR || used.has(w.i)) continue
+        if (!demandAfter(remainingOf(s, v), [...picked, w.card])) continue
+        used.add(w.i); picked.push(w.card); out.push({ visitorIdx: i, windowIdx: w.i })
+      }
     }
     return out
   }
 
+  // Try every window → (no sale | a Visitor) assignment; at most 4^5 combinations
+  const scoreVisitor = (v: VisitorCard, cards: ResourceCard[]) => {
+    if (cards.length === 0) return 0
+    const rem = demandAfter(remainingOf(s, v), cards)
+    if (!rem) return -Infinity
+    const completes = demandTotal(rem) === 0
+    return cards.reduce((n, c) => n + gain(c), 0) + contributionValue(s, me, ctx, v, cards.length, completes) + (completes ? 1 : 0)
+  }
+  const picks: ResourceCard[][] = visitors.map(() => [])
+  const pickIdx: number[][] = visitors.map(() => [])
   let best: { score: number; list: { visitorIdx: number; windowIdx: number }[] } = { score: 0, list: [] }
-  const recurse = (vi: number, used: Set<number>, list: { visitorIdx: number; windowIdx: number }[], score: number) => {
-    if (vi === visitors.length) {
-      if (score > best.score) best = { score, list: [...list] }
+  const recurse = (wi: number) => {
+    if (wi === windows.length) {
+      const score = visitors.reduce((n, { v }, k) => n + scoreVisitor(v, picks[k]), 0)
+      if (score > best.score) {
+        best = { score, list: visitors.flatMap(({ i }, k) => pickIdx[k].map(windowIdx => ({ visitorIdx: i, windowIdx }))) }
+      }
       return
     }
-    recurse(vi + 1, used, list, score)
-    const { v, i } = visitors[vi]
-    for (const w of windows) {
-      if (used.has(w.i) || !fits(w.card, v)) continue
-      const g = gain(w.card, v)
-      if (g <= 0) continue
-      used.add(w.i); list.push({ visitorIdx: i, windowIdx: w.i })
-      recurse(vi + 1, used, list, score + g)
-      used.delete(w.i); list.pop()
+    recurse(wi + 1)
+    const w = windows[wi]
+    if (gain(w.card) <= 0) return
+    for (let k = 0; k < visitors.length; k++) {
+      if (picks[k].length >= MAX_SALES_PER_VISITOR) continue
+      if (!demandAfter(remainingOf(s, visitors[k].v), [...picks[k], w.card])) continue
+      picks[k].push(w.card); pickIdx[k].push(w.i)
+      recurse(wi + 1)
+      picks[k].pop(); pickIdx[k].pop()
     }
   }
-  recurse(0, new Set(), [], 0)
+  recurse(0)
   return best.list
+}
+
+/** Workshop "Sell to a Visitor": the best Visitor and up to 2 hoard/window cards to sell into it. */
+function bestMarketSale(s: GameStore, me: Player, ctx: ValueContext) {
+  const options: SaleOption[] = [
+    ...me.hoard.map(card => ({ card, zone: 'hoard' as const })),
+    ...me.windows.flatMap((w, i) => (w.card && w.status !== 'broken' ? [{ card: w.card, zone: 'window' as const, windowIdx: i }] : [])),
+  ]
+  // Window cards would sell in the next sell phase anyway, so moving them early is worth less
+  const gain = (o: SaleOption) => (saleValue(o.card, ctx) - cardWorth(o.card, ctx)) * (o.zone === 'window' ? 0.4 : 1)
+  let best: { visitorIdx: number; picks: SaleOption[]; value: number } | null = null
+  s.activeVisitors.forEach((v, visitorIdx) => {
+    if (!v) return
+    const start = remainingOf(s, v)
+    const sets: SaleOption[][] = []
+    options.forEach((a, x) => {
+      sets.push([a])
+      options.slice(x + 1).forEach(b => sets.push([a, b]))
+    })
+    for (const set of sets) {
+      const rem = demandAfter(start, set.map(o => o.card))
+      if (!rem) continue
+      const completes = demandTotal(rem) === 0
+      const value = set.reduce((n, o) => n + gain(o), 0) +
+        contributionValue(s, me, ctx, v, set.length, completes) + (completes ? 1 : 0)
+      if (!best || value > best.value) best = { visitorIdx, picks: set, value }
+    }
+  })
+  return best as { visitorIdx: number; picks: SaleOption[]; value: number } | null
 }
 
 /** Card ids a bot wants to keep for the public Work Order it can finish soon. */
@@ -689,10 +815,10 @@ function locationCandidates(s: GameStore, me: Player, ctx: ValueContext): Candid
     if (me.activeTokens < 2 && tokenVal > 0) {
       add('tavern', 'refresh', (2 - me.activeTokens) * tokenVal, g => g.refreshActiveTokens(me.id), true)
     }
-    const auctionPick = bestAuction(me, ctx)
+    const auctionPick = bestAuction(s, me, ctx)
     if (auctionPick) {
-      add('tavern', `auction:${auctionPick.card.id}`, auctionPick.gain,
-        g => g.auction(me.id, auctionPick.card.id, auctionPick.zone, auctionPick.windowIdx), true)
+      add('tavern', `auction:${auctionPick.card.id}:${auctionPick.visitorIdx ?? '-'}`, auctionPick.gain,
+        g => g.auction(me.id, auctionPick.card.id, auctionPick.zone, auctionPick.windowIdx, auctionPick.visitorIdx), true)
     }
     const swaps = bestTrades(s, me, ctx, 3, false)
     if (swaps.length > 0) {
@@ -788,15 +914,10 @@ function locationCandidates(s: GameStore, me: Player, ctx: ValueContext): Candid
       add('workshop', `craft:${wo.id}:${plan.cardIds.join(',')}`, wo.price + bonus + denial + honour - plan.cost * 0.85,
         g => g.completeCraft(me.id, idx, plan.cardIds), true)
     })
-    if (s.resourceDeck.length >= 1) {
-      add('workshop', 'appraise', drawValue(2, avgDraw * 1.25, me), g => {
-        g.peekWorkshopAppraise(me.id)
-        const peek = st().appraisePeek
-        if (peek && peek.playerId === me.id) {
-          const c2 = buildContext(st(), st().players.find(p => p.id === me.id)!, difficulty)
-          st().completeAppraise(me.id, sortByWorth(peek.cards, c2).slice(0, peek.maxKeep).map(c => c.id))
-        }
-      }, true)
+    const sale = bestMarketSale(s, me, ctx)
+    if (sale && sale.value > 0) {
+      add('workshop', `sell-visitor:${sale.visitorIdx}:${sale.picks.map(o => o.card.id).join(',')}`, sale.value,
+        g => g.marketSale(me.id, sale.visitorIdx, sale.picks.map(o => ({ cardId: o.card.id, zone: o.zone, windowIdx: o.windowIdx }))), true)
     }
   }
 
@@ -877,16 +998,28 @@ function bestTrades(s: GameStore, me: Player, ctx: ValueContext, max: number, ho
   return swaps
 }
 
-function bestAuction(me: Player, ctx: ValueContext) {
-  const options: { card: ResourceCard; zone: 'hoard' | 'window'; windowIdx?: number }[] = [
+function bestAuction(s: GameStore, me: Player, ctx: ValueContext) {
+  const options: SaleOption[] = [
     ...me.hoard.filter(c => !isCounterfeit(c)).map(card => ({ card, zone: 'hoard' as const })),
     ...me.windows.flatMap((w, i) =>
       w.card && w.status !== 'broken' && !isCounterfeit(w.card) ? [{ card: w.card, zone: 'window' as const, windowIdx: i }] : []),
   ]
-  let best: (typeof options)[number] & { gain: number } | null = null
+  let best: SaleOption & { gain: number; visitorIdx?: number } | null = null
   for (const o of options) {
-    const gain = 3.5 + o.card.repTokens * repValue(me.rep, o.card.type, ctx.difficulty) - cardWorth(o.card, ctx)
-    if (!best || gain > best.gain) best = { ...o, gain }
+    const base = 3.5 + o.card.repTokens * repValue(me.rep, o.card.type, ctx.difficulty) - cardWorth(o.card, ctx)
+    // Selling into a Visitor it fits pays the same roll and counts toward that Visitor's prizes
+    let visitorIdx: number | undefined
+    let extra = 0
+    s.activeVisitors.forEach((v, i) => {
+      if (!v) return
+      const rem = demandAfter(remainingOf(s, v), [o.card])
+      if (!rem) return
+      const completes = demandTotal(rem) === 0
+      const value = contributionValue(s, me, ctx, v, 1, completes) + (completes ? 1 : 0)
+      if (visitorIdx === undefined || value > extra) { visitorIdx = i; extra = value }
+    })
+    const gain = base + Math.max(0, extra)
+    if (!best || gain > best.gain) best = { ...o, gain, visitorIdx }
   }
   return best
 }
