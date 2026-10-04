@@ -19,8 +19,9 @@ export const FEARSOME_CHAMPION_MAX = 2
 export const CLAN_TOLL = 1
 /** Shaman Elemental dice that have been used recharge at the start of this round. */
 export const SHAMAN_DICE_RECHARGE_ROUND = 4
-/** Face-up Work Orders on the board that any player may complete with Craft. */
-export const PUBLIC_WORK_ORDERS = 3
+/** Face-up Work Orders on the board that any player may complete with Craft.
+ *  A completed order's slot stays empty until the next round begins. */
+export const PUBLIC_WORK_ORDERS = 2
 
 function shuffle<T>(arr: T[]): T[] {
   const a = [...arr]
@@ -1409,6 +1410,24 @@ export const useGameStore = create<GameStore>((set, get) => ({
     })
     get().refillVisitors()
     get().refillFleaMarket()
+    // Public Work Orders completed last round are restocked now
+    set(s => {
+      let deck = s.workOrderDeck
+      const posted: string[] = []
+      const activeWorkOrders = s.activeWorkOrders.map(o => {
+        if (o || deck.length === 0) return o
+        const [next, ...rest] = deck
+        deck = rest
+        posted.push(next.name)
+        return next
+      })
+      if (posted.length === 0) return {}
+      return {
+        activeWorkOrders,
+        workOrderDeck: deck,
+        actionLog: [logEntry(`New Work Order${posted.length !== 1 ? 's' : ''} posted: ${posted.join(', ')}.`), ...s.actionLog.slice(0, 49)],
+      }
+    })
     // Each player draws 1 resource per round; pitch camp players draw 2 extra
     if (newRound <= 6) {
       const { players } = get()
@@ -2200,7 +2219,7 @@ export const useGameStore = create<GameStore>((set, get) => ({
   },
 
   completeCraft(playerId, orderIdx, cardIds) {
-    const { players, activeWorkOrders, workOrderDeck } = get()
+    const { players, activeWorkOrders } = get()
     const player = players.find(p => p.id === playerId)
     const order = activeWorkOrders[orderIdx]
     if (!player || !order) return
@@ -2237,13 +2256,12 @@ export const useGameStore = create<GameStore>((set, get) => ({
     const gained = order.price + rn02Bonus
     const discountUsed = player.craftDiscount > 0
 
-    // Refill the public slot from the deck; the completed order goes to the bottom
-    const [next, ...rest] = workOrderDeck
 
     set(s => ({
       resourceDiscard: [...discardedCards, ...s.resourceDiscard],
-      activeWorkOrders: s.activeWorkOrders.map((o, i) => (i === orderIdx ? next ?? null : o)),
-      workOrderDeck: [...rest, order],
+      // The slot stays empty until next round; the completed order goes to the bottom of the deck
+      activeWorkOrders: s.activeWorkOrders.map((o, i) => (i === orderIdx ? null : o)),
+      workOrderDeck: [...s.workOrderDeck, order],
       players: s.players.map(p =>
         p.id === playerId
           ? {
@@ -2267,8 +2285,7 @@ export const useGameStore = create<GameStore>((set, get) => ({
         (rn02Bonus > 0 ? ` ◆ Forge of Ironpeak — +${rn02Bonus} bonus coins.` : '') +
         (counterfeitCards.length > 0
           ? ` ${counterfeitCards.length} Counterfeit card${counterfeitCards.length !== 1 ? 's were' : ' was'} returned to the Rogue.`
-          : '') +
-        (next ? ` New Work Order: ${next.name}.` : ''),
+          : ''),
         playerId
       ), ...s.actionLog.slice(0, 49)],
     }))

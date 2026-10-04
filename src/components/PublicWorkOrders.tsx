@@ -31,13 +31,16 @@ export function PublicWorkOrdersRow({ player }: { player?: Player }) {
               </div>
             </div>
           ) : (
-            <div key={i} className="zone w-[132px] h-[150px] flex items-center justify-center text-parchment-700 text-xs">—</div>
+            <div key={i} className="zone w-[132px] h-[150px] flex flex-col items-center justify-center text-center text-parchment-600 text-xs px-2">
+              <span className="font-semibold">Completed</span>
+              <span className="text-[10px] text-parchment-700">New order next round</span>
+            </div>
           )
         )}
       </div>
       <div className="text-center">
         <div className="text-xs font-bold text-parchment-400 uppercase tracking-widest">Work Orders</div>
-        <div className="text-[10px] text-parchment-500">Craft any of these at the Workshop · {workOrderDeck.length} in deck</div>
+        <div className="text-[10px] text-parchment-500">Craft at the Workshop · restocked each round · {workOrderDeck.length} in deck</div>
       </div>
     </div>
   )
@@ -72,7 +75,7 @@ export function PublicWorkOrdersReference({ player, compact = false }: { player?
               </span>
             </div>
           ))}
-          <div className="text-[9px] text-parchment-600 italic">Anyone can Craft these at the Workshop — keep the right resources.</div>
+          <div className="text-[9px] text-parchment-600 italic">Anyone can Craft these at the Workshop. A completed order isn't replaced until next round.</div>
         </div>
       )}
     </div>

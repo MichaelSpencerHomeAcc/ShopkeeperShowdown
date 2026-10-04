@@ -1730,9 +1730,9 @@ function WorkshopActions({ actionId, onAction, onBack }: { actionId: string; onA
       <div className="space-y-2">
         <BackButton onBack={onBack} />
         <div className="text-xs text-parchment-300 font-semibold">Choose a public Work Order to complete:</div>
-        <div className="grid grid-cols-3 gap-2">
+        <div className="grid grid-cols-2 gap-2">
           {activeWorkOrders.map((wo, i) => {
-            if (!wo) return <div key={i} className="zone flex items-center justify-center text-xs text-parchment-700">—</div>
+            if (!wo) return <div key={i} className="zone flex items-center justify-center text-center text-xs text-parchment-600 px-2">Completed — new order next round</div>
             const ready = canPlayerCraft(player, wo)
             return (
               <button
@@ -1758,7 +1758,7 @@ function WorkshopActions({ actionId, onAction, onBack }: { actionId: string; onA
             )
           })}
         </div>
-        <p className="text-[10px] text-parchment-500">The completed order is replaced from the Work Order deck.</p>
+        <p className="text-[10px] text-parchment-500">A completed order isn't replaced until the next round — first come, first served.</p>
       </div>
     )
   }
