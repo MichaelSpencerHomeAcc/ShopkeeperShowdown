@@ -739,8 +739,8 @@ function sellIntoVisitors(
       logEntry(
         describe(lines, coins) +
         (Object.keys(rep).length ? ` +rep (${Object.entries(rep).map(([t, n]) => `${n} ${t}`).join(', ')})` : '') +
-        (completed.length ? ` — ${completed.map(v => v.name).join(', ')} satisfied!` : '') +
-        (rn07 > 0 ? ` King's Errand +${rn07} coin(s)` : '') + '.',
+        (rn07 > 0 ? `. King's Errand +${rn07} coin(s)` : '') +
+        (completed.length ? ` — ${completed.map(v => v.name).join(', ')} satisfied!` : '.'),
         playerId,
       ),
       ...s.actionLog.slice(0, 49),
@@ -801,18 +801,6 @@ function awardVisitorPrizes(
       }))
     }
   }
-}
-
-/** Players a Steal prize can hit: anyone else with cards in hoard and no Night Watcher. */
-export function prizeStealTargets(s: Pick<GameState, 'players'>, playerId: string): Player[] {
-  return s.players.filter(p => p.id !== playerId && !p.hasNightWatcher && p.hoard.length > 0)
-}
-
-/** Windows a Break prize can hit: another player's breakable, unbroken windows (no Night Watcher). */
-export function prizeBreakTargets(s: Pick<GameState, 'players'>, playerId: string): { player: Player; windowIdx: number }[] {
-  return s.players.flatMap(p => (p.id === playerId || p.hasNightWatcher
-    ? []
-    : p.windows.flatMap((w, i) => (isBreakableWindowIndex(i) && w.status === 'normal' ? [{ player: p, windowIdx: i }] : []))))
 }
 
 /** The final sell waits on prize choices; once the last one is made, move to the next seller. */
@@ -3057,7 +3045,8 @@ export const useGameStore = create<GameStore>((set, get) => ({
             : p?.classId === 'paladin'
             ? p.renownCards.reduce((sum, c) => sum + c.clashBonus, 0)
             : 0
-          return { playerId: pw.playerId, roll: Math.ceil(Math.random() * 6) + bonus }
+          const die = Math.ceil(Math.random() * 6)
+          return { playerId: pw.playerId, roll: die + bonus, die, bonus }
         })
         const maxRoll = Math.max(...rolls.map(r => r.roll))
         const winners = rolls.filter(r => r.roll === maxRoll)
@@ -3199,10 +3188,10 @@ export const useGameStore = create<GameStore>((set, get) => ({
     if (barbarianRetreats) {
       // Barbarian retreats — remaining non-paying players Clash among themselves if 2+
       if (fightingIds.length >= 2) {
-        const fightRolls = fightingIds.map(id => ({
-          playerId: id,
-          roll: Math.ceil(Math.random() * 6),
-        }))
+        const fightRolls = fightingIds.map(id => {
+          const die = Math.ceil(Math.random() * 6)
+          return { playerId: id, roll: die, die, bonus: 0 }
+        })
         const maxRoll = Math.max(...fightRolls.map(r => r.roll))
         const winners = fightRolls.filter(r => r.roll === maxRoll)
         const isTie = winners.length > 1
@@ -3251,10 +3240,11 @@ export const useGameStore = create<GameStore>((set, get) => ({
     } else {
       // No one paid — run full Clash including Barbarian with +2
       const allIds = [barbarianId, ...fightingIds]
-      const rolls = allIds.map(id => ({
-        playerId: id,
-        roll: Math.ceil(Math.random() * 6) + (id === barbarianId ? 2 : 0),
-      }))
+      const rolls = allIds.map(id => {
+        const die = Math.ceil(Math.random() * 6)
+        const bonus = id === barbarianId ? 2 : 0
+        return { playerId: id, roll: die + bonus, die, bonus }
+      })
       const maxRoll = Math.max(...rolls.map(r => r.roll))
       const winners = rolls.filter(r => r.roll === maxRoll)
       const isTie = winners.length > 1

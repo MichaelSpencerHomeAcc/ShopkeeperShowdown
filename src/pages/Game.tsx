@@ -9,6 +9,7 @@ import { supabase } from '../lib/supabase'
 import { abandonRoom } from '../lib/rooms'
 import { CheatSheetModal } from '../components/CheatSheetModal'
 import { useBotDriver } from '../bots/useBotDriver'
+import { useIncidentStore } from '../store/incidentStore'
 import { BOT_DIFFICULTY_LABEL, BOT_SPEED_LABEL, loadBotSpeed, saveBotSpeed, type BotSpeed } from '../bots/botConfig'
 import type { Player, ResourceCard } from '../types'
 
@@ -96,6 +97,8 @@ export function Game({ localPlayerName, roomId, isHost, onLeave }: Props) {
   const isMyTurn = isOnline ? localPlayer?.id === currentTurnPlayerId : !currentIsBot
   const [viewingPlayerId, setViewingPlayerId] = useState<string | null>(null)
   const [hoveredTopWindowCard, setHoveredTopWindowCard] = useState<{ name: string; imageFile: string; x: number; y: number } | null>(null)
+  // Players who were just stolen from / broken into — their panel shakes and glows red
+  const incidentHits = useIncidentStore(s => s.hits)
   const centrePlayer = viewingPlayerId ? players.find(p => p.id === viewingPlayerId) : localPlayer
   const centreIndex = centrePlayer ? players.indexOf(centrePlayer) : 0
   const viewingOpponent = viewingPlayerId !== null
@@ -310,8 +313,14 @@ export function Game({ localPlayerName, roomId, isHost, onLeave }: Props) {
             const classTint = CLASS_PANEL_TINTS[p.classId] ?? 'rgba(212, 144, 30, 0.32)'
             const playerColor = PAWN_COLOR_HEX[i % PAWN_COLOR_HEX.length]
             const extraStatus = classStatus(p)
+            const hit = incidentHits[p.id]
             return (
               <div key={p.id} className="relative flex-shrink-0 pt-5">
+                {hit && (
+                  <div key={`badge-${hit.id}`} className="incident-in absolute right-2 top-0 z-30 rounded-t-md bg-red-600 px-2.5 py-1 text-[10px] font-black uppercase tracking-wide text-white shadow-lg">
+                    {hit.kind === 'break' ? '🔨 Window broken' : hit.kind === 'heist' ? '🎭 Heisted' : hit.kind === 'lost' ? '🔥 Lost a card' : '🗝️ Robbed'}
+                  </div>
+                )}
                 {isViewingThisPlayer && (
                   <div className="absolute left-1/2 top-0 z-20 -translate-x-1/2 rounded-t-md border border-b-0 border-sky-200/90 bg-sky-300/95 px-3 py-1 text-[9px] font-black uppercase tracking-wide text-ink-950 shadow">
                     Viewing
@@ -324,7 +333,8 @@ export function Game({ localPlayerName, roomId, isHost, onLeave }: Props) {
                     setViewingPlayerId(p.id === localPlayer.id ? null : p.id)
                   }}
                   disabled={!localPlayer}
-                  className={`relative min-w-[270px] rounded-lg border px-3 py-2.5 bg-ink-950/55 overflow-hidden text-left transition-all ${
+                  key={`panel-${hit?.id ?? 'calm'}`}
+                  className={`relative min-w-[270px] rounded-lg border px-3 py-2.5 bg-ink-950/55 overflow-hidden text-left transition-all ${hit ? 'incident-hit-shake' : ''} ${
                     localPlayer ? 'cursor-pointer hover:brightness-110 active:scale-[0.99]' : 'cursor-default'
                   } ${
                     isViewingThisPlayer ? 'ring-2 ring-sky-200/95' : ''
@@ -429,7 +439,7 @@ export function Game({ localPlayerName, roomId, isHost, onLeave }: Props) {
                             setHoveredTopWindowCard({ name: w.card.name, imageFile: w.card.imageFile, x: event.clientX, y: event.clientY })
                           }}
                           onMouseLeave={() => setHoveredTopWindowCard(null)}
-                          className={`relative h-6 rounded border flex items-center justify-center overflow-hidden text-[11px] font-display font-bold ${
+                          className={`relative h-6 rounded border flex items-center justify-center overflow-hidden text-[11px] font-display font-bold ${hit?.windowIdxs.includes(windowIdx) ? 'ring-2 ring-red-400 animate-pulse' : ''} ${
                             w.status === 'broken'
                               ? 'border-red-400/80 bg-red-950/70 text-red-100'
                               : w.status === 'shuttered'

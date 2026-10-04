@@ -282,7 +282,8 @@ export interface GameState {
 
   clashResult: {
     location: Location
-    rolls: { playerId: string; roll: number }[]
+    /** roll = die + bonus (Barbarian +2, Paladin Renown); die/bonus let the overlay show the d6 and the bonus separately */
+    rolls: { playerId: string; roll: number; die?: number; bonus?: number }[]
     winnerId: string | null
     spoils: { winnerId: string; cardName: string; fromName: string }[]
     /** IDs of participants who have clicked Continue — turn advances once all have acknowledged */
