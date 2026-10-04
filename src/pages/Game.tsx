@@ -1,6 +1,6 @@
 import { useState, useEffect, useRef } from 'react'
 import { createPortal } from 'react-dom'
-import { useGameStore, turnOrder } from '../store/gameStore'
+import { useGameStore, turnOrder, debtOnBoard, MAX_MOMENTUM, WARLOCK_DEBT_SUPPLY } from '../store/gameStore'
 import { PlayerArea } from '../components/PlayerArea'
 import { SharedBoard } from '../components/SharedBoard'
 import { ActionLog } from '../components/ActionLog'
@@ -53,10 +53,12 @@ const WINDOW_STATUS_STYLE: Record<string, string> = {
   TRI: 'border-green-400/80 bg-green-600 text-white',
   TRG: 'border-pink-400/80 bg-pink-600 text-white',
 }
-function classStatus(player: Player) {
+function classStatus(player: Player, players: Player[], rippling: boolean) {
   if (player.classId === 'paladin') return `Renown ${player.renownCards.length}`
   if (player.classId === 'rogue') return `CF ${player.counterfeitHand.length}`
   if (player.classId === 'ranger') return `Ambushes ${player.ambushesPlaced.length}/3`
+  if (player.classId === 'warlock') return `Debt ${debtOnBoard(players)}/${WARLOCK_DEBT_SUPPLY}`
+  if (player.classId === 'sorcerer' && rippling) return '🌀 Ripple'
   return null
 }
 
@@ -74,7 +76,7 @@ interface Props {
 
 export function Game({ localPlayerName, roomId, isHost, onLeave }: Props) {
   const {
-    players, round, resetGame, startPlayerOffset,
+    players, round, resetGame, startPlayerOffset, ripple,
     currentTurnPlayerId, startingDraft, completeStartingDraftPick,
   } = useGameStore()
 
@@ -312,7 +314,7 @@ export function Game({ localPlayerName, roomId, isHost, onLeave }: Props) {
             const classAccent = CLASS_ACCENTS[p.classId] ?? '#d4901e'
             const classTint = CLASS_PANEL_TINTS[p.classId] ?? 'rgba(212, 144, 30, 0.32)'
             const playerColor = PAWN_COLOR_HEX[i % PAWN_COLOR_HEX.length]
-            const extraStatus = classStatus(p)
+            const extraStatus = classStatus(p, players, ripple?.playerId === p.id)
             const hit = incidentHits[p.id]
             return (
               <div key={p.id} className="relative flex-shrink-0 pt-5">
@@ -360,6 +362,9 @@ export function Game({ localPlayerName, roomId, isHost, onLeave }: Props) {
                     {extraStatus && (
                       <div className="truncate text-center text-[11px] font-bold leading-tight text-white/95">{extraStatus}</div>
                     )}
+                    {p.debtTokens > 0 && (
+                      <div className="text-center text-[11px] font-bold leading-tight text-purple-200" title="Debt tokens from the Warlock">⛓ Debt ×{p.debtTokens}</div>
+                    )}
                   </div>
 
                   <div className="flex flex-col items-center min-w-0">
@@ -398,10 +403,21 @@ export function Game({ localPlayerName, roomId, isHost, onLeave }: Props) {
 
                   <div className="rounded-md bg-black/20 border border-white/10 px-2 py-1.5 min-h-[74px] flex flex-col items-center justify-center gap-1">
                     <div className="text-[10px] font-bold text-white/85">{p.classId === 'monk' ? 'Momentum' : 'Active'}</div>
+                    {p.classId === 'monk' ? (
+                      <div className="flex flex-col items-center gap-1">
+                        <div className="text-xl font-display font-bold text-sky-100 leading-none tabular-nums">
+                          {p.momentumTokens}<span className="text-xs text-white/60">/{MAX_MOMENTUM}</span>
+                        </div>
+                        <div className="grid grid-cols-4 gap-0.5">
+                          {Array.from({ length: MAX_MOMENTUM }, (_, idx) => (
+                            <div key={idx} className={`w-2.5 h-2.5 rounded-full border ${idx < p.momentumTokens ? 'bg-sky-400 border-sky-100' : 'border-zinc-500/70 bg-zinc-800/85'}`} />
+                          ))}
+                        </div>
+                      </div>
+                    ) : (
                     <div className="flex flex-wrap justify-center gap-1">
-                      {Array.from({ length: p.classId === 'monk' ? Math.max(1, Math.min(4, p.momentumTokens || 1)) : 2 }, (_, idx) => {
-                        const activeValue = p.classId === 'monk' ? p.momentumTokens : p.activeTokens
-                        const lit = idx < Math.min(activeValue, p.classId === 'monk' ? 4 : 2)
+                      {Array.from({ length: 2 }, (_, idx) => {
+                        const lit = idx < Math.min(p.activeTokens, 2)
                         return (
                           <div
                             key={idx}
@@ -414,6 +430,7 @@ export function Game({ localPlayerName, roomId, isHost, onLeave }: Props) {
                         )
                       })}
                     </div>
+                    )}
                   </div>
                 </div>
 

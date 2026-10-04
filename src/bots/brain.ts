@@ -1,8 +1,11 @@
 import {
   useGameStore, CLAN_TOLL, FEARSOME_CHAMPION_MAX, MAX_SALES_PER_VISITOR, rankContributors, type GameStore,
+  MOMENTUM_COSTS, SHARED_REP_MAX, RIPPLE_LAUNDER, HARVEST_COINS_PER_TOKEN, PACT_REFUSED_COINS, DEBT_PAYOFF_COST, FLOW_STATE_MAX,
+  debtOnBoard, debtSupply, pactProblem,
 } from '../store/gameStore'
 import type {
-  BotDifficulty, DemandMap, DuelStake, Location, Player, ResourceCard, ResourceType, VisitorCard, VisitorPrize, WorkOrderCard,
+  BotDifficulty, DemandMap, DuelStake, Location, MomentumSpendId, PactOffer, Player, RepType, ResourceCard, ResourceType,
+  SorcererMagicChoice, VisitorCard, VisitorPrize, WorkOrderCard,
 } from '../types'
 import { parseRequirements, recipeMainType } from '../utils/requirements'
 import {
@@ -95,7 +98,8 @@ export function anythingPending(s: GameStore): boolean {
     s.negotiateReview || s.shamanCallLightning || s.ambushPending || s.ambushResult ||
     s.trickShotPending || s.trickShotBonusPending || s.rangerVisitorTradePending ||
     s.rn04RerollPending || s.nightWatcherChoicePending || s.townCrierPeek || s.appraisePeek ||
-    s.foragePeek || s.visitorPrizeQueue.length > 0 || s.players.some(p => p.hoard.length > 8)
+    s.foragePeek || s.visitorPrizeQueue.length > 0 || s.rippleRerollPending || s.sorcererMagicPending || s.hotStreak ||
+    s.pactPending || s.harvestQueue.length > 0 || s.players.some(p => p.hoard.length > 8)
   )
 }
 
@@ -291,6 +295,74 @@ function promptStep(s: GameStore): BotStep | null {
       if (swap) st().resolveRangerVisitorTrade(swap.cardId, swap.fleaIdx)
       else st().dismissRangerVisitorTrade()
     })
+  }
+
+  // Sorcerer: Reality Ripple keep-or-re-roll
+  const rip = s.rippleRerollPending
+  const ripBot = botOf(s, rip?.playerId)
+  if (rip && ripBot) {
+    // Re-rolling for the first time gives up the Launder 4, so only rescue a dire roll
+    const threshold = s.ripple?.rerolled ? 3 : ripBot.bot === 'easy' ? 2 : 1
+    const reroll = rip.roll !== 6 && rip.roll <= threshold
+    return step(`ripple:${rip.history.join('-')}`, ripBot, 'think', () => st().resolveRippleReroll(reroll))
+  }
+
+  // Sorcerer: Uncontrollable Magic
+  const magic = s.sorcererMagicPending
+  const magicBot = botOf(s, magic?.playerId)
+  if (magic && magicBot) {
+    const ctx = buildContext(s, magicBot, magicBot.bot!)
+    const avgDraw = averageWorth(s.resourceDeck.length > 0 ? s.resourceDeck : s.resourceDiscard, ctx, 1)
+    const swaps = bestTrades(s, magicBot, ctx, 2, false)
+    const victim = bestStealTarget(s, magicBot, ctx)
+    const options: { choice: SorcererMagicChoice; value: number }[] = [
+      { choice: { kind: 'draw' }, value: drawValue(2, avgDraw, magicBot) },
+      ...(magicBot.activeTokens < 2 ? [{ choice: { kind: 'refresh' } as SorcererMagicChoice, value: tokenValue(magicBot) }] : []),
+      ...(swaps.length ? [{ choice: { kind: 'trade', cardIds: swaps.map(x => x.cardId), fleaSlotIdxs: swaps.map(x => x.fleaIdx) } as SorcererMagicChoice, value: swaps.reduce((n, x) => n + x.gain, 0) }] : []),
+      ...(victim ? [{ choice: { kind: 'steal', targetId: victim.id } as SorcererMagicChoice, value: averageWorth(victim.hoard, ctx, 1) * 0.85 + 2 * harmWeight(s, magicBot, victim, ctx.difficulty) }] : []),
+      ...(s.resourceDeck.length > 0 && !s.appraisePeek ? [{ choice: { kind: 'appraise' } as SorcererMagicChoice, value: drawValue(2, avgDraw * 1.25, magicBot) }] : []),
+    ]
+    const best = magicBot.bot === 'easy' ? pickRandom(options)! : options.sort((a, b) => b.value - a.value)[0]
+    return step(`magic:${magic.count}`, magicBot, 'think', () => st().resolveSorcererMagic(best.choice))
+  }
+
+  // Sorcerer: Hot Streak!
+  const hs = s.hotStreak
+  const hsBot = botOf(s, hs?.playerId)
+  if (hs && hsBot) {
+    if (!hs.missed) {
+      const guess = hsBot.bot === 'easy' ? pickRandom(RESOURCE_TYPES)! : commonestType(s).type
+      return step(`streak:${hs.drawn.length}`, hsBot, 'think', () => st().hotStreakGuess(guess))
+    }
+    const ctx = buildContext(s, hsBot, hsBot.bot!)
+    const hit = bestBreak(s, hsBot, ctx)
+    return step('streak:break', hsBot, 'think', () => (hit ? st().finishHotStreak(hit.target.id, hit.windowIdx) : st().finishHotStreak()))
+  }
+
+  // Warlock: someone (a bot) answering a Dark Bargain
+  const pact = s.pactPending
+  const pactBot = botOf(s, pact?.targetId)
+  if (pact && pactBot) {
+    const warlock = s.players.find(p => p.id === pact.warlockId)!
+    const accept = botAcceptsPact(s, pactBot, warlock, pact.offer)
+    return step('pact-answer', pactBot, 'think', () => st().answerPact(accept))
+  }
+
+  // Warlock: a bot paying for The Harvest
+  const owed = s.harvestQueue[0]
+  const owedBot = botOf(s, owed?.playerId)
+  if (owed && owedBot) {
+    const ctx = buildContext(s, owedBot, owedBot.bot!)
+    // Hand over cards worth less than the coins they replace; use cards when short of coins
+    const cards = sortByWorth(owedBot.hoard, ctx).reverse()
+    const give: string[] = []
+    let coinsLeft = owedBot.coins
+    for (let i = 0; i < owed.tokens; i++) {
+      const card = cards[give.length]
+      if (card && (cardWorth(card, ctx) < HARVEST_COINS_PER_TOKEN || coinsLeft < HARVEST_COINS_PER_TOKEN)) give.push(card.id)
+      else coinsLeft -= HARVEST_COINS_PER_TOKEN
+    }
+    return step(`harvest-pay:${owed.playerId}`, owedBot, 'think', () => st().payHarvest(owedBot.id, give))
   }
 
   // A Visitor contribution prize that needs a choice
@@ -654,6 +726,12 @@ function turnStep(s: GameStore, me: Player, memory: BotMemory): BotStep | null {
   // Housekeeping: never leave a bot's draw sitting in lastDrawnCards (it confuses the human UI)
   if (s.lastDrawnCards !== null) return step('clear-drawn', me, 'quick', () => st().clearDrawnCards())
 
+  // 0. Pay off a Debt before any action, if coins are comfortable and the Warlock is likely to Harvest
+  if (me.debtTokens > 0 && !s.debtPaidThisTurn && s.turnActionsUsed === 0 && difficulty !== 'easy' &&
+      me.coins >= DEBT_PAYOFF_COST + 4 && s.round >= 3) {
+    return step(`payoff:${s.round}`, me, 'quick', () => st().payOffDebt(me.id))
+  }
+
   // 1. Sell phase (round 2+) — give a Rogue the chance to interrupt first, exactly like the UI does
   if (s.round >= 2 && !s.sellPhaseDone) {
     const rogue = s.players.find(p => p.classId === 'rogue')
@@ -788,10 +866,16 @@ function locationCandidates(s: GameStore, me: Player, ctx: ValueContext): Candid
     return me.coins >= coinsNeeded + (clan ? CLAN_TOLL : 0)
   }
   const tollCost = (loc: Location) => (clanOwnerAt(s, loc, me.id) ? CLAN_TOLL * 1.25 : 0)
+  // Monk Flow State: each new player shared with is worth ~1 Momentum (max 2 a turn)
+  const flow = (loc: Location) => {
+    if (me.classId !== 'monk') return 0
+    const fresh = s.pawns.filter(pw => pw.location === loc && pw.playerId !== me.id && !s.monkSharedWith.includes(pw.playerId)).length
+    return Math.min(fresh, FLOW_STATE_MAX - s.monkFlowGained) * 1.1
+  }
   const add = (loc: Location, id: string, value: number, fn: (s: GameStore) => void, basic = false) => {
     out.push({
       key: `act:${loc}:${id}`,
-      value: value - tollCost(loc) + clashAdjustment(s, me, ctx, loc, left),
+      value: value - tollCost(loc) + clashAdjustment(s, me, ctx, loc, left) + flow(loc),
       basic,
       run: locationAction(me.id, loc, fn),
     })
@@ -969,10 +1053,75 @@ function tokenValue(me: Player): number {
       return 3
     case 'shaman':
     case 'ranger':
+    case 'sorcerer':
+    case 'warlock':
       return 2.5
+    case 'monk':
+      // A Refresh only gives a Monk 1 Momentum
+      return 0.6
     default:
       return 0
   }
+}
+
+// ── Sorcerer / Monk / Warlock helpers ────────────────────────────────────────
+
+/** The resource type most common in the deck, and its share (Hot Streak guesses). */
+function commonestType(s: GameStore): { type: ResourceType; share: number } {
+  const pool = s.resourceDeck.length > 0 ? s.resourceDeck : s.resourceDiscard
+  const counts: Record<ResourceType, number> = { ARM: 0, CON: 0, TRI: 0, TRG: 0 }
+  for (const c of pool) counts[c.type]++
+  const type = RESOURCE_TYPES.reduce((a, b) => (counts[b] > counts[a] ? b : a))
+  return { type, share: pool.length ? Math.min(0.6, counts[type] / pool.length) : 0.25 }
+}
+
+/** What a Pact is worth to the player offered it (positive = they should take it). */
+function pactWorthTo(s: GameStore, target: Player, warlock: Player, offer: PactOffer): number {
+  const difficulty = target.bot ?? 'medium'
+  const ctx = buildContext(s, target, difficulty)
+  const avgDraw = averageWorth(s.resourceDeck.length > 0 ? s.resourceDeck : s.resourceDiscard, ctx, 1)
+  const benefit =
+    offer.kind === 'coins' ? offer.amount
+    : offer.kind === 'resource' ? (() => { const c = warlock.hoard.find(x => x.id === offer.cardId); return c ? cardWorth(c, ctx, 1) : 0 })()
+    : offer.kind === 'draw' ? drawValue(2, avgDraw, target)
+    : offer.kind === 'repair' ? 2.5 * clamp(sellPhasesLeft(s, target.id) / 3, 0.3, 1) + 0.5
+    : target.classId === 'monk' ? 1.2 : tokenValue(target)
+  // The Debt costs ~2 later (Harvest or pay-off); meanwhile the Warlock earns 1 Rep now and a coin a turn
+  const turnsLeft = Math.max(0, 6 - s.round)
+  const harm = harmWeight(s, target, warlock, difficulty) * (repValue(warlock.rep, bestRepType(warlock.rep, difficulty), difficulty) + turnsLeft * 0.6)
+  return benefit - HARVEST_COINS_PER_TOKEN - harm * 0.6
+}
+
+/** Will this bot accept the Pact? */
+function botAcceptsPact(s: GameStore, target: Player, warlock: Player, offer: PactOffer): boolean {
+  if (target.bot === 'easy') return chance(0.5)
+  return pactWorthTo(s, target, warlock, offer) > 0
+}
+
+/** The Warlock's best Pact to offer: expected value of accept (Rep + Debt income) vs refuse (2 coins). */
+function bestPact(s: GameStore, me: Player, ctx: ValueContext): { targetId: string; offer: PactOffer; value: number } | null {
+  const turnsLeft = Math.max(0, 6 - s.round)
+  const acceptGain = repValue(me.rep, bestRepType(me.rep, ctx.difficulty), ctx.difficulty) + turnsLeft * 0.8 + 1.2
+  let best: { targetId: string; offer: PactOffer; value: number } | null = null
+  for (const t of s.players) {
+    if (t.id === me.id) continue
+    const worst = sortByWorth(me.hoard, ctx).slice(-1)[0]
+    const options: { offer: PactOffer; cost: number }[] = [
+      { offer: { kind: 'draw' }, cost: 0 },
+      { offer: { kind: 'refresh' }, cost: 0 },
+      { offer: { kind: 'repair', windowIdx: t.windows.findIndex(w => w.status === 'broken') }, cost: 0 },
+      { offer: { kind: 'coins', amount: 2 }, cost: 2 },
+      ...(worst ? [{ offer: { kind: 'resource', cardId: worst.id } as PactOffer, cost: cardWorth(worst, ctx) }] : []),
+    ]
+    for (const { offer, cost } of options) {
+      if (pactProblem(me, t, offer)) continue
+      // Humans: assume a coin flip; bots: we can predict them
+      const p = t.bot ? (t.bot === 'easy' ? 0.5 : pactWorthTo(s, t, me, offer) > 0 ? 0.9 : 0.1) : 0.5
+      const value = p * (acceptGain - cost) + (1 - p) * PACT_REFUSED_COINS
+      if (!best || value > best.value) best = { targetId: t.id, offer, value }
+    }
+  }
+  return best
 }
 
 // ── Action helpers ───────────────────────────────────────────────────────────
@@ -1344,6 +1493,83 @@ function abilityCandidates(s: GameStore, me: Player, ctx: ValueContext): Candida
         const value = avgDraw + 4 * harmWeight(s, me, target, difficulty) * (s.players.length - 1) * 0.5
         push(`lightning:${target.id}`, value - tokenCost, () => st().callLightning(me.id, target.id))
       }
+    }
+  }
+
+  if (me.classId === 'sorcerer' && me.activeTokens >= 1 && s.currentTurnPlayerId === me.id) {
+    if (!used('hotStreak') && !s.hotStreak) {
+      // Naming the commonest type, each draw hits with chance p: expect 1/(1-p) cards, then a Break
+      const p = commonestType(s).share
+      const cards = 1 / (1 - p)
+      const hit = bestBreak(s, me, ctx)
+      push('hotStreak', cards * avgDraw * 0.9 + (hit ? hit.value * 0.8 : 0) - tokenCost, () => st().startHotStreak(me.id))
+    }
+    if (!used('realityRipple') && !s.ripple) {
+      // Bots mostly keep it for the Launder 4 when it runs out
+      push('ripple', drawValue(RIPPLE_LAUNDER, avgDraw * 0.85, me) * 0.8 - tokenCost, () => st().realityRipple(me.id))
+    }
+  }
+
+  if (me.classId === 'monk' && s.currentTurnPlayerId === me.id) {
+    const can = (id: MomentumSpendId) => me.momentumTokens >= MOMENTUM_COSTS[id] && !used(`momentum:${id}`)
+    // Unspent Momentum is a coin each at the end, so a spend has to beat that
+    const cost = (id: MomentumSpendId) => MOMENTUM_COSTS[id]
+    if (can('draw2')) push('m:draw2', drawValue(2, avgDraw, me) - cost('draw2'), () => st().spendMomentum(me.id, 'draw2'))
+    if (can('trade2')) {
+      const swaps = bestTrades(s, me, ctx, 2, false)
+      if (swaps.length > 0) {
+        push(`m:trade2:${swaps.map(x => x.cardId).join(',')}`, swaps.reduce((n, x) => n + x.gain, 0) - cost('trade2'),
+          () => st().spendMomentum(me.id, 'trade2', { cardIds: swaps.map(x => x.cardId), fleaSlotIdxs: swaps.map(x => x.fleaIdx) }))
+      }
+    }
+    if (can('appraise2') && s.resourceDeck.length > 0 && !s.appraisePeek) {
+      push('m:appraise2', drawValue(2, avgDraw * 1.25, me) - cost('appraise2'), () => st().spendMomentum(me.id, 'appraise2'))
+    }
+    if (can('breakOrSteal')) {
+      const victim = bestStealTarget(s, me, ctx)
+      const stealValue = victim ? averageWorth(victim.hoard, ctx, 1) * 0.85 + 4 * harmWeight(s, me, victim, difficulty) * (s.players.length - 1) * 0.5 : 0
+      const hit = bestBreak(s, me, ctx)
+      if (victim && stealValue >= (hit?.value ?? 0)) {
+        push(`m:steal:${victim.id}`, stealValue - cost('breakOrSteal'), () => st().spendMomentum(me.id, 'breakOrSteal', { mode: 'steal', targetId: victim.id }))
+      } else if (hit) {
+        push(`m:break:${hit.target.id}:${hit.windowIdx}`, hit.value - cost('breakOrSteal'),
+          () => st().spendMomentum(me.id, 'breakOrSteal', { mode: 'break', targetId: hit.target.id, windowIdx: hit.windowIdx }))
+      }
+    }
+    if (can('copyPro')) {
+      const windowWorth = 2.5 * clamp(sellPhasesLeft(s, me.id) / 3, 0.3, 1)
+      for (const prof of s.professionalSlots) {
+        if (!prof) continue
+        const c = professionalCandidate(s, me, ctx, prof.id, avgDraw, windowWorth, tokenValue(me))
+        if (c) push(`m:copy:${prof.id}:${c.tag}`, c.value - cost('copyPro'), () => { if (st().spendMomentum(me.id, 'copyPro', { professionalId: prof.id })) c.fn(st()) })
+      }
+    }
+    const shared = Math.min(SHARED_REP_MAX, s.monkSharedWith.length)
+    if (can('sharedRep') && shared > 0) {
+      const repTypes: RepType[] = []
+      const rep = { ...me.rep }
+      let value = 0
+      for (let i = 0; i < shared; i++) {
+        const t = bestRepType(rep, difficulty)
+        value += repValue(rep, t, difficulty)
+        rep[t]++
+        repTypes.push(t)
+      }
+      push(`m:rep:${repTypes.join(',')}`, value - cost('sharedRep'), () => st().spendMomentum(me.id, 'sharedRep', { repTypes }))
+    }
+  }
+
+  if (me.classId === 'warlock' && me.activeTokens >= 1) {
+    const turnsLeft = Math.max(0, 6 - s.round)
+    const debt = debtOnBoard(s.players)
+    if (!used('harvest') && debt > 0 && s.currentTurnPlayerId === me.id) {
+      // Each token pays ~2 now; left out it earns 1 coin per Warlock turn
+      push('harvest', debt * HARVEST_COINS_PER_TOKEN - debt * turnsLeft * 0.7 - tokenCost, () => st().harvest(me.id))
+    }
+    const pact = !used('darkBargain') && !s.pactPending && debtSupply(s.players) > 0 ? bestPact(s, me, ctx) : null
+    if (pact) {
+      push(`pact:${pact.targetId}:${pact.offer.kind}`, pact.value - tokenCost,
+        () => st().offerPact(me.id, pact.targetId, pact.offer, bestRepType(me.rep, difficulty)))
     }
   }
 

@@ -9,6 +9,39 @@ export interface ResourceCard {
   imageFile: string
 }
 
+/** Warlock Dark Bargain offers (the Bargain card). Coins and resources come from the Warlock's own supply. */
+export type PactOffer =
+  | { kind: 'coins'; amount: number }
+  | { kind: 'resource'; cardId: string }
+  | { kind: 'draw' }
+  | { kind: 'repair'; windowIdx: number }
+  | { kind: 'refresh' }
+
+/** Sorcerer Uncontrollable Magic: what a kept 6 can be turned into. */
+export interface SorcererMagicChoice {
+  kind: 'refresh' | 'draw' | 'trade' | 'steal' | 'appraise'
+  /** Trade 2: your cards and the Flea Market slots they swap with */
+  cardIds?: string[]
+  fleaSlotIdxs?: number[]
+  /** Steal 1 */
+  targetId?: string
+}
+
+/** Monk Momentum spends: [cost, once per turn each]. */
+export type MomentumSpendId = 'draw2' | 'trade2' | 'appraise2' | 'breakOrSteal' | 'copyPro' | 'sharedRep'
+
+export interface MomentumChoice {
+  cardIds?: string[]
+  fleaSlotIdxs?: number[]
+  mode?: 'break' | 'steal'
+  targetId?: string
+  windowIdx?: number
+  /** copyPro: which Professional slot to copy */
+  professionalId?: string
+  /** sharedRep: one Rep type per point */
+  repTypes?: RepType[]
+}
+
 /** What a Visitor awards its top two contributors when it is completed. */
 export type VisitorPrizeKind = 'coins' | 'rep' | 'refresh' | 'take' | 'draw' | 'steal' | 'break'
 
@@ -236,7 +269,8 @@ export interface GameState {
   lastGuildFenceType: ResourceType | null
   diceResult: number | null
   townCrierPeek: { playerId: string; cards: VisitorCard[] } | null
-  appraisePeek: { playerId: string; cards: ResourceCard[]; maxKeep: number } | null
+  /** source: who asked for the peek — Sorcerer/Monk peeks get their own picker */
+  appraisePeek: { playerId: string; cards: ResourceCard[]; maxKeep: number; source?: 'magic' | 'momentum' } | null
   foragePeek: { playerId: string; cards: ResourceCard[]; source?: 'location' | 'patience' } | null
   lastDrawnCards: ResourceCard[] | null
   visitorDemandRemaining: Record<string, DemandMap>
@@ -248,6 +282,40 @@ export interface GameState {
   contributionSeq: number
   /** Won prizes waiting for the winner to make a choice */
   visitorPrizeQueue: PendingVisitorPrize[]
+
+  // ── Sorcerer ──
+  /** Reality Ripple is active for this Sorcerer until their next turn starts */
+  ripple: { playerId: string; rerolled: boolean } | null
+  /** A Gather / Auction / Mascot roll waiting on the Sorcerer's keep-or-re-roll choice */
+  rippleRerollPending: {
+    playerId: string
+    rollType: 'gather' | 'auction' | 'mascot'
+    roll: number
+    rerollsLeft: number
+    history: number[]
+    auctionCardId?: string
+    auctionFromZone?: 'hoard' | 'window'
+    auctionWindowIdx?: number
+    auctionVisitorIdx?: number
+  } | null
+  /** Kept 6s waiting for the Sorcerer to pick an Uncontrollable Magic effect */
+  sorcererMagicPending: { playerId: string; count: number } | null
+  /** Hot Streak! in progress: cards drawn so far; missed = time to Break */
+  hotStreak: { playerId: string; drawn: { card: ResourceCard; guess: ResourceType }[]; missed: boolean } | null
+
+  // ── Monk ──
+  /** Players the Monk has shared a location with this turn (Flow State + the 7-Momentum Rep spend) */
+  monkSharedWith: string[]
+  /** Momentum gained from Flow State sharing this turn (max 2) */
+  monkFlowGained: number
+
+  // ── Warlock ──
+  /** A Dark Bargain waiting for the target's answer */
+  pactPending: { warlockId: string; targetId: string; offer: PactOffer; repType: RepType } | null
+  /** The Harvest: players still to pay for the Debt just collected from them */
+  harvestQueue: { warlockId: string; playerId: string; tokens: number }[]
+  /** The current player already paid off a Debt this turn */
+  debtPaidThisTurn: boolean
 
   // Turn management
   /** Seats the first player has moved left since round 1 — turn order rotates each round */

@@ -552,7 +552,7 @@ function GuildhallActions({ actionId, onAction, onBack }: { actionId: string; on
 
 // Per-professional inline UIs
 
-function ProfessionalUI({ profId, player, onDone }: { profId: string; player: Player; onDone: () => void }) {
+export function ProfessionalUI({ profId, player, onDone }: { profId: string; player: Player; onDone: () => void }) {
   const store = useGameStore()
 
   switch (profId) {
@@ -607,7 +607,7 @@ function MascotUI({ player, onDone }: { player: Player; onDone: () => void }) {
           marvellousMAscot(player.id)
           const store = useGameStore.getState()
           // If a SharedBoard overlay will take over, close now and let it handle the roll.
-          if (store.trickShotPending !== null || store.rn04RerollPending !== null) {
+          if (store.trickShotPending !== null || store.rn04RerollPending !== null || store.rippleRerollPending !== null) {
             onDone()
             return
           }
@@ -1115,7 +1115,7 @@ function TavernActions({ actionId, onAction, onBack }: { actionId: string; onAct
             // If a SharedBoard overlay (z-320+) will take over, close the panel immediately —
             // the overlay already displays the original roll; showing a dice modal inside
             // the z-50 LocationActionPanel stacking context would be hidden behind it.
-            if (store.trickShotPending !== null || store.rn04RerollPending !== null) {
+            if (store.trickShotPending !== null || store.rn04RerollPending !== null || store.rippleRerollPending !== null) {
               onAction()
               return
             }

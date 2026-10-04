@@ -107,9 +107,12 @@ Whenever you roll a die and keep a 6, immediately choose one bonus effect:
 Name a resource type (Armament, Consumable, Trinket, or Trade Good). Draw 1 resource from the deck.
 - If it matches the type you named: go again (name a type, draw another).
 - When you fail (draw doesn't match): Break 1 of another player's windows.
+- You keep every card you drew, including the miss.
 
 ### Active — Reality Ripple
-Until the start of your next turn, you may re-roll any single die you roll up to twice, keeping the final result. If you didn't actually re-roll any die during this turn, Launder 4 resources.
+Until the start of your next turn, you may re-roll any die you roll up to twice, keeping the final result. When it runs out (the start of your next turn), if you never re-rolled, Launder 4 resources.
+
+*In the app:* Gather, Auction and Mascot rolls ask you "Keep or re-roll?". Clash and Duel rolls are made all at once, so the app re-rolls for you while you're behind (and that counts as using it).
 
 ### Class Feature — Dice Rolling
 Your abilities trigger any time you roll a die — including Gather rolls, Clash rolls, Auction rolls, etc. The Sorcerer is the "die-rolling" class; many of their bonuses key off rolling.
@@ -128,7 +131,7 @@ Your abilities trigger any time you roll a die — including Gather rolls, Clash
 - Gain 2 Momentum when you complete a Visitor's order.
 
 ### Active — Momentum Spend (no token cost; spend Momentum points instead)
-You may spend Momentum during your turn from this list (multiple spends per turn allowed if you have the Momentum):
+You may spend Momentum during your turn from this list. Spending is free (no action), and each option can be used once per turn:
 - **2 Momentum:** Draw 2 resources
 - **2 Momentum:** Trade 2 with the Flea Market
 - **4 Momentum:** Appraise 2 (look at top 4 of deck, keep 2)
@@ -239,10 +242,10 @@ Discard 1 Renown Card from your hand. Immediately resolve its Spend effect.
 - When a Pact you offer is **refused**: gain 2 coins.
 - Always on: At the start of your turn, gain 1 coin for each Debt token currently on the board (across all players).
 
-### Active — Dark Bargain (off-turn)
+### Active — Dark Bargain (any turn)
 Offer any player a benefit from your Bargain Card (see below).
 - If they **accept**: deliver the chosen benefit and place 1 Debt token on their player board.
-- If they **refuse**: gain 2 coins (this is in addition to the passive — total 4 coins).
+- If they **refuse**: gain 2 coins.
 - This can be triggered on another player's turn.
 
 ### Active — The Harvest
@@ -250,7 +253,7 @@ Collect all Debt tokens currently on the board. For each Debt token collected fr
 
 ### Class Feature — Pacts and Debts
 - Debt tokens are placed on player boards when they accept a Pact.
-- Players may voluntarily pay off 1 Debt token at the start of their turn (before taking any actions) for 2 coins per Debt cleared.
+- Players may voluntarily pay off 1 Debt token at the start of their turn (before taking any actions) by paying the Warlock 2 coins.
 - Debt tokens have no negative effect until The Harvest is used or voluntarily paid off.
 - The Warlock starts the game with 6 Debt tokens available to place.
 
@@ -260,7 +263,7 @@ When the Warlock offers a Pact, they choose ONE benefit from this list to delive
 - Give them 1 resource from your Hoard
 - Draw 2 resources on their behalf (target player keeps them)
 - Repair 1 of their windows
-- Protect them from the next Steal or Break this round
+- Refresh 1 of their Active tokens (a Monk gains 1 Momentum instead)
 
 **Custom components:** Debt tokens (6, Warlock-coloured), Bargain Card (reference card for valid offers), player boards of other players need space for Debt tokens
 

@@ -7,6 +7,7 @@ import { breakWindowRule, totalRep, windowTargetRule } from '../utils/targets'
 import { ResourceCardMini } from './ResourceCardMini'
 import { CardPickerGrid } from './CardPickerGrid'
 import { DiceRollModal } from './DiceRollModal'
+import { MonkAbilities, SorcererAbilities, WarlockAbilities } from './NewClassAbilities'
 
 interface Props {
   player: Player
@@ -31,6 +32,9 @@ export function ClassAbilitiesPanel({ player, isActiveTurn, isOwn = true }: Prop
   if (player.classId === 'rogue') {
     return <RogueAbilities player={player} isOwn={isOwn} />
   }
+  if (player.classId === 'sorcerer') return <SorcererAbilities player={player} isActiveTurn={isActiveTurn} />
+  if (player.classId === 'monk') return <MonkAbilities player={player} isActiveTurn={isActiveTurn} />
+  if (player.classId === 'warlock') return <WarlockAbilities player={player} isActiveTurn={isActiveTurn} />
   return null
 }
 

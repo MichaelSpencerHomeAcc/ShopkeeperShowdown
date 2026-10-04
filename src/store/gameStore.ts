@@ -4,6 +4,7 @@ import type {
   ClassId, Location, WindowStatus, LogEntry, RepType, ShamanPatienceEffects, AmbushCard,
   DemandMap, PlayerSetup, BotDifficulty, ResourceType, VisitorPrizeKind, VisitorPrize,
   VisitorContribution, PendingVisitorPrize, VisitorPrizeChoice,
+  PactOffer, SorcererMagicChoice, MomentumSpendId, MomentumChoice,
 } from '../types'
 import { canCraft, parseRequirements, recipeMainType } from '../utils/requirements'
 import { RESOURCE_CARDS } from '../data/resources'
@@ -230,6 +231,15 @@ function buildInitialGameState(players: Player[]): GameState {
     visitorContributions: {},
     contributionSeq: 0,
     visitorPrizeQueue: [],
+    ripple: null,
+    rippleRerollPending: null,
+    sorcererMagicPending: null,
+    hotStreak: null,
+    monkSharedWith: [],
+    monkFlowGained: 0,
+    pactPending: null,
+    harvestQueue: [],
+    debtPaidThisTurn: false,
     startPlayerOffset: 0,
     currentTurnPlayerId: draftOrder[0] ?? players[0]?.id ?? '',
     turnActionsUsed: 0,
@@ -329,6 +339,37 @@ export interface GameStore extends GameState {
   resolveVisitorPrize: (choice: VisitorPrizeChoice) => void
   /** Pass on the first queued Visitor prize */
   skipVisitorPrize: () => void
+
+  // Sorcerer
+  /** Reality Ripple: re-roll up to twice per roll until your next turn; Launder 4 then if you never did */
+  realityRipple: (playerId: string) => void
+  /** Keep (false) or re-roll (true) a Sorcerer roll held by Reality Ripple */
+  resolveRippleReroll: (reroll: boolean) => void
+  /** Hot Streak!: start, then name a type per draw until a miss, then Break 1 */
+  startHotStreak: (playerId: string) => void
+  hotStreakGuess: (guess: ResourceType) => void
+  finishHotStreak: (targetId?: string, windowIdx?: number) => void
+  /** Uncontrollable Magic: turn a kept 6 into an effect */
+  resolveSorcererMagic: (choice: SorcererMagicChoice) => void
+  skipSorcererMagic: () => void
+  /** Look at the top 4 of the deck and keep up to maxKeep */
+  appraiseKeep: (playerId: string, maxKeep: number, source?: 'magic' | 'momentum') => void
+
+  // Monk
+  /** Spend Momentum (free, each option once per turn). Returns false if it couldn't be done. */
+  spendMomentum: (playerId: string, spend: MomentumSpendId, choice?: MomentumChoice) => boolean
+
+  // Warlock
+  /** Dark Bargain: offer a Pact from the Bargain card (1 Active token). Returns false if not allowed. */
+  offerPact: (warlockId: string, targetId: string, offer: PactOffer, repType: RepType) => boolean
+  /** The target accepts or refuses the pending Pact */
+  answerPact: (accept: boolean) => void
+  /** The Harvest: collect every Debt token; each debtor then pays */
+  harvest: (warlockId: string) => void
+  /** Pay for Harvested Debt: these hoard cards (1 per token), the rest 2 coins each */
+  payHarvest: (playerId: string, cardIds: string[]) => void
+  /** Pay off 1 Debt (2 coins to the Warlock) at the start of your turn, before any action */
+  payOffDebt: (playerId: string) => void
   appraise: (playerId: string, count: number) => void
   tradeWithFleaMarket: (playerId: string, playerCardIds: string[], fleaSlotIndices: number[]) => void
   steal: (byPlayerId: string, fromPlayerId: string) => void
@@ -487,6 +528,15 @@ const INITIAL: GameState = {
   visitorContributions: {},
   contributionSeq: 0,
   visitorPrizeQueue: [],
+  ripple: null,
+  rippleRerollPending: null,
+  sorcererMagicPending: null,
+  hotStreak: null,
+  monkSharedWith: [],
+  monkFlowGained: 0,
+  pactPending: null,
+  harvestQueue: [],
+  debtPaidThisTurn: false,
   startPlayerOffset: 0,
   currentTurnPlayerId: '',
   turnActionsUsed: 0,
@@ -729,6 +779,8 @@ function sellIntoVisitors(
       return {
         ...p,
         coins: p.coins + coins + rn07,
+        // Monk Flow State: +2 Momentum per Visitor completed
+        momentumTokens: p.classId === 'monk' ? Math.min(MAX_MOMENTUM, p.momentumTokens + VISITOR_MOMENTUM * completed.length) : p.momentumTokens,
         rep: newRep,
         hoard: p.hoard.filter(c => !soldIds.has(c.id)),
         stolenHoardCardIds: p.stolenHoardCardIds.filter(id => !soldIds.has(id)),
@@ -787,10 +839,8 @@ function awardVisitorPrizes(
       set(s => ({
         players: s.players.map(p => {
           if (p.id !== winner.id) return p
-          // Monks have no Active tokens — they gain Momentum instead
-          return p.classId === 'monk'
-            ? { ...p, momentumTokens: Math.min(8, p.momentumTokens + amount) }
-            : { ...p, activeTokens: Math.min(2, p.activeTokens + amount) }
+          // Monks have no Active tokens — they gain 1 Momentum instead
+          return refreshed(p, amount)
         }),
         actionLog: [logEntry(`${head}: refreshed ${amount} Active token${amount !== 1 ? 's' : ''}.`, winner.id), ...s.actionLog.slice(0, 49)],
       }))
@@ -861,6 +911,195 @@ function payAuction(
   if (isCounterfeitCard(card)) get().returnCounterfeitsToRogue([card], a.playerId, 'auctioned')
 }
 
+// ── Monk, Sorcerer and Warlock ───────────────────────────────────────────────
+
+export const MAX_MOMENTUM = 8
+/** Monk Momentum spends and their costs. Each can be used once per turn. */
+export const MOMENTUM_COSTS: Record<MomentumSpendId, number> = {
+  draw2: 2, trade2: 2, appraise2: 4, breakOrSteal: 4, copyPro: 7, sharedRep: 7,
+}
+/** Flow State: Momentum from sharing a location, per turn */
+export const FLOW_STATE_MAX = 2
+export const VISITOR_MOMENTUM = 2
+export const SHARED_REP_MAX = 3
+
+export const RIPPLE_REROLLS = 2
+export const RIPPLE_LAUNDER = 4
+
+export const WARLOCK_DEBT_SUPPLY = 6
+export const PACT_COINS = { min: 2, max: 4 }
+export const PACT_REFUSED_COINS = 2
+export const DEBT_PAYOFF_COST = 2
+export const HARVEST_COINS_PER_TOKEN = 2
+
+const d6 = () => Math.ceil(Math.random() * 6)
+
+/** Refresh Active tokens — a Monk has none, so any refresh gives them 1 Momentum instead. */
+export function refreshed(p: Player, n: number): Player {
+  return p.classId === 'monk'
+    ? { ...p, momentumTokens: Math.min(MAX_MOMENTUM, p.momentumTokens + 1) }
+    : { ...p, activeTokens: Math.min(2, p.activeTokens + n) }
+}
+
+export function debtOnBoard(players: Player[]) {
+  return players.reduce((n, p) => n + p.debtTokens, 0)
+}
+
+/** Debt tokens the Warlock still has to hand out */
+export function debtSupply(players: Player[]) {
+  return WARLOCK_DEBT_SUPPLY - debtOnBoard(players)
+}
+
+/** Why this Pact can't be offered to this player right now, or null if it can. */
+export function pactProblem(warlock: Player, target: Player, offer: PactOffer): string | null {
+  switch (offer.kind) {
+    case 'coins':
+      if (offer.amount < PACT_COINS.min || offer.amount > PACT_COINS.max) return `Offer ${PACT_COINS.min}–${PACT_COINS.max} coins`
+      return warlock.coins < offer.amount ? 'You don’t have that many coins' : null
+    case 'resource':
+      return warlock.hoard.some(c => c.id === offer.cardId) ? null : 'Pick a card from your hoard'
+    case 'draw':
+      return null
+    case 'repair':
+      return target.windows[offer.windowIdx]?.status === 'broken' ? null : 'They have no broken window there'
+    case 'refresh':
+      return target.classId !== 'monk' && target.activeTokens >= 2 ? 'Their Active tokens are already full' : null
+  }
+}
+
+export function describePact(offer: PactOffer, warlock?: Player): string {
+  switch (offer.kind) {
+    case 'coins': return `${offer.amount} coins`
+    case 'resource': return warlock?.hoard.find(c => c.id === offer.cardId)?.name ?? '1 resource'
+    case 'draw': return 'Draw 2 resources'
+    case 'repair': return `Repair Window ${offer.windowIdx + 1}`
+    case 'refresh': return 'Refresh 1 Active token'
+  }
+}
+
+type SetFn = (partial: Partial<GameStore> | ((s: GameStore) => Partial<GameStore>)) => void
+
+/** Uncontrollable Magic: a kept 6 on any Sorcerer roll queues a bonus choice. */
+function queueSorcererSix(get: () => GameStore, set: SetFn, playerId: string, roll: number) {
+  if (roll !== 6) return
+  const p = get().players.find(x => x.id === playerId)
+  if (p?.classId !== 'sorcerer') return
+  set(s => ({
+    sorcererMagicPending: { playerId, count: (s.sorcererMagicPending?.playerId === playerId ? s.sorcererMagicPending.count : 0) + 1 },
+    actionLog: [logEntry(`${p.name} rolled a 6 — Uncontrollable Magic!`, playerId), ...s.actionLog.slice(0, 49)],
+  }))
+}
+
+/** Reality Ripple: hold a Sorcerer's Gather / Auction / Mascot roll for a keep-or-re-roll choice. True if it's now waiting. */
+function offerRipple(
+  get: () => GameStore,
+  set: SetFn,
+  pending: Omit<NonNullable<GameState['rippleRerollPending']>, 'rerollsLeft' | 'history'>,
+): boolean {
+  if (get().ripple?.playerId !== pending.playerId) return false
+  set({ diceResult: pending.roll, rippleRerollPending: { ...pending, rerollsLeft: RIPPLE_REROLLS, history: [pending.roll] } })
+  return true
+}
+
+/**
+ * Clash and Duel rolls happen all at once, so a rippling Sorcerer re-rolls automatically
+ * (up to twice) while behind — the only sensible use — and a kept 6 triggers Uncontrollable Magic.
+ */
+function applySorcererToContest<T extends { playerId: string; roll: number; die?: number; bonus?: number }>(
+  get: () => GameStore, set: SetFn, rolls: T[],
+): T[] {
+  const sorc = rolls.find(r => get().players.find(p => p.id === r.playerId)?.classId === 'sorcerer')
+  if (!sorc) return rolls
+  const bonus = sorc.bonus ?? 0
+  let die = sorc.die ?? sorc.roll - bonus
+  const best = Math.max(...rolls.filter(r => r !== sorc).map(r => r.roll))
+  const history = [die]
+  if (get().ripple?.playerId === sorc.playerId) {
+    for (let i = 0; i < RIPPLE_REROLLS && die + bonus < best; i++) { die = d6(); history.push(die) }
+    if (history.length > 1) {
+      const name = get().players.find(p => p.id === sorc.playerId)?.name ?? 'The Sorcerer'
+      set(s => ({
+        ripple: s.ripple ? { ...s.ripple, rerolled: true } : s.ripple,
+        actionLog: [logEntry(`${name}'s Reality Ripple — re-rolled ${history.join(' → ')}.`, sorc.playerId), ...s.actionLog.slice(0, 49)],
+      }))
+    }
+  }
+  queueSorcererSix(get, set, sorc.playerId, die)
+  return rolls.map(r => (r === sorc ? { ...r, die, roll: die + bonus } : r))
+}
+
+/** Draw `count` cards marked Stolen (Launder). */
+function launderCards(get: () => GameStore, set: SetFn, playerId: string, count: number, why: string) {
+  const st = get()
+  const player = st.players.find(p => p.id === playerId)
+  if (!player) return
+  const { drawn, deck, discard } = drawCards(st.resourceDeck, st.resourceDiscard, count, 0, Infinity)
+  set(s => ({
+    resourceDeck: deck,
+    resourceDiscard: discard,
+    lastDrawnCards: drawn,
+    players: s.players.map(p => (p.id === playerId
+      ? { ...p, hoard: [...p.hoard, ...drawn], stolenHoardCardIds: [...p.stolenHoardCardIds, ...drawn.map(c => c.id)] }
+      : p)),
+    actionLog: [logEntry(`${player.name} — ${why}: laundered ${drawn.length} card${drawn.length !== 1 ? 's' : ''}.`, playerId), ...s.actionLog.slice(0, 49)],
+  }))
+}
+
+/** Draw `count` plain cards into a player's hoard. */
+function drawInto(get: () => GameStore, set: SetFn, playerId: string, count: number): ResourceCard[] {
+  const st = get()
+  const { drawn, deck, discard } = drawCards(st.resourceDeck, st.resourceDiscard, count, 0, Infinity)
+  set(s => ({
+    resourceDeck: deck,
+    resourceDiscard: discard,
+    players: s.players.map(p => (p.id === playerId ? { ...p, hoard: [...p.hoard, ...drawn] } : p)),
+  }))
+  return drawn
+}
+
+/** Monk Flow State: +1 Momentum per new player shared with this turn, up to FLOW_STATE_MAX. */
+function applyFlowState(get: () => GameStore, set: SetFn, playerId: string, location: Location) {
+  const st = get()
+  const monk = st.players.find(p => p.id === playerId)
+  if (monk?.classId !== 'monk' || st.currentTurnPlayerId !== playerId) return
+  const here = st.pawns.filter(pw => pw.location === location && pw.playerId !== playerId).map(pw => pw.playerId)
+  const fresh = here.filter(id => !st.monkSharedWith.includes(id))
+  if (fresh.length === 0) return
+  const gain = Math.min(fresh.length, FLOW_STATE_MAX - st.monkFlowGained, MAX_MOMENTUM - monk.momentumTokens)
+  set(s => ({
+    monkSharedWith: [...s.monkSharedWith, ...fresh],
+    monkFlowGained: s.monkFlowGained + Math.max(0, gain),
+    players: gain > 0 ? s.players.map(p => (p.id === playerId ? { ...p, momentumTokens: p.momentumTokens + gain } : p)) : s.players,
+    actionLog: gain > 0
+      ? [logEntry(`${monk.name}'s Flow State — +${gain} Momentum for sharing a location.`, playerId), ...s.actionLog.slice(0, 49)]
+      : s.actionLog,
+  }))
+}
+
+/** Turn-start passives and resets for the newer classes. */
+function applyNewClassTurnStart(get: () => GameStore, set: SetFn, startingId: string) {
+  set({ monkSharedWith: [], monkFlowGained: 0, debtPaidThisTurn: false })
+  const st = get()
+  const starter = st.players.find(p => p.id === startingId)
+  if (!starter) return
+
+  // Warlock — Master Manipulator: +1 coin per Debt token on the board
+  if (starter.classId === 'warlock') {
+    const debt = debtOnBoard(st.players)
+    if (debt > 0) set(s => ({
+      players: s.players.map(p => (p.id === startingId ? { ...p, coins: p.coins + debt } : p)),
+      actionLog: [logEntry(`${starter.name}'s Master Manipulator — +${debt} coin${debt !== 1 ? 's' : ''} (${debt} Debt on the board).`, startingId), ...s.actionLog.slice(0, 49)],
+    }))
+  }
+
+  // Sorcerer — Reality Ripple runs out; if it was never used to re-roll, Launder 4
+  if (st.ripple?.playerId === startingId) {
+    const unused = !st.ripple.rerolled
+    set({ ripple: null })
+    if (unused) launderCards(get, set, startingId, RIPPLE_LAUNDER, 'Reality Ripple wasn’t used to re-roll')
+  }
+}
+
 // Shared helper: execute the underlying action (gather/auction/mascot) with a given final roll.
 // Called by both useTrickShot and passTrickShot after the Trick Shot decision is made.
 function _applyTrickShotRoll(
@@ -878,6 +1117,7 @@ function _applyTrickShotRoll(
   const { players, resourceDeck, resourceDiscard } = get()
   const player = players.find(p => p.id === playerId)
   if (!player) return
+  queueSorcererSix(get, set, playerId, finalRoll)
 
   if (rollType === 'gather') {
     const { drawn, deck, discard } = drawCards(resourceDeck, resourceDiscard, finalRoll, 0, Infinity)
@@ -1431,7 +1671,7 @@ export const useGameStore = create<GameStore>((set, get) => ({
   refreshActiveTokens(playerId) {
     set(s => ({
       players: s.players.map(p =>
-        p.id === playerId && p.classId !== 'monk' ? { ...p, activeTokens: 2 } : p
+        p.id === playerId ? (p.classId === 'monk' ? refreshed(p, 2) : { ...p, activeTokens: 2 }) : p
       ),
     }))
   },
@@ -1567,6 +1807,7 @@ export const useGameStore = create<GameStore>((set, get) => ({
       rn04RerollPending: hasReroll ? { playerId, rollType: 'generic', originalRoll: roll } : null,
       actionLog: [logEntry(`${player?.name ?? 'Someone'} rolled a ${roll}.`, playerId), ...s.actionLog.slice(0, 49)],
     }))
+    queueSorcererSix(get, set, playerId, roll)
   },
 
   addLog(message, playerId) {
@@ -1751,6 +1992,8 @@ export const useGameStore = create<GameStore>((set, get) => ({
     const roll = Math.ceil(Math.random() * 6)
     const hasReroll = player.renownCards.some(c => c.id === 'rn04') && !player.rn04RerollUsed
 
+    if (offerRipple(get, set, { playerId, rollType: 'gather', roll })) return
+
     if (hasReroll) {
       set({ diceResult: roll, rn04RerollPending: { playerId, rollType: 'gather', originalRoll: roll } })
       return
@@ -1775,6 +2018,7 @@ export const useGameStore = create<GameStore>((set, get) => ({
       ),
       actionLog: [logEntry(`${player.name} gathered — rolled ${roll}, drew ${drawn.length} resources.`, playerId), ...s.actionLog.slice(0, 49)],
     }))
+    queueSorcererSix(get, set, playerId, roll)
   },
 
   forage(playerId) {
@@ -1827,6 +2071,8 @@ export const useGameStore = create<GameStore>((set, get) => ({
     const roll = Math.ceil(Math.random() * 6)
     const hasReroll = player.renownCards.some(c => c.id === 'rn04') && !player.rn04RerollUsed
 
+    if (offerRipple(get, set, { playerId, rollType: 'auction', roll, auctionCardId: cardId, auctionFromZone: fromZone, auctionWindowIdx: windowIdx, auctionVisitorIdx: visitorIdx })) return
+
     if (hasReroll) {
       set({ diceResult: roll, rn04RerollPending: { playerId, rollType: 'auction', originalRoll: roll, auctionCardId: cardId, auctionFromZone: fromZone, auctionWindowIdx: windowIdx, auctionVisitorIdx: visitorIdx } })
       return
@@ -1839,6 +2085,7 @@ export const useGameStore = create<GameStore>((set, get) => ({
     }
 
     payAuction(get, set, { playerId, cardId, fromZone, windowIdx, visitorIdx, roll, note: '', extra: { diceResult: roll } })
+    queueSorcererSix(get, set, playerId, roll)
   },
 
   appraise(playerId, count) {
@@ -2669,7 +2916,7 @@ export const useGameStore = create<GameStore>((set, get) => ({
   refreshOneActiveToken(playerId) {
     set(s => ({
       players: s.players.map(p =>
-        p.id === playerId ? { ...p, activeTokens: Math.min(2, p.activeTokens + 1) } : p
+        p.id === playerId ? refreshed(p, 1) : p
       ),
     }))
   },
@@ -2709,6 +2956,8 @@ export const useGameStore = create<GameStore>((set, get) => ({
     const roll = Math.ceil(Math.random() * 6)
     const hasReroll = player.renownCards.some(c => c.id === 'rn04') && !player.rn04RerollUsed
 
+    if (offerRipple(get, set, { playerId, rollType: 'mascot', roll })) return
+
     if (hasReroll) {
       set({ diceResult: roll, rn04RerollPending: { playerId, rollType: 'mascot', originalRoll: roll } })
       return
@@ -2747,6 +2996,7 @@ export const useGameStore = create<GameStore>((set, get) => ({
       }),
       actionLog: [logEntry(`${player.name} used Marvellous Mascot — rolled ${roll}, drew ${drawn.length} card(s), gained rep: ${distinctTypes.join(', ') || 'none'}.`, playerId), ...s.actionLog.slice(0, 49)],
     }))
+    queueSorcererSix(get, set, playerId, roll)
   },
 
   resourcefulRecruiter(playerId) {
@@ -2953,6 +3203,7 @@ export const useGameStore = create<GameStore>((set, get) => ({
     // In local play the dropdown sets activePlayerId to the acting player; in online play they're always equal
     const actingPlayerId = activePlayerId || currentTurnPlayerId
     get().movePawn(actingPlayerId, location)
+    applyFlowState(get, set, actingPlayerId, location)
 
     // Compute ambush in advance (using snapshot from before this set, which is fine —
     // movePawn only touches pawns/actionLog, not player data or ambushesPlaced).
@@ -3038,7 +3289,7 @@ export const useGameStore = create<GameStore>((set, get) => ({
 
         // Roll d6 for every player at this location
         // Barbarian: +2; Paladin: +sum of clashBonus on held Renown cards
-        const rolls = clashPawns.map(pw => {
+        const rolls = applySorcererToContest(get, set, clashPawns.map(pw => {
           const p = players.find(pl => pl.id === pw.playerId)
           const bonus = p?.classId === 'barbarian'
             ? 2
@@ -3047,7 +3298,7 @@ export const useGameStore = create<GameStore>((set, get) => ({
             : 0
           const die = Math.ceil(Math.random() * 6)
           return { playerId: pw.playerId, roll: die + bonus, die, bonus }
-        })
+        }))
         const maxRoll = Math.max(...rolls.map(r => r.roll))
         const winners = rolls.filter(r => r.roll === maxRoll)
         const isTie = winners.length > 1
@@ -3078,7 +3329,7 @@ export const useGameStore = create<GameStore>((set, get) => ({
           }
           // Refresh 1 active token for winner
           updatedPlayers = updatedPlayers.map(p =>
-            p.id === winnerId ? { ...p, activeTokens: Math.min(2, p.activeTokens + 1) } : p
+            p.id === winnerId ? refreshed(p, 1) : p
           )
 
           const winnerName = players.find(p => p.id === winnerId)?.name ?? 'Someone'
@@ -3188,10 +3439,10 @@ export const useGameStore = create<GameStore>((set, get) => ({
     if (barbarianRetreats) {
       // Barbarian retreats — remaining non-paying players Clash among themselves if 2+
       if (fightingIds.length >= 2) {
-        const fightRolls = fightingIds.map(id => {
+        const fightRolls = applySorcererToContest(get, set, fightingIds.map(id => {
           const die = Math.ceil(Math.random() * 6)
           return { playerId: id, roll: die, die, bonus: 0 }
-        })
+        }))
         const maxRoll = Math.max(...fightRolls.map(r => r.roll))
         const winners = fightRolls.filter(r => r.roll === maxRoll)
         const isTie = winners.length > 1
@@ -3215,7 +3466,7 @@ export const useGameStore = create<GameStore>((set, get) => ({
             spoils.push({ winnerId, cardName: stolen.name, fromName: loserName })
             clashStolenFromIds.push(loserId)
           }
-          postPlayers = postPlayers.map(p => p.id === winnerId ? { ...p, activeTokens: Math.min(2, p.activeTokens + 1) } : p)
+          postPlayers = postPlayers.map(p => p.id === winnerId ? refreshed(p, 1) : p)
         }
         // Clear Night Watcher from everyone; assign or queue choice based on how many were stolen from
         // Night Watcher is disabled in 2-player (only one opponent, so it would permanently block them)
@@ -3240,11 +3491,11 @@ export const useGameStore = create<GameStore>((set, get) => ({
     } else {
       // No one paid — run full Clash including Barbarian with +2
       const allIds = [barbarianId, ...fightingIds]
-      const rolls = allIds.map(id => {
+      const rolls = applySorcererToContest(get, set, allIds.map(id => {
         const die = Math.ceil(Math.random() * 6)
         const bonus = id === barbarianId ? 2 : 0
         return { playerId: id, roll: die + bonus, die, bonus }
-      })
+      }))
       const maxRoll = Math.max(...rolls.map(r => r.roll))
       const winners = rolls.filter(r => r.roll === maxRoll)
       const isTie = winners.length > 1
@@ -3268,7 +3519,7 @@ export const useGameStore = create<GameStore>((set, get) => ({
           spoils.push({ winnerId, cardName: stolen.name, fromName: loserName })
           fullClashStolenFromIds.push(loserId)
         }
-        postPlayers = postPlayers.map(p => p.id === winnerId && p.classId !== 'monk' ? { ...p, activeTokens: Math.min(2, p.activeTokens + 1) } : p)
+        postPlayers = postPlayers.map(p => p.id === winnerId ? refreshed(p, 1) : p)
       }
       const fullWinnerId = isTie ? null : winners[0].playerId
       const fullNwUpdate = players.length <= 2
@@ -3785,7 +4036,10 @@ export const useGameStore = create<GameStore>((set, get) => ({
     const baseRoll = Math.ceil(Math.random() * 6)
     const bonus = challenger.renownCards.length
     const challengerTotal = baseRoll + bonus
-    const targetTotal = Math.ceil(Math.random() * 6)
+    const targetTotal = applySorcererToContest(get, set, [
+      { playerId: challengerId, roll: challengerTotal },
+      { playerId: targetId, roll: Math.ceil(Math.random() * 6) },
+    ])[1].roll
     const isTie = challengerTotal === targetTotal
     const winnerId = isTie ? null : challengerTotal > targetTotal ? challengerId : targetId
 
@@ -4202,6 +4456,7 @@ export const useGameStore = create<GameStore>((set, get) => ({
         applyBarbPassive(queue[0])
         applyRangerPassive(queue[0])
         applyRogueLowCounterfeitPassive(queue[0])
+        applyNewClassTurnStart(get, set, queue[0])
         return
       }
       set(s => ({ players: shutterEndingPlayer(s.players, currentTurnPlayerId) }))
@@ -4230,6 +4485,7 @@ export const useGameStore = create<GameStore>((set, get) => ({
       applyBarbPassive(firstId)
       applyRangerPassive(firstId)
       applyRogueLowCounterfeitPassive(firstId)
+      applyNewClassTurnStart(get, set, firstId)
     } else {
       const next = order[nextIdx]
       set(s => ({
@@ -4254,6 +4510,7 @@ export const useGameStore = create<GameStore>((set, get) => ({
       applyBarbPassive(next.id)
       applyRangerPassive(next.id)
       applyRogueLowCounterfeitPassive(next.id)
+      applyNewClassTurnStart(get, set, next.id)
     }
   },
 
@@ -4367,6 +4624,318 @@ export const useGameStore = create<GameStore>((set, get) => ({
       actionLog: [logEntry(`${winner?.name ?? 'A player'} passed on their ${pending.visitorName} prize.`, pending.playerId), ...s.actionLog.slice(0, 49)],
     }))
     resumeFinalSellAfterPrizes(get)
+  },
+
+  // ---- Sorcerer class abilities ----
+
+  realityRipple(playerId) {
+    const st = get()
+    const p = st.players.find(x => x.id === playerId)
+    if (p?.classId !== 'sorcerer' || st.currentTurnPlayerId !== playerId || p.activeTokens < 1) return
+    if (st.ripple || st.classAbilitiesUsedThisTurn.includes('realityRipple')) return
+    set(s => ({
+      ripple: { playerId, rerolled: false },
+      classAbilitiesUsedThisTurn: [...s.classAbilitiesUsedThisTurn, 'realityRipple'],
+      players: s.players.map(x => (x.id === playerId ? { ...x, activeTokens: x.activeTokens - 1 } : x)),
+      actionLog: [logEntry(`${p.name} cast Reality Ripple — re-roll up to twice per roll until their next turn (or Launder ${RIPPLE_LAUNDER} if they never do).`, playerId), ...s.actionLog.slice(0, 49)],
+    }))
+  },
+
+  resolveRippleReroll(reroll) {
+    const pend = get().rippleRerollPending
+    if (!pend) return
+    let { roll, history } = pend
+    if (reroll && pend.rerollsLeft > 0) {
+      roll = d6()
+      history = [...history, roll]
+      set(s => ({ diceResult: roll, ripple: s.ripple ? { ...s.ripple, rerolled: true } : s.ripple }))
+      if (pend.rerollsLeft > 1) {
+        set({ rippleRerollPending: { ...pend, roll, history, rerollsLeft: pend.rerollsLeft - 1 } })
+        return
+      }
+    }
+    set({ rippleRerollPending: null })
+    const note = history.length > 1 ? ` (Reality Ripple: ${history.join(' → ')})` : ''
+    const { playerId, rollType, auctionCardId, auctionFromZone, auctionWindowIdx, auctionVisitorIdx } = pend
+    // A Ranger can still Trick Shot the kept result
+    const ranger = get().players.find(p => p.classId === 'ranger' && p.id !== playerId && p.trickShotAvailable && p.activeTokens > 0)
+    if (ranger) {
+      set({ diceResult: roll, trickShotPending: { rangerId: ranger.id, targetPlayerId: playerId, originalRoll: roll, rollType, auctionCardId, auctionFromZone, auctionWindowIdx, auctionVisitorIdx } })
+      return
+    }
+    set({ diceResult: roll })
+    _applyTrickShotRoll(get, set, rollType, playerId, roll, note, auctionCardId, auctionFromZone, auctionWindowIdx, auctionVisitorIdx)
+  },
+
+  startHotStreak(playerId) {
+    const st = get()
+    const p = st.players.find(x => x.id === playerId)
+    if (p?.classId !== 'sorcerer' || st.currentTurnPlayerId !== playerId || p.activeTokens < 1) return
+    if (st.hotStreak || st.classAbilitiesUsedThisTurn.includes('hotStreak')) return
+    set(s => ({
+      hotStreak: { playerId, drawn: [], missed: false },
+      classAbilitiesUsedThisTurn: [...s.classAbilitiesUsedThisTurn, 'hotStreak'],
+      players: s.players.map(x => (x.id === playerId ? { ...x, activeTokens: x.activeTokens - 1 } : x)),
+      actionLog: [logEntry(`${p.name} is on a Hot Streak!`, playerId), ...s.actionLog.slice(0, 49)],
+    }))
+  },
+
+  hotStreakGuess(guess) {
+    const hs = get().hotStreak
+    if (!hs || hs.missed) return
+    const p = get().players.find(x => x.id === hs.playerId)
+    const [card] = drawInto(get, set, hs.playerId, 1)
+    if (!card) {
+      // Nothing left to draw — the streak simply ends
+      set(s => ({ hotStreak: null, actionLog: [logEntry(`${p?.name}'s Hot Streak ends — the deck is empty.`, hs.playerId), ...s.actionLog.slice(0, 49)] }))
+      return
+    }
+    const hit = card.type === guess
+    set(s => ({
+      hotStreak: s.hotStreak ? { ...s.hotStreak, drawn: [...s.hotStreak.drawn, { card, guess }], missed: !hit } : s.hotStreak,
+      actionLog: [logEntry(
+        `${p?.name} named ${guess} and drew ${card.name} (${card.type}) — ${hit ? 'correct, go again!' : 'miss! Time to Break 1.'}`,
+        hs.playerId,
+      ), ...s.actionLog.slice(0, 49)],
+    }))
+  },
+
+  finishHotStreak(targetId, windowIdx) {
+    const hs = get().hotStreak
+    if (!hs) return
+    set({ hotStreak: null })
+    if (hs.missed && targetId && windowIdx !== undefined) get().breakWindow(hs.playerId, targetId, windowIdx)
+  },
+
+  resolveSorcererMagic(choice) {
+    const pend = get().sorcererMagicPending
+    if (!pend) return
+    const { playerId } = pend
+    const p = get().players.find(x => x.id === playerId)
+    set({ sorcererMagicPending: pend.count > 1 ? { playerId, count: pend.count - 1 } : null })
+    if (!p) return
+    const log = (msg: string) => set(s => ({ actionLog: [logEntry(`${p.name}'s Uncontrollable Magic — ${msg}`, playerId), ...s.actionLog.slice(0, 49)] }))
+    switch (choice.kind) {
+      case 'refresh':
+        set(s => ({ players: s.players.map(x => (x.id === playerId ? refreshed(x, 1) : x)) }))
+        log('Refresh 1.')
+        break
+      case 'draw': {
+        const drawn = drawInto(get, set, playerId, 2)
+        set({ lastDrawnCards: drawn })
+        log(`drew ${drawn.length}.`)
+        break
+      }
+      case 'trade': {
+        const ids = (choice.cardIds ?? []).slice(0, 2)
+        const slots = (choice.fleaSlotIdxs ?? []).slice(0, ids.length)
+        if (ids.length > 0 && ids.length === slots.length) get().tradeWithFleaMarket(playerId, ids, slots)
+        break
+      }
+      case 'steal':
+        if (choice.targetId) get().steal(playerId, choice.targetId)
+        break
+      case 'appraise':
+        get().appraiseKeep(playerId, 2, 'magic')
+        break
+    }
+  },
+
+  skipSorcererMagic() {
+    const pend = get().sorcererMagicPending
+    if (!pend) return
+    set({ sorcererMagicPending: pend.count > 1 ? { playerId: pend.playerId, count: pend.count - 1 } : null })
+  },
+
+  appraiseKeep(playerId, maxKeep, source) {
+    const cards = get().resourceDeck.slice(0, 4)
+    if (cards.length === 0) return
+    set({ appraisePeek: { playerId, cards, maxKeep, source } })
+  },
+
+  // ---- Monk class abilities ----
+
+  spendMomentum(playerId, spend, choice = {}) {
+    const st = get()
+    const p = st.players.find(x => x.id === playerId)
+    const cost = MOMENTUM_COSTS[spend]
+    const key = `momentum:${spend}`
+    if (p?.classId !== 'monk' || st.currentTurnPlayerId !== playerId) return false
+    if (p.momentumTokens < cost || st.classAbilitiesUsedThisTurn.includes(key)) return false
+
+    // Check the choice before paying
+    if (spend === 'trade2') {
+      const n = choice.cardIds?.length ?? 0
+      if (n < 1 || n > 2 || n !== (choice.fleaSlotIdxs?.length ?? 0)) return false
+    }
+    if (spend === 'appraise2' && st.resourceDeck.length === 0) return false
+    if (spend === 'breakOrSteal' && (!choice.targetId || (choice.mode === 'break' && choice.windowIdx === undefined))) return false
+    if (spend === 'copyPro' && !st.professionalSlots.some(pr => pr?.id === choice.professionalId)) return false
+    const shared = Math.min(SHARED_REP_MAX, st.monkSharedWith.length)
+    if (spend === 'sharedRep' && shared === 0) return false
+
+    set(s => ({
+      classAbilitiesUsedThisTurn: [...s.classAbilitiesUsedThisTurn, key],
+      players: s.players.map(x => (x.id === playerId ? { ...x, momentumTokens: x.momentumTokens - cost } : x)),
+    }))
+    const log = (msg: string) => set(s => ({ actionLog: [logEntry(`${p.name} spent ${cost} Momentum — ${msg}`, playerId), ...s.actionLog.slice(0, 49)] }))
+
+    switch (spend) {
+      case 'draw2': {
+        const drawn = drawInto(get, set, playerId, 2)
+        set({ lastDrawnCards: drawn })
+        log(`drew ${drawn.length}.`)
+        break
+      }
+      case 'trade2':
+        log('Trade 2.')
+        get().tradeWithFleaMarket(playerId, choice.cardIds!, choice.fleaSlotIdxs!)
+        break
+      case 'appraise2':
+        log('Appraise 2.')
+        get().appraiseKeep(playerId, 2, 'momentum')
+        break
+      case 'breakOrSteal':
+        log(choice.mode === 'break' ? 'Break 1.' : 'Steal 1.')
+        if (choice.mode === 'break') get().breakWindow(playerId, choice.targetId!, choice.windowIdx!)
+        else get().steal(playerId, choice.targetId!)
+        break
+      case 'copyPro': {
+        const pro = st.professionalSlots.find(pr => pr?.id === choice.professionalId)
+        log(`copied ${pro?.name ?? 'a Professional'}.`)
+        break
+      }
+      case 'sharedRep': {
+        const types = (choice.repTypes ?? []).slice(0, shared)
+        while (types.length < shared) types.push('ARM')
+        set(s => ({
+          players: s.players.map(x => {
+            if (x.id !== playerId) return x
+            const rep = { ...x.rep }
+            for (const t of types) rep[t]++
+            return { ...x, rep }
+          }),
+        }))
+        log(`+${shared} Rep (${types.join(', ')}) for sharing locations with ${shared} player${shared !== 1 ? 's' : ''}.`)
+        break
+      }
+    }
+    return true
+  },
+
+  // ---- Warlock class abilities ----
+
+  offerPact(warlockId, targetId, offer, repType) {
+    const st = get()
+    const w = st.players.find(p => p.id === warlockId)
+    const t = st.players.find(p => p.id === targetId)
+    if (w?.classId !== 'warlock' || !t || t.id === w.id || w.activeTokens < 1) return false
+    if (st.pactPending || debtSupply(st.players) <= 0 || st.classAbilitiesUsedThisTurn.includes('darkBargain')) return false
+    if (pactProblem(w, t, offer)) return false
+    set(s => ({
+      pactPending: { warlockId, targetId, offer, repType },
+      classAbilitiesUsedThisTurn: [...s.classAbilitiesUsedThisTurn, 'darkBargain'],
+      players: s.players.map(p => (p.id === warlockId ? { ...p, activeTokens: p.activeTokens - 1 } : p)),
+      actionLog: [logEntry(`${w.name} offers ${t.name} a Dark Bargain: ${describePact(offer, w)} for 1 Debt token.`, warlockId), ...s.actionLog.slice(0, 49)],
+    }))
+    return true
+  },
+
+  answerPact(accept) {
+    const pend = get().pactPending
+    if (!pend) return
+    const st = get()
+    const w = st.players.find(p => p.id === pend.warlockId)
+    const t = st.players.find(p => p.id === pend.targetId)
+    set({ pactPending: null })
+    if (!w || !t) return
+    if (!accept || pactProblem(w, t, pend.offer)) {
+      set(s => ({
+        players: s.players.map(p => (p.id === w.id ? { ...p, coins: p.coins + PACT_REFUSED_COINS } : p)),
+        actionLog: [logEntry(`${t.name} refused the Dark Bargain — ${w.name} gains ${PACT_REFUSED_COINS} coins.`, t.id), ...s.actionLog.slice(0, 49)],
+      }))
+      return
+    }
+    const { offer, repType } = pend
+    if (offer.kind === 'draw') drawInto(get, set, t.id, 2)
+    set(s => ({
+      players: s.players.map(p => {
+        if (p.id === w.id) {
+          const base = { ...p, rep: { ...p.rep, [repType]: p.rep[repType] + 1 } }
+          if (offer.kind === 'coins') return { ...base, coins: base.coins - offer.amount }
+          if (offer.kind === 'resource') return { ...base, hoard: base.hoard.filter(c => c.id !== offer.cardId), stolenHoardCardIds: base.stolenHoardCardIds.filter(id => id !== offer.cardId) }
+          return base
+        }
+        if (p.id === t.id) {
+          let next = { ...p, debtTokens: p.debtTokens + 1 }
+          if (offer.kind === 'coins') next.coins += offer.amount
+          if (offer.kind === 'resource') {
+            const card = w.hoard.find(c => c.id === offer.cardId)
+            if (card) next.hoard = [...next.hoard, card]
+          }
+          if (offer.kind === 'repair') next.windows = next.windows.map((x, i) => (i === offer.windowIdx ? { ...x, status: 'normal' as WindowStatus } : x))
+          if (offer.kind === 'refresh') next = refreshed(next, 1)
+          return next
+        }
+        return p
+      }),
+      actionLog: [logEntry(`${t.name} accepted the Dark Bargain (${describePact(offer, w)}) and takes 1 Debt — ${w.name} gains 1 ${repType} Rep.`, t.id), ...s.actionLog.slice(0, 49)],
+    }))
+  },
+
+  harvest(warlockId) {
+    const st = get()
+    const w = st.players.find(p => p.id === warlockId)
+    if (w?.classId !== 'warlock' || st.currentTurnPlayerId !== warlockId || w.activeTokens < 1) return
+    if (st.classAbilitiesUsedThisTurn.includes('harvest') || debtOnBoard(st.players) === 0) return
+    const queue = turnOrder(st)
+      .filter(p => p.debtTokens > 0)
+      .map(p => ({ warlockId, playerId: p.id, tokens: p.debtTokens }))
+    set(s => ({
+      harvestQueue: queue,
+      classAbilitiesUsedThisTurn: [...s.classAbilitiesUsedThisTurn, 'harvest'],
+      players: s.players.map(p => (p.id === warlockId ? { ...p, activeTokens: p.activeTokens - 1, debtTokens: 0 } : { ...p, debtTokens: 0 })),
+      actionLog: [logEntry(`${w.name} reaps The Harvest — ${queue.reduce((n, q) => n + q.tokens, 0)} Debt collected.`, warlockId), ...s.actionLog.slice(0, 49)],
+    }))
+  },
+
+  payHarvest(playerId, cardIds) {
+    const head = get().harvestQueue[0]
+    if (!head || head.playerId !== playerId) return
+    const st = get()
+    const payer = st.players.find(p => p.id === playerId)
+    const w = st.players.find(p => p.id === head.warlockId)
+    if (!payer || !w) { set(s => ({ harvestQueue: s.harvestQueue.slice(1) })); return }
+    const cards = cardIds.slice(0, head.tokens).map(id => payer.hoard.find(c => c.id === id)).filter((c): c is ResourceCard => !!c)
+    const coins = Math.min(payer.coins, (head.tokens - cards.length) * HARVEST_COINS_PER_TOKEN)
+    const ids = new Set(cards.map(c => c.id))
+    set(s => ({
+      harvestQueue: s.harvestQueue.slice(1),
+      players: s.players.map(p => {
+        if (p.id === playerId) return { ...p, coins: p.coins - coins, hoard: p.hoard.filter(c => !ids.has(c.id)), stolenHoardCardIds: p.stolenHoardCardIds.filter(id => !ids.has(id)) }
+        if (p.id === w.id) return { ...p, coins: p.coins + coins, hoard: [...p.hoard, ...cards] }
+        return p
+      }),
+      actionLog: [logEntry(
+        `${payer.name} pays The Harvest: ${[cards.length ? `${cards.map(c => c.name).join(', ')}` : '', coins ? `${coins} coins` : ''].filter(Boolean).join(' + ') || 'nothing (couldn’t pay)'}.`,
+        playerId,
+      ), ...s.actionLog.slice(0, 49)],
+    }))
+  },
+
+  payOffDebt(playerId) {
+    const st = get()
+    const p = st.players.find(x => x.id === playerId)
+    if (!p || st.currentTurnPlayerId !== playerId || p.debtTokens <= 0 || p.coins < DEBT_PAYOFF_COST) return
+    if (st.debtPaidThisTurn || st.turnActionsUsed > 0) return
+    set(s => ({
+      debtPaidThisTurn: true,
+      // Paid to the Warlock — it's their Debt
+      players: s.players.map(x => (x.id === playerId
+        ? { ...x, coins: x.coins - DEBT_PAYOFF_COST, debtTokens: x.debtTokens - 1 }
+        : x.classId === 'warlock' ? { ...x, coins: x.coins + DEBT_PAYOFF_COST } : x)),
+      actionLog: [logEntry(`${p.name} paid off 1 Debt — ${DEBT_PAYOFF_COST} coins to the Warlock.`, playerId), ...s.actionLog.slice(0, 49)],
+    }))
   },
 
   // ---- Ranger class abilities ----

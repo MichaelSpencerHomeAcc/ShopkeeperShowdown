@@ -14,6 +14,10 @@ import { PublicWorkOrdersRow, PublicWorkOrdersReference } from './PublicWorkOrde
 import { VisitorPrizeInfo, VisitorPrizeModal } from './VisitorPrizes'
 import { TargetPicker, WindowPicker, type TargetChoice } from './TargetPicker'
 import { IncidentSpotlight } from './IncidentSpotlight'
+import {
+  AppraiseKeepModal, HarvestPayModal, HotStreakModal, PactAnswerModal, RippleRerollModal, SorcererMagicModal,
+} from './NewClassModals'
+import { DEBT_PAYOFF_COST } from '../store/gameStore'
 import { useIncidentFeed, useIncidentStore } from '../store/incidentStore'
 import { breakWindowRule, heistWindowRule, stealRule, windowTargetRule } from '../utils/targets'
 
@@ -164,6 +168,7 @@ export function SharedBoard({ canAct = true, localPlayerName }: SharedBoardProps
     auction, tradeWithFleaMarket, breakWindow,
     resourceDeck, resourceDiscard,
     townCrierPeek, completeTownCrier, activeVisitors, visitorDemandRemaining, visitorPrizeQueue,
+    rippleRerollPending, sorcererMagicPending, hotStreak, pactPending, harvestQueue, debtPaidThisTurn, payOffDebt,
     professionalSlots,
     actionLog, lastGuildFencedCard,
     steal, heist,
@@ -789,6 +794,16 @@ export function SharedBoard({ canAct = true, localPlayerName }: SharedBoardProps
               className="text-[10px] bg-amber-900/40 border border-amber-600/40 text-amber-300 px-2 py-0.5 rounded font-semibold hover:bg-amber-800/50 transition-colors"
             >
               Sell phase pending
+            </button>
+          )}
+          {canAct && currentPlayer && currentPlayer.debtTokens > 0 && !debtPaidThisTurn && turnActionsUsed === 0 && (
+            <button
+              onClick={() => payOffDebt(currentPlayer.id)}
+              disabled={currentPlayer.coins < DEBT_PAYOFF_COST}
+              title="Before your first action you may pay off 1 Debt"
+              className="text-[10px] bg-purple-900/50 border border-purple-500/50 text-purple-200 px-2 py-0.5 rounded font-semibold hover:bg-purple-800/60 transition-colors disabled:opacity-40"
+            >
+              ⛓ Pay off 1 Debt ({DEBT_PAYOFF_COST}$ to the Warlock) · {currentPlayer.debtTokens} held
             </button>
           )}
         </div>
@@ -1460,6 +1475,24 @@ export function SharedBoard({ canAct = true, localPlayerName }: SharedBoardProps
             />
           : <WaitingOverlay name={ranger?.name} action="choosing Trick Shot bonus" classId={ranger?.classId} />
       })()}
+
+      {/* Sorcerer, Monk and Warlock prompts */}
+      {rippleRerollPending && (isMe(rippleRerollPending.playerId)
+        ? <RippleRerollModal />
+        : <WaitingOverlay name={players.find(p => p.id === rippleRerollPending.playerId)?.name} action="deciding whether to re-roll (Reality Ripple)" classId="sorcerer" />)}
+      {sorcererMagicPending && !rippleRerollPending && (isMe(sorcererMagicPending.playerId)
+        ? <SorcererMagicModal />
+        : <WaitingOverlay name={players.find(p => p.id === sorcererMagicPending.playerId)?.name} action="choosing Uncontrollable Magic" classId="sorcerer" />)}
+      {hotStreak && (isMe(hotStreak.playerId)
+        ? <HotStreakModal />
+        : <WaitingOverlay name={players.find(p => p.id === hotStreak.playerId)?.name} action="on a Hot Streak" classId="sorcerer" />)}
+      {pactPending && (isMe(pactPending.targetId)
+        ? <PactAnswerModal />
+        : <WaitingOverlay name={players.find(p => p.id === pactPending.targetId)?.name} action="considering a Dark Bargain" classId={players.find(p => p.id === pactPending.targetId)?.classId} />)}
+      {harvestQueue.length > 0 && (isMe(harvestQueue[0].playerId)
+        ? <HarvestPayModal />
+        : <WaitingOverlay name={players.find(p => p.id === harvestQueue[0].playerId)?.name} action="paying for The Harvest" classId={players.find(p => p.id === harvestQueue[0].playerId)?.classId} />)}
+      {appraisePeek?.source && isMe(appraisePeek.playerId) && <AppraiseKeepModal />}
 
       {/* Visitor contribution prize that needs a choice */}
       {visitorPrizeQueue.length > 0 && (() => {
@@ -3750,7 +3783,7 @@ function RogueCounterfeitActionModal({
     if (!cardId) return
     onAuction(cardId, auctionZone, auctionZone === 'window' ? auctionWindowIdx : undefined)
     const store = useGameStore.getState()
-    if (store.trickShotPending || store.rn04RerollPending) {
+    if (store.trickShotPending || store.rn04RerollPending || store.rippleRerollPending) {
       onDone()
       return
     }

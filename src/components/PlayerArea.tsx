@@ -27,7 +27,6 @@ export function PlayerArea({ player, playerIndex, isOwn = true, isMyTurn = true 
   /** Can the player move cards around their shop right now? */
   const canMove = isOwn && isMyTurn
   const {
-    adjustDebt, adjustMomentum,
     currentTurnPlayerId,
     endTurn, turnActionsUsed, bonusActionsThisTurn,
   } = useGameStore()
@@ -134,24 +133,11 @@ export function PlayerArea({ player, playerIndex, isOwn = true, isMyTurn = true 
       <div className="flex items-center gap-2">
 
         {/* Class-specific tokens */}
-        {player.classId === 'warlock' && (
-          <TokenCounter
-            label="Debt"
-            value={player.debtTokens}
-            onIncrement={isOwn ? () => adjustDebt(player.id, 1) : undefined}
-            onDecrement={isOwn ? () => adjustDebt(player.id, -1) : undefined}
-            color="bg-purple-900/60"
-          />
+        {player.debtTokens > 0 && (
+          <TokenCounter label="Debt" value={player.debtTokens} color="bg-purple-900/60" />
         )}
         {player.classId === 'monk' && (
-          <TokenCounter
-            label="Momentum"
-            value={player.momentumTokens}
-            onIncrement={isOwn ? () => adjustMomentum(player.id, 1) : undefined}
-            onDecrement={isOwn ? () => adjustMomentum(player.id, -1) : undefined}
-            max={8}
-            color="bg-blue-900/60"
-          />
+          <TokenCounter label="Momentum" value={player.momentumTokens} max={8} color="bg-blue-900/60" />
         )}
       </div>
 
