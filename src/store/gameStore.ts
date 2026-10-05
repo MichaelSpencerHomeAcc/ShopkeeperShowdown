@@ -925,7 +925,7 @@ function payAuction(
 export const MAX_MOMENTUM = 8
 /** Monk Momentum spends and their costs. Each can be used once per turn. */
 export const MOMENTUM_COSTS: Record<MomentumSpendId, number> = {
-  draw2: 2, trade2: 2, appraise2: 4, breakOrSteal: 4, copyPro: 7, sharedRep: 7,
+  draw2: 1, trade2: 1, appraise2: 3, breakOrSteal: 3, copyPro: 5, sharedRep: 5,
 }
 /** Flow State: Momentum from sharing a location, per turn */
 export const FLOW_STATE_MAX = 2
@@ -938,6 +938,10 @@ export const MAX_OMENS = 3
 export const MAX_CHARGE = 3
 export const SURGE_REROLL_COST = 1
 export const SURGE_SHIFT_COST = 2
+/** Wild Magic: a kept die of this or higher sets off a Surge */
+export const SURGE_ON = 5
+/** Casting Wild Surge rolls this many Surges */
+export const WILD_SURGE_COUNT = 2
 
 const d6 = () => Math.ceil(Math.random() * 6)
 
@@ -1060,7 +1064,7 @@ function triggerSurge(get: () => GameStore, set: SetFn, playerId: string, why: s
   }))
 }
 
-/** Wild Magic + Arcane Charge: a kept 1 gives Charge, a kept 6 surges. */
+/** Wild Magic + Arcane Charge: a kept 1 gives Charge, a kept 5 or 6 surges. */
 function sorcererDie(get: () => GameStore, set: SetFn, playerId: string, die: number) {
   const p = get().players.find(x => x.id === playerId)
   if (p?.classId !== 'sorcerer') return
@@ -1068,7 +1072,7 @@ function sorcererDie(get: () => GameStore, set: SetFn, playerId: string, die: nu
     gainCharge(set, playerId, 1)
     addLog(set, `${p.name} rolled a 1 — +1 Arcane Charge.`, playerId)
   }
-  if (die === 6) triggerSurge(get, set, playerId, 'rolled a 6')
+  if (die >= SURGE_ON) triggerSurge(get, set, playerId, `rolled a ${die}`)
 }
 
 // ── One path for every roll ──
@@ -4776,7 +4780,7 @@ export const useGameStore = create<GameStore>((set, get) => ({
       classAbilitiesUsedThisTurn: [...s.classAbilitiesUsedThisTurn, 'wildSurge'],
       players: s.players.map(x => (x.id === playerId ? { ...x, activeTokens: x.activeTokens - 1, charge: Math.min(MAX_CHARGE, x.charge + 1) } : x)),
     }))
-    triggerSurge(get, set, playerId, 'casts Wild Surge')
+    for (let i = 0; i < WILD_SURGE_COUNT; i++) triggerSurge(get, set, playerId, 'casts Wild Surge')
   },
 
   bendSurge(kind) {

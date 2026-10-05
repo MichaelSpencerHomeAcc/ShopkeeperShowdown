@@ -24,7 +24,7 @@ export const CLASSES: ClassCard[] = [
     status: 'BETA',
     passive: "Flow State — Gain 1 Momentum when you share a location with another player during your turn (max 2 per turn). Gain 2 Momentum when you complete a Visitor. Momentum: track up to 8; you have no Active tokens, and any effect that would Refresh an Active gives you 1 Momentum instead. Unspent Momentum is worth 1 coin each at the end.",
     actives: [
-      "Momentum Spend (free, each option once per turn) — 2: Draw 2 · 2: Trade 2 with the Flea Market · 4: Appraise 2 · 4: Break 1 or Steal 1 · 7: Copy any Professional currently in play and resolve it · 7: Gain 1 Rep per player you shared a location with this turn (max 3).",
+      "Momentum Spend (free, each option once per turn) — 1: Draw 2 · 1: Trade 2 with the Flea Market · 3: Appraise 2 · 3: Break 1 or Steal 1 · 5: Copy any Professional currently in play and resolve it · 5: Gain 1 Rep per player you shared a location with this turn (max 3).",
     ],
     playstyle: "The Wanderer. Difficulty 3/5. No Active tokens — everything runs on Momentum, built by visiting busy locations and completing Visitors. Spend it on flexible effects, or bank it: every unspent point is a coin at the end. Rewards positioning around other players.",
   },
@@ -91,12 +91,12 @@ export const CLASSES: ClassCard[] = [
     tagline: "Magic is easy. Aiming it is the hard part.",
     imageFile: '/cards/player-boards/Sorcerer.png',
     status: 'BETA',
-    passive: "Wild Magic — Whenever you keep a 6 on any die (Gather, Auction, Clash, Duel, Mascot…), a Wild Surge erupts: roll 2d6 on the Surge Table. Arcane Charge (max 3): gain 1 when you cast a spell or roll a 1. Spend 1 to re-roll a Surge, or 2 to shift it up or down by 1.",
+    passive: "Wild Magic — Whenever you keep a 5 or 6 on any die (Gather, Auction, Clash, Duel, Mascot…), a Wild Surge erupts: roll 2d6 on the Surge Table. Arcane Charge (max 3): gain 1 when you cast a spell or roll a 1. Spend 1 to re-roll a Surge, or 2 to shift it up or down by 1.",
     actives: [
       "Hot Streak! — Name a resource type and draw. If it matches, bank everything or go again (+1 Charge). On a miss, lose every card drawn after the first, then Break 1 of another player's windows. Your first card is always safe.",
-      "Wild Surge — Roll on the Surge Table now (and gain 1 Charge to bend it).",
+      "Wild Surge — Roll on the Surge Table twice, one after the other (and gain 1 Charge to bend them).",
     ],
-    playstyle: "The Wildcard. Difficulty 2/5. Every 6 you keep unleashes a Wild Surge — Gold Rain, Fireball, Swap Meet, or the odd Backfire — so the whole table watches you roll. Arcane Charge lets you steer the chaos, and Hot Streak is pure push-your-luck: how far will you go?",
+    playstyle: "The Wildcard. Difficulty 2/5. Every 5 or 6 you keep unleashes a Wild Surge — Gold Rain, Fireball, Swap Meet, or the odd Backfire — so the whole table watches you roll. Arcane Charge lets you steer the chaos, and Hot Streak is pure push-your-luck: how far will you go?",
   },
   {
     id: 'warlock',

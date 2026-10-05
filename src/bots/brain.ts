@@ -1,6 +1,6 @@
 import {
   useGameStore, CLAN_TOLL, FEARSOME_CHAMPION_MAX, MAX_SALES_PER_VISITOR, rankContributors, type GameStore,
-  MOMENTUM_COSTS, SHARED_REP_MAX, FLOW_STATE_MAX, MAX_OMENS, SURGE_REROLL_COST, SURGE_SHIFT_COST,
+  MOMENTUM_COSTS, SHARED_REP_MAX, FLOW_STATE_MAX, MAX_OMENS, SURGE_REROLL_COST, SURGE_SHIFT_COST, WILD_SURGE_COUNT,
 } from '../store/gameStore'
 import type {
   BotDifficulty, CurseId, DemandMap, DuelStake, Location, MomentumSpendId, Player, RepType, ResourceCard, ResourceType,
@@ -1528,7 +1528,7 @@ function abilityCandidates(s: GameStore, me: Player, ctx: ValueContext): Candida
     if (!used('wildSurge') && !s.surge) {
       const v = surgeValues(s, me)
       const ev = Object.entries(TWO_D6).reduce((n, [t, w]) => n + v[Number(t)] * w, 0) / 36
-      push('wildSurge', ev + 0.6 - tokenCost, () => st().castWildSurge(me.id))
+      push('wildSurge', ev * WILD_SURGE_COUNT + 0.6 - tokenCost, () => st().castWildSurge(me.id))
     }
   }
 

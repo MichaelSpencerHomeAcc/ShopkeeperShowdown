@@ -119,7 +119,7 @@ export function SorcererAbilities({ player, isActiveTurn }: { player: Player; is
       } />
 
       <Passive title="Passive · Wild Magic">
-        <div>Whenever you keep a <b className="text-violet-300">6</b> on any die — Gather, Auction, Clash, Duel, Mascot — a <b>Wild Surge</b> erupts: roll 2d6 on the Surge Table.</div>
+        <div>Whenever you keep a <b className="text-violet-300">5 or 6</b> on any die — Gather, Auction, Clash, Duel, Mascot — a <b>Wild Surge</b> erupts: roll 2d6 on the Surge Table.</div>
         <div className="text-xs text-parchment-500">
           Arcane Charge: +1 when you cast a spell or roll a 1 (max {MAX_CHARGE}). Spend {SURGE_REROLL_COST} to re-roll a Surge, or {SURGE_SHIFT_COST} to nudge it up or down by 1.
         </div>
@@ -137,7 +137,7 @@ export function SorcererAbilities({ player, isActiveTurn }: { player: Player; is
       <AbilityButton
         icon="🌀"
         title="Wild Surge"
-        detail={surgeUsed ? '✓ Used this turn' : 'Unleash the chaos: roll on the Surge Table now (+1 Charge to bend it).'}
+        detail={surgeUsed ? '✓ Used this turn' : 'Unleash the chaos: roll on the Surge Table twice, one after the other (+1 Charge to bend them).'}
         cost={<TokenCost player={player} />}
         disabled={!canAct || surgeUsed || !!surge}
         onClick={() => castWildSurge(player.id)}

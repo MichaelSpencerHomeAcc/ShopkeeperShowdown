@@ -57,11 +57,20 @@ describe('Sorcerer', () => {
     expect(me('sorcerer').charge).toBe(0)
   })
 
-  it('Wild Surge costs an Active token, gives 1 Charge and rolls the table', () => {
+  it('Wild Surge costs an Active token, gives 1 Charge and rolls the table twice', () => {
     const s = myTurn(['sorcerer', 'monk'], 'sorcerer')
     st().castWildSurge(s.id)
     expect(me('sorcerer').activeTokens).toBe(1)
     expect(me('sorcerer').charge).toBe(1)
+    expect(st().surge).toMatchObject({ playerId: s.id, backlog: 1 })
+    st().resolveSurge()
+    expect(st().surge).toMatchObject({ playerId: s.id, backlog: 0 })
+  })
+
+  it('a kept 5 also sets off a Wild Surge', () => {
+    const s = myTurn(['sorcerer', 'monk'], 'sorcerer')
+    rolls(5)
+    st().gather(s.id)
     expect(st().surge?.playerId).toBe(s.id)
   })
 
@@ -144,14 +153,14 @@ describe('Monk', () => {
     expect(st().spendMomentum(m.id, 'draw2')).toBe(false)
   })
 
-  it('the 7-Momentum Rep spend pays 1 Rep per player shared with', () => {
+  it('the Shared Path spend pays 1 Rep per player shared with', () => {
     const m = myTurn(['monk', 'shaman', 'paladin'], 'monk')
     patchPlayer(m.id, { momentumTokens: 8 })
     useGameStore.setState({ monkSharedWith: st().players.filter(p => p.id !== m.id).map(p => p.id) })
     expect(st().spendMomentum(m.id, 'sharedRep', { repTypes: ['TRI', 'TRG'] })).toBe(true)
     expect(me('monk').rep.TRI).toBe(1)
     expect(me('monk').rep.TRG).toBe(1)
-    expect(me('monk').momentumTokens).toBe(1)
+    expect(me('monk').momentumTokens).toBe(8 - MOMENTUM_COSTS.sharedRep)
   })
 })
 

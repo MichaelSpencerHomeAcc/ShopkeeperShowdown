@@ -96,7 +96,7 @@ Use one Elemental die per turn maximum. A used die is set aside until the start 
 **Difficulty:** 2/5
 
 ### Passive — Wild Magic
-Whenever you keep a **6** on any die — Gather, Auction, Clash, Duel, Mascot — a **Wild Surge** erupts: roll 2d6 on the Surge Table.
+Whenever you keep a **5 or 6** on any die — Gather, Auction, Clash, Duel, Mascot — a **Wild Surge** erupts: roll 2d6 on the Surge Table.
 
 ### Class Feature — Arcane Charge (0–3)
 - Gain 1 Charge each time you cast a spell (use an Active) or roll a 1.
@@ -108,7 +108,7 @@ Name a resource type and draw 1.
 - On a miss: lose every card drawn this streak **except the first**, then Break 1 of another player's windows.
 
 ### Active — Wild Surge
-Roll on the Surge Table now (casting it gives the usual +1 Charge to bend it).
+Roll on the Surge Table **twice**, one after the other (casting it gives the usual +1 Charge to bend them).
 
 ### Surge Table (2d6)
 | Roll | Surge | Effect |
@@ -140,12 +140,12 @@ Roll on the Surge Table now (casting it gives the usual +1 Charge to bend it).
 
 ### Active — Momentum Spend (no token cost; spend Momentum points instead)
 You may spend Momentum during your turn from this list. Spending is free (no action), and each option can be used once per turn:
-- **2 Momentum:** Draw 2 resources
-- **2 Momentum:** Trade 2 with the Flea Market
-- **4 Momentum:** Appraise 2 (look at top 4 of deck, keep 2)
-- **4 Momentum:** Break 1 or Steal 1
-- **7 Momentum:** Copy any face-up Professional currently in play and resolve it (without paying any associated costs of "visiting the Guildhall")
-- **7 Momentum:** Gain 1 Reputation per other player sharing a location with you this turn (max 3 Rep)
+- **1 Momentum:** Draw 2 resources
+- **1 Momentum:** Trade 2 with the Flea Market
+- **3 Momentum:** Appraise 2 (look at top 4 of deck, keep 2)
+- **3 Momentum:** Break 1 or Steal 1
+- **5 Momentum:** Copy any face-up Professional currently in play and resolve it (without paying any associated costs of "visiting the Guildhall")
+- **5 Momentum:** Gain 1 Reputation per other player sharing a location with you this turn (max 3 Rep)
 
 ### Class Feature — Momentum
 - The Monk does NOT have Active tokens. Their player board has a Momentum tracker (0–8) instead.
