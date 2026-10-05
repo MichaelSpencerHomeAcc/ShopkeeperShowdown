@@ -1,6 +1,7 @@
 import { useState, useEffect, useRef } from 'react'
 import { createPortal } from 'react-dom'
-import { useGameStore, turnOrder } from '../store/gameStore'
+import { useGameStore, turnOrder, MAX_MOMENTUM } from '../store/gameStore'
+import { CURSE_BY_ID } from '../data/curses'
 import { PlayerArea } from '../components/PlayerArea'
 import { SharedBoard } from '../components/SharedBoard'
 import { ActionLog } from '../components/ActionLog'
@@ -9,6 +10,7 @@ import { supabase } from '../lib/supabase'
 import { abandonRoom } from '../lib/rooms'
 import { CheatSheetModal } from '../components/CheatSheetModal'
 import { useBotDriver } from '../bots/useBotDriver'
+import { useIncidentStore } from '../store/incidentStore'
 import { BOT_DIFFICULTY_LABEL, BOT_SPEED_LABEL, loadBotSpeed, saveBotSpeed, type BotSpeed } from '../bots/botConfig'
 import type { Player, ResourceCard } from '../types'
 
@@ -56,6 +58,8 @@ function classStatus(player: Player) {
   if (player.classId === 'paladin') return `Renown ${player.renownCards.length}`
   if (player.classId === 'rogue') return `CF ${player.counterfeitHand.length}`
   if (player.classId === 'ranger') return `Ambushes ${player.ambushesPlaced.length}/3`
+  if (player.classId === 'warlock') return player.omens.length ? `🔮 ${player.omens.join(' ')}` : '🔮 —'
+  if (player.classId === 'sorcerer') return `⚡ ${player.charge}/3`
   return null
 }
 
@@ -96,6 +100,8 @@ export function Game({ localPlayerName, roomId, isHost, onLeave }: Props) {
   const isMyTurn = isOnline ? localPlayer?.id === currentTurnPlayerId : !currentIsBot
   const [viewingPlayerId, setViewingPlayerId] = useState<string | null>(null)
   const [hoveredTopWindowCard, setHoveredTopWindowCard] = useState<{ name: string; imageFile: string; x: number; y: number } | null>(null)
+  // Players who were just stolen from / broken into — their panel shakes and glows red
+  const incidentHits = useIncidentStore(s => s.hits)
   const centrePlayer = viewingPlayerId ? players.find(p => p.id === viewingPlayerId) : localPlayer
   const centreIndex = centrePlayer ? players.indexOf(centrePlayer) : 0
   const viewingOpponent = viewingPlayerId !== null
@@ -310,8 +316,14 @@ export function Game({ localPlayerName, roomId, isHost, onLeave }: Props) {
             const classTint = CLASS_PANEL_TINTS[p.classId] ?? 'rgba(212, 144, 30, 0.32)'
             const playerColor = PAWN_COLOR_HEX[i % PAWN_COLOR_HEX.length]
             const extraStatus = classStatus(p)
+            const hit = incidentHits[p.id]
             return (
               <div key={p.id} className="relative flex-shrink-0 pt-5">
+                {hit && (
+                  <div key={`badge-${hit.id}`} className="incident-in absolute right-2 top-0 z-30 rounded-t-md bg-red-600 px-2.5 py-1 text-[10px] font-black uppercase tracking-wide text-white shadow-lg">
+                    {hit.kind === 'break' ? '🔨 Window broken' : hit.kind === 'heist' ? '🎭 Heisted' : hit.kind === 'lost' ? '🔥 Lost a card' : '🗝️ Robbed'}
+                  </div>
+                )}
                 {isViewingThisPlayer && (
                   <div className="absolute left-1/2 top-0 z-20 -translate-x-1/2 rounded-t-md border border-b-0 border-sky-200/90 bg-sky-300/95 px-3 py-1 text-[9px] font-black uppercase tracking-wide text-ink-950 shadow">
                     Viewing
@@ -324,7 +336,8 @@ export function Game({ localPlayerName, roomId, isHost, onLeave }: Props) {
                     setViewingPlayerId(p.id === localPlayer.id ? null : p.id)
                   }}
                   disabled={!localPlayer}
-                  className={`relative min-w-[270px] rounded-lg border px-3 py-2.5 bg-ink-950/55 overflow-hidden text-left transition-all ${
+                  key={`panel-${hit?.id ?? 'calm'}`}
+                  className={`relative min-w-[270px] rounded-lg border px-3 py-2.5 bg-ink-950/55 overflow-hidden text-left transition-all ${hit ? 'incident-hit-shake' : ''} ${
                     localPlayer ? 'cursor-pointer hover:brightness-110 active:scale-[0.99]' : 'cursor-default'
                   } ${
                     isViewingThisPlayer ? 'ring-2 ring-sky-200/95' : ''
@@ -349,6 +362,11 @@ export function Game({ localPlayerName, roomId, isHost, onLeave }: Props) {
                     </div>
                     {extraStatus && (
                       <div className="truncate text-center text-[11px] font-bold leading-tight text-white/95">{extraStatus}</div>
+                    )}
+                    {p.curse && (
+                      <div className="truncate text-center text-[11px] font-bold leading-tight text-purple-200" title={`${CURSE_BY_ID[p.curse.id].name}: ${CURSE_BY_ID[p.curse.id].text}`}>
+                        {CURSE_BY_ID[p.curse.id].icon} {CURSE_BY_ID[p.curse.id].name}
+                      </div>
                     )}
                   </div>
 
@@ -388,10 +406,21 @@ export function Game({ localPlayerName, roomId, isHost, onLeave }: Props) {
 
                   <div className="rounded-md bg-black/20 border border-white/10 px-2 py-1.5 min-h-[74px] flex flex-col items-center justify-center gap-1">
                     <div className="text-[10px] font-bold text-white/85">{p.classId === 'monk' ? 'Momentum' : 'Active'}</div>
+                    {p.classId === 'monk' ? (
+                      <div className="flex flex-col items-center gap-1">
+                        <div className="text-xl font-display font-bold text-sky-100 leading-none tabular-nums">
+                          {p.momentumTokens}<span className="text-xs text-white/60">/{MAX_MOMENTUM}</span>
+                        </div>
+                        <div className="grid grid-cols-4 gap-0.5">
+                          {Array.from({ length: MAX_MOMENTUM }, (_, idx) => (
+                            <div key={idx} className={`w-2.5 h-2.5 rounded-full border ${idx < p.momentumTokens ? 'bg-sky-400 border-sky-100' : 'border-zinc-500/70 bg-zinc-800/85'}`} />
+                          ))}
+                        </div>
+                      </div>
+                    ) : (
                     <div className="flex flex-wrap justify-center gap-1">
-                      {Array.from({ length: p.classId === 'monk' ? Math.max(1, Math.min(4, p.momentumTokens || 1)) : 2 }, (_, idx) => {
-                        const activeValue = p.classId === 'monk' ? p.momentumTokens : p.activeTokens
-                        const lit = idx < Math.min(activeValue, p.classId === 'monk' ? 4 : 2)
+                      {Array.from({ length: 2 }, (_, idx) => {
+                        const lit = idx < Math.min(p.activeTokens, 2)
                         return (
                           <div
                             key={idx}
@@ -404,6 +433,7 @@ export function Game({ localPlayerName, roomId, isHost, onLeave }: Props) {
                         )
                       })}
                     </div>
+                    )}
                   </div>
                 </div>
 
@@ -429,7 +459,7 @@ export function Game({ localPlayerName, roomId, isHost, onLeave }: Props) {
                             setHoveredTopWindowCard({ name: w.card.name, imageFile: w.card.imageFile, x: event.clientX, y: event.clientY })
                           }}
                           onMouseLeave={() => setHoveredTopWindowCard(null)}
-                          className={`relative h-6 rounded border flex items-center justify-center overflow-hidden text-[11px] font-display font-bold ${
+                          className={`relative h-6 rounded border flex items-center justify-center overflow-hidden text-[11px] font-display font-bold ${hit?.windowIdxs.includes(windowIdx) ? 'ring-2 ring-red-400 animate-pulse' : ''} ${
                             w.status === 'broken'
                               ? 'border-red-400/80 bg-red-950/70 text-red-100'
                               : w.status === 'shuttered'

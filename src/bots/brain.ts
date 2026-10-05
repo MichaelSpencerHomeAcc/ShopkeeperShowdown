@@ -1,8 +1,10 @@
 import {
   useGameStore, CLAN_TOLL, FEARSOME_CHAMPION_MAX, MAX_SALES_PER_VISITOR, rankContributors, type GameStore,
+  MOMENTUM_COSTS, SHARED_REP_MAX, FLOW_STATE_MAX, MAX_OMENS, SURGE_REROLL_COST, SURGE_SHIFT_COST, WILD_SURGE_COUNT,
 } from '../store/gameStore'
 import type {
-  BotDifficulty, DemandMap, DuelStake, Location, Player, ResourceCard, ResourceType, VisitorCard, VisitorPrize, WorkOrderCard,
+  BotDifficulty, CurseId, DemandMap, DuelStake, Location, MomentumSpendId, Player, RepType, ResourceCard, ResourceType,
+  SurgeChoice, VisitorCard, VisitorPrize, WorkOrderCard,
 } from '../types'
 import { parseRequirements, recipeMainType } from '../utils/requirements'
 import {
@@ -95,7 +97,7 @@ export function anythingPending(s: GameStore): boolean {
     s.negotiateReview || s.shamanCallLightning || s.ambushPending || s.ambushResult ||
     s.trickShotPending || s.trickShotBonusPending || s.rangerVisitorTradePending ||
     s.rn04RerollPending || s.nightWatcherChoicePending || s.townCrierPeek || s.appraisePeek ||
-    s.foragePeek || s.visitorPrizeQueue.length > 0 || s.players.some(p => p.hoard.length > 8)
+    s.foragePeek || s.visitorPrizeQueue.length > 0 || s.twistPending || s.hexPeek || s.surge || s.mirrorPending || s.hotStreak || s.players.some(p => p.hoard.length > 8)
   )
 }
 
@@ -291,6 +293,58 @@ function promptStep(s: GameStore): BotStep | null {
       if (swap) st().resolveRangerVisitorTrade(swap.cardId, swap.fleaIdx)
       else st().dismissRangerVisitorTrade()
     })
+  }
+
+  // Warlock: Twist of Fate
+  const tw = s.twistPending
+  const twBot = botOf(s, tw?.warlockId)
+  if (tw && twBot) {
+    const idx = chooseTwist(s, twBot, tw)
+    return step(`twist:${tw.playerId}:${tw.rollType}:${tw.roll}:${twBot.omens.join('')}`, twBot, 'quick', () => st().resolveTwist(idx))
+  }
+
+  // Warlock: pick which curse to lay
+  const hp = s.hexPeek
+  const hpBot = botOf(s, hp?.warlockId)
+  if (hp && hpBot) {
+    const pick = chooseCurse(s, hpBot, hp.targetId, hp.cards)
+    return step(`hex:${hp.cards.join(',')}`, hpBot, 'think', () => st().chooseHex(pick))
+  }
+
+  // Sorcerer: bend, then resolve, a Wild Surge
+  const sg = s.surge
+  const sgBot = botOf(s, sg?.playerId)
+  if (sg && sgBot) {
+    const plan = planSurge(s, sgBot, sg.total)
+    return step(`surge:${sg.dice.join('')}:${sg.total}:${sgBot.charge}:${sg.backlog}`, sgBot, 'think',
+      () => (plan.bend ? st().bendSurge(plan.bend) : st().resolveSurge(plan.choice)))
+  }
+
+  // Sorcerer: Mirror Image copies a Professional
+  const mi = s.mirrorPending
+  const miBot = botOf(s, mi?.playerId)
+  if (mi && miBot) {
+    const ctx = buildContext(s, miBot, miBot.bot!)
+    const avgDraw = averageWorth(s.resourceDeck.length > 0 ? s.resourceDeck : s.resourceDiscard, ctx, 1)
+    const windowWorth = 2.5 * clamp(sellPhasesLeft(s, miBot.id) / 3, 0.3, 1)
+    const c = professionalCandidate(s, miBot, ctx, mi.professionalId, avgDraw, windowWorth, tokenValue(miBot))
+    return step('mirror', miBot, 'think', () => { if (c) c.fn(st()); st().finishMirror() })
+  }
+
+  // Sorcerer: Hot Streak! — the first card is safe, so always press on once; bank before risking more
+  const hs = s.hotStreak
+  const hsBot = botOf(s, hs?.playerId)
+  if (hs && hsBot) {
+    if (hs.missed) {
+      const ctx = buildContext(s, hsBot, hsBot.bot!)
+      const hit = bestBreak(s, hsBot, ctx)
+      return step('streak:break', hsBot, 'think', () => (hit ? st().finishHotStreak(hit.target.id, hit.windowIdx) : st().finishHotStreak()))
+    }
+    const atRisk = Math.max(0, hs.drawn.length - 1)
+    const greed = hsBot.bot === 'easy' ? 2 : 1
+    if (hs.drawn.length > 0 && atRisk >= greed) return step(`streak:bank:${hs.drawn.length}`, hsBot, 'think', () => st().hotStreakBank())
+    const guess = hsBot.bot === 'easy' ? pickRandom(RESOURCE_TYPES)! : commonestType(s).type
+    return step(`streak:${hs.drawn.length}`, hsBot, 'think', () => st().hotStreakGuess(guess))
   }
 
   // A Visitor contribution prize that needs a choice
@@ -788,10 +842,16 @@ function locationCandidates(s: GameStore, me: Player, ctx: ValueContext): Candid
     return me.coins >= coinsNeeded + (clan ? CLAN_TOLL : 0)
   }
   const tollCost = (loc: Location) => (clanOwnerAt(s, loc, me.id) ? CLAN_TOLL * 1.25 : 0)
+  // Monk Flow State: each new player shared with is worth ~1 Momentum (max 2 a turn)
+  const flow = (loc: Location) => {
+    if (me.classId !== 'monk') return 0
+    const fresh = s.pawns.filter(pw => pw.location === loc && pw.playerId !== me.id && !s.monkSharedWith.includes(pw.playerId)).length
+    return Math.min(fresh, FLOW_STATE_MAX - s.monkFlowGained) * 1.1
+  }
   const add = (loc: Location, id: string, value: number, fn: (s: GameStore) => void, basic = false) => {
     out.push({
       key: `act:${loc}:${id}`,
-      value: value - tollCost(loc) + clashAdjustment(s, me, ctx, loc, left),
+      value: value - tollCost(loc) + clashAdjustment(s, me, ctx, loc, left) + flow(loc),
       basic,
       run: locationAction(me.id, loc, fn),
     })
@@ -969,10 +1029,122 @@ function tokenValue(me: Player): number {
       return 3
     case 'shaman':
     case 'ranger':
+    case 'sorcerer':
+    case 'warlock':
       return 2.5
+    case 'monk':
+      // A Refresh only gives a Monk 1 Momentum
+      return 0.6
     default:
       return 0
   }
+}
+
+// ── Sorcerer / Monk / Warlock helpers ────────────────────────────────────────
+
+/** The resource type most common in the deck, and its share (Hot Streak guesses). */
+function commonestType(s: GameStore): { type: ResourceType; share: number } {
+  const pool = s.resourceDeck.length > 0 ? s.resourceDeck : s.resourceDiscard
+  const counts: Record<ResourceType, number> = { ARM: 0, CON: 0, TRI: 0, TRG: 0 }
+  for (const c of pool) counts[c.type]++
+  const type = RESOURCE_TYPES.reduce((a, b) => (counts[b] > counts[a] ? b : a))
+  return { type, share: pool.length ? Math.min(0.6, counts[type] / pool.length) : 0.25 }
+}
+
+/** Twist of Fate for a bot Warlock: bless its own low rolls, curse rivals' high ones, steer the Imp. */
+function chooseTwist(s: GameStore, w: Player, tw: NonNullable<GameStore['twistPending']>): number | null {
+  const six = w.omens.indexOf(6)
+  const one = w.omens.indexOf(1)
+  const d = w.bot ?? 'medium'
+  if (tw.rollType === 'imp') {
+    // The Imp steals on 1–2, breaks on 3–4: push a banishing roll down
+    return one >= 0 && tw.roll >= 3 ? one : null
+  }
+  if (tw.playerId === w.id) return six >= 0 && tw.roll <= (d === 'hard' ? 4 : 3) ? six : null
+  if (one < 0) return null
+  if (d === 'easy') return tw.roll >= 5 && chance(0.4) ? one : null
+  const victim = s.players.find(p => p.id === tw.playerId)
+  const harsh = victim && harmWeight(s, w, victim, d) > 0.4
+  return tw.roll >= (d === 'hard' || harsh ? 4 : 5) ? one : null
+}
+
+/** A bot Warlock's pick between the two Curse cards it drew. */
+function chooseCurse(s: GameStore, w: Player, targetId: string, cards: CurseId[]): CurseId {
+  const t = s.players.find(p => p.id === targetId)
+  const repInShop = t ? [...t.hoard, ...t.windows.flatMap(x => (x.card ? [x.card] : []))].reduce((n, c) => n + c.repTokens, 0) : 0
+  const score: Record<CurseId, number> = {
+    tithe: 2.2, tollOfShadows: 2, leakyPockets: 1.8, jinx: 1.6, butterfingers: 1.5,
+    hexedGoods: repInShop > 0 ? 2.4 : 0.5,
+    unsettledShelves: 1,
+    badOmen: w.omens.length < MAX_OMENS ? 1.2 : 0.2,
+  }
+  if (w.bot === 'easy') return pickRandom(cards)!
+  return [...cards].sort((a, b) => score[b] - score[a])[0]
+}
+
+/** Rough worth of each Wild Surge result to this Sorcerer. */
+function surgeValues(s: GameStore, me: Player): Record<number, number> {
+  const ctx = buildContext(s, me, me.bot ?? 'medium')
+  const avgDraw = averageWorth(s.resourceDeck.length > 0 ? s.resourceDeck : s.resourceDiscard, ctx, 1)
+  const others = s.players.length - 1
+  const ownWindow = me.windows.find((w, i) => i > 0 && i < 4 && w.status === 'normal')
+  const windowWorth = 2.5 * clamp(sellPhasesLeft(s, me.id) / 3, 0.3, 1)
+  const bestPro = Math.max(0, ...s.professionalSlots.map(p => (p ? professionalCandidate(s, me, ctx, p.id, avgDraw, windowWorth, tokenValue(me))?.value ?? 0 : 0)))
+  const v: Record<number, number> = {
+    2: ownWindow ? -(windowWorth + (ownWindow.card ? 1 : 0)) : 0,
+    3: me.hoard.length ? -averageWorth(me.hoard, ctx, 0) : 0,
+    4: -0.5,
+    5: 0,
+    6: 3 - others * 0.6,
+    7: drawValue(2, avgDraw, me),
+    8: s.currentTurnPlayerId === me.id ? 4 : avgDraw,
+    9: 2,
+    10: bestPro,
+    11: others * 1.4,
+  }
+  v[12] = Math.max(...Object.values(v))
+  return v
+}
+
+/** Probability of each 2d6 total. */
+const TWO_D6: Record<number, number> = { 2: 1, 3: 2, 4: 3, 5: 4, 6: 5, 7: 6, 8: 5, 9: 4, 10: 3, 11: 2, 12: 1 }
+
+/** A bot Sorcerer's Surge plan: bend it with Charge if worth it, otherwise resolve with the best choices. */
+function planSurge(s: GameStore, me: Player, total: number): { bend?: 'reroll' | 'up' | 'down'; choice: SurgeChoice } {
+  const v = surgeValues(s, me)
+  const chargeWorth = 1.2
+  const now = v[total]
+  const avg = Object.entries(TWO_D6).reduce((n, [t, w]) => n + v[Number(t)] * w, 0) / 36
+  if (me.bot !== 'easy') {
+    const opts: { bend: 'reroll' | 'up' | 'down'; gain: number }[] = []
+    if (me.charge >= SURGE_REROLL_COST) opts.push({ bend: 'reroll', gain: avg - now - chargeWorth * SURGE_REROLL_COST })
+    if (me.charge >= SURGE_SHIFT_COST && total < 12) opts.push({ bend: 'up', gain: v[total + 1] - now - chargeWorth * SURGE_SHIFT_COST })
+    if (me.charge >= SURGE_SHIFT_COST && total > 2) opts.push({ bend: 'down', gain: v[total - 1] - now - chargeWorth * SURGE_SHIFT_COST })
+    const best = opts.sort((a, b) => b.gain - a.gain)[0]
+    if (best && best.gain > 0.5) return { bend: best.bend, choice: {} }
+  }
+  // Wish: take the best result
+  const wish = total === 12 ? Number(Object.entries(v).filter(([t]) => t !== '12').sort((a, b) => b[1] - a[1])[0][0]) : undefined
+  const effective = wish ?? total
+  const choice: SurgeChoice = { wish }
+  if (effective === 9) {
+    // Transmute a card no Visitor wants into the type they want most
+    const ctx = buildContext(s, me, me.bot ?? 'medium')
+    const wanted = RESOURCE_TYPES.reduce((a, b) => (ctx.demanded[b] > ctx.demanded[a] ? b : a))
+    const card = [...me.hoard, ...me.windows.flatMap(w => (w.card ? [w.card] : []))].find(c => c.type !== wanted && ctx.demanded[c.type] === 0)
+      ?? me.hoard.find(c => c.type !== wanted)
+    if (card) { choice.cardId = card.id; choice.type = wanted }
+  }
+  if (effective === 10) {
+    const ctx = buildContext(s, me, me.bot ?? 'medium')
+    const avgDraw = averageWorth(s.resourceDeck.length > 0 ? s.resourceDeck : s.resourceDiscard, ctx, 1)
+    const windowWorth = 2.5 * clamp(sellPhasesLeft(s, me.id) / 3, 0.3, 1)
+    const best = s.professionalSlots
+      .flatMap(p => (p ? [{ id: p.id, value: professionalCandidate(s, me, ctx, p.id, avgDraw, windowWorth, tokenValue(me))?.value ?? -1 }] : []))
+      .sort((a, b) => b.value - a.value)[0]
+    if (best && best.value > 0) choice.professionalId = best.id
+  }
+  return { choice }
 }
 
 // ── Action helpers ───────────────────────────────────────────────────────────
@@ -1344,6 +1516,85 @@ function abilityCandidates(s: GameStore, me: Player, ctx: ValueContext): Candida
         const value = avgDraw + 4 * harmWeight(s, me, target, difficulty) * (s.players.length - 1) * 0.5
         push(`lightning:${target.id}`, value - tokenCost, () => st().callLightning(me.id, target.id))
       }
+    }
+  }
+
+  if (me.classId === 'sorcerer' && me.activeTokens >= 1 && s.currentTurnPlayerId === me.id) {
+    if (!used('hotStreak') && !s.hotStreak) {
+      // One safe card, ~25% for each extra, and a Break on the usual miss
+      const hit = bestBreak(s, me, ctx)
+      push('hotStreak', avgDraw * 1.3 + (hit ? hit.value * 0.7 : 0) + 0.5 - tokenCost, () => st().startHotStreak(me.id))
+    }
+    if (!used('wildSurge') && !s.surge) {
+      const v = surgeValues(s, me)
+      const ev = Object.entries(TWO_D6).reduce((n, [t, w]) => n + v[Number(t)] * w, 0) / 36
+      push('wildSurge', ev * WILD_SURGE_COUNT + 0.6 - tokenCost, () => st().castWildSurge(me.id))
+    }
+  }
+
+  if (me.classId === 'monk' && s.currentTurnPlayerId === me.id) {
+    const can = (id: MomentumSpendId) => me.momentumTokens >= MOMENTUM_COSTS[id] && !used(`momentum:${id}`)
+    // Unspent Momentum is a coin each at the end, so a spend has to beat that
+    const cost = (id: MomentumSpendId) => MOMENTUM_COSTS[id]
+    if (can('draw2')) push('m:draw2', drawValue(2, avgDraw, me) - cost('draw2'), () => st().spendMomentum(me.id, 'draw2'))
+    if (can('trade2')) {
+      const swaps = bestTrades(s, me, ctx, 2, false)
+      if (swaps.length > 0) {
+        push(`m:trade2:${swaps.map(x => x.cardId).join(',')}`, swaps.reduce((n, x) => n + x.gain, 0) - cost('trade2'),
+          () => st().spendMomentum(me.id, 'trade2', { cardIds: swaps.map(x => x.cardId), fleaSlotIdxs: swaps.map(x => x.fleaIdx) }))
+      }
+    }
+    if (can('appraise2') && s.resourceDeck.length > 0 && !s.appraisePeek) {
+      push('m:appraise2', drawValue(2, avgDraw * 1.25, me) - cost('appraise2'), () => st().spendMomentum(me.id, 'appraise2'))
+    }
+    if (can('breakOrSteal')) {
+      const victim = bestStealTarget(s, me, ctx)
+      const stealValue = victim ? averageWorth(victim.hoard, ctx, 1) * 0.85 + 4 * harmWeight(s, me, victim, difficulty) * (s.players.length - 1) * 0.5 : 0
+      const hit = bestBreak(s, me, ctx)
+      if (victim && stealValue >= (hit?.value ?? 0)) {
+        push(`m:steal:${victim.id}`, stealValue - cost('breakOrSteal'), () => st().spendMomentum(me.id, 'breakOrSteal', { mode: 'steal', targetId: victim.id }))
+      } else if (hit) {
+        push(`m:break:${hit.target.id}:${hit.windowIdx}`, hit.value - cost('breakOrSteal'),
+          () => st().spendMomentum(me.id, 'breakOrSteal', { mode: 'break', targetId: hit.target.id, windowIdx: hit.windowIdx }))
+      }
+    }
+    if (can('copyPro')) {
+      const windowWorth = 2.5 * clamp(sellPhasesLeft(s, me.id) / 3, 0.3, 1)
+      for (const prof of s.professionalSlots) {
+        if (!prof) continue
+        const c = professionalCandidate(s, me, ctx, prof.id, avgDraw, windowWorth, tokenValue(me))
+        if (c) push(`m:copy:${prof.id}:${c.tag}`, c.value - cost('copyPro'), () => { if (st().spendMomentum(me.id, 'copyPro', { professionalId: prof.id })) c.fn(st()) })
+      }
+    }
+    const shared = Math.min(SHARED_REP_MAX, s.monkSharedWith.length)
+    if (can('sharedRep') && shared > 0) {
+      const repTypes: RepType[] = []
+      const rep = { ...me.rep }
+      let value = 0
+      for (let i = 0; i < shared; i++) {
+        const t = bestRepType(rep, difficulty)
+        value += repValue(rep, t, difficulty)
+        rep[t]++
+        repTypes.push(t)
+      }
+      push(`m:rep:${repTypes.join(',')}`, value - cost('sharedRep'), () => st().spendMomentum(me.id, 'sharedRep', { repTypes }))
+    }
+  }
+
+  if (me.classId === 'warlock' && me.activeTokens >= 1 && s.currentTurnPlayerId === me.id) {
+    if (!used('hex') && !s.hexPeek && me.curseDeck.length > 0) {
+      const victim = rankOpponents(s, me.id).find(p => !p.hasNightWatcher && !p.curse)
+      if (victim) {
+        const value = 1.8 + 2 * harmWeight(s, me, victim, difficulty) * (s.players.length - 1) * 0.4
+        push(`hex:${victim.id}`, value - tokenCost, () => st().hex(me.id, victim.id))
+      }
+    }
+    if (!used('imp') && !s.imp && s.round < 6) {
+      // Lurk where rivals most often go
+      const busy: Location[] = ['wilderness', 'guildhall', 'workshop', 'barracks', 'tavern', 'thieves-guild']
+      const loc = difficulty === 'easy' ? pickRandom(busy)! : busy[0]
+      const omenBoost = me.omens.includes(1) ? 0.8 : 0
+      push(`imp:${loc}`, 2.2 * Math.min(1, (s.players.length - 1) / 2) + omenBoost - tokenCost, () => st().summonImp(me.id, loc))
     }
   }
 

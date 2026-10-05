@@ -5,7 +5,7 @@ import type { Player } from '../types'
 const player = (over: Partial<Player>): Player => ({
   id: 'p', name: 'P', classId: 'sorcerer', coins: 0, rep: { ARM: 0, CON: 0, TRI: 0, TRG: 0 },
   activeTokens: 2, windows: [], hoard: [], renownCards: [], counterfeitCards: [], counterfeitHand: [],
-  debtTokens: 0, momentumTokens: 0, clanLocation: null, hasNightWatcher: false, stolenHoardCardIds: [],
+  momentumTokens: 0, omens: [], curseDeck: [], curse: null, charge: 0, clanLocation: null, hasNightWatcher: false, stolenHoardCardIds: [],
   pitchCampPending: false, craftDiscount: 0, rn04RerollUsed: false, elementalDice: [], ambushHand: [],
   ambushesPlaced: [], trickShotAvailable: false, ...over,
 })

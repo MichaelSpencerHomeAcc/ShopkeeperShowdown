@@ -2,9 +2,12 @@ import { useState } from 'react'
 import type { Player, RepType, ShamanPatienceEffects, DuelStake } from '../types'
 import { LOCATIONS } from '../data/locations'
 import { useGameStore, CLAN_TOLL, FEARSOME_CHAMPION_MAX, SHAMAN_DICE_RECHARGE_ROUND } from '../store/gameStore'
+import { TargetPicker, type TargetChoice } from './TargetPicker'
+import { breakWindowRule, totalRep, windowTargetRule } from '../utils/targets'
 import { ResourceCardMini } from './ResourceCardMini'
 import { CardPickerGrid } from './CardPickerGrid'
 import { DiceRollModal } from './DiceRollModal'
+import { MonkAbilities, SorcererAbilities, WarlockAbilities } from './NewClassAbilities'
 
 interface Props {
   player: Player
@@ -29,6 +32,9 @@ export function ClassAbilitiesPanel({ player, isActiveTurn, isOwn = true }: Prop
   if (player.classId === 'rogue') {
     return <RogueAbilities player={player} isOwn={isOwn} />
   }
+  if (player.classId === 'sorcerer') return <SorcererAbilities player={player} isActiveTurn={isActiveTurn} />
+  if (player.classId === 'monk') return <MonkAbilities player={player} isActiveTurn={isActiveTurn} />
+  if (player.classId === 'warlock') return <WarlockAbilities player={player} isActiveTurn={isActiveTurn} />
   return null
 }
 
@@ -37,51 +43,34 @@ export function ClassAbilitiesPanel({ player, isActiveTurn, isOwn = true }: Prop
 function BarbarianAbilities({ player, isActiveTurn }: { player: Player; isActiveTurn: boolean }) {
   const { players, recklessSwing, raidingParty, appraisePeek, completeAppraise, classAbilitiesUsedThisTurn } = useGameStore()
   const [swingOpen, setSwingOpen] = useState(false)
-  const [swingTarget, setSwingTarget] = useState('')
-  const [swingWindow1, setSwingWindow1] = useState(0)
-  const [swingWindow2, setSwingWindow2] = useState<number | null>(null)
+  const [swingTarget, setSwingTarget] = useState<TargetChoice | null>(null)
   const [raidOpen, setRaidOpen] = useState(false)
   const [raidLoc, setRaidLoc] = useState<string>(LOCATIONS[0].id)
   const [appraiseSelected, setAppraiseSelected] = useState<string[]>([])
 
   const otherPlayers = players.filter(p => p.id !== player.id)
-  const swingTargets = otherPlayers.filter(p => !p.hasNightWatcher)
-  const targetPlayer = swingTargets.find(p => p.id === swingTarget) ?? swingTargets[0]
+  const swingRule = windowTargetRule(breakWindowRule)
+  const swingTargets = otherPlayers.filter(p => !swingRule(p))
+  const targetPlayer = swingTarget ? players.find(p => p.id === swingTarget.playerId) : undefined
   const canAct = isActiveTurn && player.activeTokens >= 1
   const swingUsed = classAbilitiesUsedThisTurn.includes('recklessSwing')
   const raidUsed = classAbilitiesUsedThisTurn.includes('raidingParty')
   // Raiding Party's appraise: keep up to maxKeep (can't keep more cards than were peeked)
   const raidKeep = appraisePeek ? Math.min(appraisePeek.maxKeep, appraisePeek.cards.length) : 1
 
-  const myRep = player.rep.ARM + player.rep.CON + player.rep.TRI + player.rep.TRG
-  const theirRep = targetPlayer
-    ? targetPlayer.rep.ARM + targetPlayer.rep.CON + targetPlayer.rep.TRI + targetPlayer.rep.TRG
-    : 0
+  const myRep = totalRep(player)
+  const theirRep = targetPlayer ? totalRep(targetPlayer) : 0
   const wouldBreakTwo = theirRep > myRep
-
-  const breakableWindows = targetPlayer
-    ? targetPlayer.windows.map((w, i) => ({ w, i })).filter(({ w, i }) => i > 0 && i < 4 && w.status === 'normal')
-    : []
-
-  function firstBreakableIdx(playerId: string) {
-    return players.find(p => p.id === playerId)?.windows
-      .map((w, i) => ({ w, i })).filter(({ w, i }) => i > 0 && i < 4 && w.status === 'normal')[0]?.i ?? 1
-  }
-
-  // Reset window selectors when target changes
-  function onTargetChange(id: string) {
-    setSwingTarget(id)
-    setSwingWindow1(firstBreakableIdx(id))
-    setSwingWindow2(null)
-  }
+  // Break 2 when they have more Rep — or as many as they have left to break
+  const breakableCount = targetPlayer ? targetPlayer.windows.filter((_, i) => !breakWindowRule(targetPlayer, i)).length : 0
+  const windowsNeeded = Math.min(wouldBreakTwo ? 2 : 1, breakableCount)
+  const swingReady = !!targetPlayer && windowsNeeded > 0 && (swingTarget?.windowIdxs.length ?? 0) === windowsNeeded
 
   function handleSwing() {
-    if (!targetPlayer) return
-    const indices = wouldBreakTwo && swingWindow2 !== null
-      ? [swingWindow1, swingWindow2]
-      : [swingWindow1]
-    recklessSwing(player.id, swingTarget || targetPlayer.id, indices)
+    if (!targetPlayer || !swingTarget || !swingReady) return
+    recklessSwing(player.id, targetPlayer.id, swingTarget.windowIdxs)
     setSwingOpen(false)
+    setSwingTarget(null)
   }
 
   function handleRaid() {
@@ -144,11 +133,7 @@ function BarbarianAbilities({ player, isActiveTurn }: { player: Player; isActive
         <button
           disabled={!canAct || swingTargets.length === 0 || swingUsed}
           onClick={() => {
-            if (!swingOpen) {
-              const tgt = swingTarget || swingTargets[0]?.id || ''
-              setSwingWindow1(firstBreakableIdx(tgt))
-              setSwingWindow2(null)
-            }
+            if (!swingOpen) setSwingTarget(null)
             setSwingOpen(v => !v)
             setRaidOpen(false)
           }}
@@ -173,112 +158,28 @@ function BarbarianAbilities({ player, isActiveTurn }: { player: Player; isActive
         </button>
         {swingOpen && (
           <div className="mt-1 bg-ink-800/60 border border-red-700/30 rounded-xl p-3 space-y-3">
-            {/* Target picker */}
-            <div className="flex flex-wrap gap-1">
-              {swingTargets.map(p => (
-                <button
-                  key={p.id}
-                  type="button"
-                  onClick={() => onTargetChange(p.id)}
-                  className={`text-xs px-2 py-0.5 rounded border transition-colors ${
-                    (swingTarget || targetPlayer?.id) === p.id
-                      ? 'bg-gold-500/30 border-gold-400 text-gold-200'
-                      : 'bg-ink-700 border-parchment-700/30 text-parchment-400 hover:border-parchment-400'
-                  }`}
-                >
-                  {p.name}
-                </button>
-              ))}
-            </div>
-            {otherPlayers.some(p => p.hasNightWatcher) && (
-              <div className="text-xs text-parchment-500 italic">Night Watcher holders cannot be targeted for Break.</div>
-            )}
-
-            {wouldBreakTwo && (
-              <div className="text-xs text-amber-400 font-semibold">
-                ⚠ They have more Rep ({theirRep} vs {myRep}) — break 2 windows!
-              </div>
-            )}
-
-            {breakableWindows.length === 0 ? (
-              <div className="text-xs text-parchment-600 italic">No breakable middle windows available.</div>
-            ) : (
-              <>
-                {/* First window */}
-                <div>
-                  <div className="text-xs text-parchment-500 mb-1.5">{wouldBreakTwo ? 'First window:' : 'Window to break:'}</div>
-                  <div className="flex flex-wrap gap-2">
-                    {breakableWindows.map(({ w, i }) => (
-                      <button
-                        key={w.id}
-                        type="button"
-                        onClick={() => setSwingWindow1(i)}
-                        disabled={wouldBreakTwo && swingWindow2 === i}
-                        className={`flex flex-col items-center gap-1 rounded-xl border-2 p-1.5 transition-all disabled:opacity-30 ${
-                          swingWindow1 === i
-                            ? 'border-red-400 bg-red-950/50 shadow-md shadow-red-900/40'
-                            : 'border-parchment-700/30 bg-ink-800/60 hover:border-red-500/50 hover:bg-red-950/20'
-                        }`}
-                      >
-                        <div className="w-20 h-28 rounded-lg overflow-hidden flex-shrink-0 border border-parchment-700/30">
-                          {w.card
-                            ? <img src={w.card.imageFile} alt={w.card.name} className="w-full h-full object-cover" />
-                            : <div className="w-full h-full bg-ink-900/60 flex items-center justify-center text-parchment-700 text-[10px]">Empty</div>
-                          }
-                        </div>
-                        <div className="text-center max-w-[60px]">
-                          <div className="text-xs font-bold text-parchment-200">Win {i + 1}</div>
-                          {w.card && <div className="text-[10px] text-parchment-400 leading-tight truncate w-full">{w.card.name}</div>}
-                          {w.status !== 'normal' && <div className="text-[10px] text-amber-400">[{w.status}]</div>}
-                        </div>
-                      </button>
-                    ))}
-                  </div>
-                </div>
-
-                {/* Second window (only when breaking 2) */}
-                {wouldBreakTwo && (
-                  <div>
-                    <div className="text-xs text-parchment-500 mb-1.5">Second window:</div>
-                    <div className="flex flex-wrap gap-2">
-                      {breakableWindows
-                        .filter(({ i }) => i !== swingWindow1)
-                        .map(({ w, i }) => (
-                          <button
-                            key={w.id}
-                            type="button"
-                            onClick={() => setSwingWindow2(i)}
-                            className={`flex flex-col items-center gap-1 rounded-xl border-2 p-1.5 transition-all ${
-                              swingWindow2 === i
-                                ? 'border-red-400 bg-red-950/50 shadow-md shadow-red-900/40'
-                                : 'border-parchment-700/30 bg-ink-800/60 hover:border-red-500/50 hover:bg-red-950/20'
-                            }`}
-                          >
-                            <div className="w-20 h-28 rounded-lg overflow-hidden flex-shrink-0 border border-parchment-700/30">
-                              {w.card
-                                ? <img src={w.card.imageFile} alt={w.card.name} className="w-full h-full object-cover" />
-                                : <div className="w-full h-full bg-ink-900/60 flex items-center justify-center text-parchment-700 text-[10px]">Empty</div>
-                              }
-                            </div>
-                            <div className="text-center max-w-[60px]">
-                              <div className="text-xs font-bold text-parchment-200">Win {i + 1}</div>
-                              {w.card && <div className="text-[10px] text-parchment-400 leading-tight truncate w-full">{w.card.name}</div>}
-                              {w.status !== 'normal' && <div className="text-[10px] text-amber-400">[{w.status}]</div>}
-                            </div>
-                          </button>
-                        ))}
-                    </div>
-                  </div>
-                )}
-              </>
-            )}
+            <TargetPicker
+              actorId={player.id}
+              players={players}
+              value={swingTarget}
+              onChange={setSwingTarget}
+              playerRule={swingRule}
+              windowRule={breakWindowRule}
+              maxWindows={wouldBreakTwo ? 2 : 1}
+              verb="Break"
+              playerDetail={p => totalRep(p) > myRep
+                ? <span className="text-amber-400 font-semibold">More Rep ({totalRep(p)} vs {myRep}) — break 2</span>
+                : <span className="text-parchment-500">Rep {totalRep(p)} vs your {myRep} — break 1</span>}
+            />
 
             <button
               onClick={handleSwing}
-              disabled={breakableWindows.length === 0 || (wouldBreakTwo && swingWindow2 === null)}
-              className="btn-primary text-xs px-2 py-0.5 w-full disabled:opacity-50"
+              disabled={!swingReady}
+              className="btn-primary text-sm py-2 w-full disabled:opacity-50"
             >
-              Break Window{wouldBreakTwo ? 's' : ''} → spend 1 token
+              {!targetPlayer ? 'Pick a target'
+                : !swingReady ? `Pick ${windowsNeeded} window${windowsNeeded !== 1 ? 's' : ''}`
+                : `Break ${targetPlayer.name}'s Window${windowsNeeded > 1 ? 's' : ''} ${swingTarget!.windowIdxs.map(i => i + 1).join(' & ')} → spend 1 token`}
             </button>
           </div>
         )}

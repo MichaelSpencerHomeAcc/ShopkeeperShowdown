@@ -9,6 +9,46 @@ export interface ResourceCard {
   imageFile: string
 }
 
+/** Warlock Curse cards (see data/curses.ts). */
+export type CurseId =
+  | 'jinx' | 'butterfingers' | 'tithe' | 'hexedGoods' | 'leakyPockets' | 'tollOfShadows' | 'unsettledShelves' | 'badOmen'
+
+/** A curse sitting on a player. armed = their turn has started, so it fizzles when that turn ends. */
+export interface ActiveCurse {
+  id: CurseId
+  warlockId: string
+  armed: boolean
+}
+
+/** Rolls the Warlock can Twist and that the Sorcerer's dice abilities watch. */
+export type RollKind = 'gather' | 'auction' | 'mascot' | 'imp'
+
+/** Choices some Wild Surge results need. */
+export interface SurgeChoice {
+  /** 12 Wish: which result (2–11) to take */
+  wish?: number
+  /** 9 Transmute: the card and its new type */
+  cardId?: string
+  type?: ResourceType
+  /** 10 Mirror Image: the Professional to copy */
+  professionalId?: string
+}
+
+/** Monk Momentum spends: [cost, once per turn each]. *//** Monk Momentum spends: [cost, once per turn each]. */
+export type MomentumSpendId = 'draw2' | 'trade2' | 'appraise2' | 'breakOrSteal' | 'copyPro' | 'sharedRep'
+
+export interface MomentumChoice {
+  cardIds?: string[]
+  fleaSlotIdxs?: number[]
+  mode?: 'break' | 'steal'
+  targetId?: string
+  windowIdx?: number
+  /** copyPro: which Professional slot to copy */
+  professionalId?: string
+  /** sharedRep: one Rep type per point */
+  repTypes?: RepType[]
+}
+
 /** What a Visitor awards its top two contributors when it is completed. */
 export type VisitorPrizeKind = 'coins' | 'rep' | 'refresh' | 'take' | 'draw' | 'steal' | 'break'
 
@@ -160,8 +200,15 @@ export interface Player {
   counterfeitCards: CounterfeitCard[]
   /** Rogue only — Counterfeit cards currently in hand and available to place */
   counterfeitHand: CounterfeitCard[]
-  debtTokens: number
   momentumTokens: number
+  /** Warlock: bottled Omen dice (each a 1 or a 6), max 3 */
+  omens: number[]
+  /** Warlock: Curse deck (top first) */
+  curseDeck: CurseId[]
+  /** A Warlock's curse on this player, if any */
+  curse: ActiveCurse | null
+  /** Sorcerer: Arcane Charge, 0–3 */
+  charge: number
   clanLocation: Location | null
   hasNightWatcher: boolean
   stolenHoardCardIds: string[]
@@ -236,7 +283,8 @@ export interface GameState {
   lastGuildFenceType: ResourceType | null
   diceResult: number | null
   townCrierPeek: { playerId: string; cards: VisitorCard[] } | null
-  appraisePeek: { playerId: string; cards: ResourceCard[]; maxKeep: number } | null
+  /** source: who asked for the peek — Sorcerer/Monk peeks get their own picker */
+  appraisePeek: { playerId: string; cards: ResourceCard[]; maxKeep: number; source?: 'magic' | 'momentum' } | null
   foragePeek: { playerId: string; cards: ResourceCard[]; source?: 'location' | 'patience' } | null
   lastDrawnCards: ResourceCard[] | null
   visitorDemandRemaining: Record<string, DemandMap>
@@ -248,6 +296,39 @@ export interface GameState {
   contributionSeq: number
   /** Won prizes waiting for the winner to make a choice */
   visitorPrizeQueue: PendingVisitorPrize[]
+
+  // ── Sorcerer ──
+  /** A Wild Surge waiting to be bent (Charge) and resolved; backlog = more surges queued behind it */
+  surge: { playerId: string; dice: [number, number]; total: number; backlog: number } | null
+  /** Surge 10 Mirror Image: the Professional the Sorcerer is copying */
+  mirrorPending: { playerId: string; professionalId: string } | null
+  /** Hot Streak! in progress. The first card is safe; the rest are lost on a miss unless banked. */
+  hotStreak: { playerId: string; drawn: { card: ResourceCard; guess: ResourceType }[]; missed: boolean } | null
+
+  // ── Warlock ──
+  /** A roll the Warlock may Twist with an Omen before it takes effect */
+  twistPending: {
+    warlockId: string
+    playerId: string
+    rollType: RollKind
+    roll: number
+    note: string
+    auctionCardId?: string
+    auctionFromZone?: 'hoard' | 'window'
+    auctionWindowIdx?: number
+    auctionVisitorIdx?: number
+    impWarlockId?: string
+  } | null
+  /** Hex: the two Curse cards drawn, waiting for the Warlock to pick one */
+  hexPeek: { warlockId: string; targetId: string; cards: CurseId[] } | null
+  /** The Warlock's Imp, lurking at a location until their next turn */
+  imp: { warlockId: string; location: Location } | null
+
+  // ── Monk ──  // ── Monk ──
+  /** Players the Monk has shared a location with this turn (Flow State + the 7-Momentum Rep spend) */
+  monkSharedWith: string[]
+  /** Momentum gained from Flow State sharing this turn (max 2) */
+  monkFlowGained: number
 
   // Turn management
   /** Seats the first player has moved left since round 1 — turn order rotates each round */
@@ -282,7 +363,8 @@ export interface GameState {
 
   clashResult: {
     location: Location
-    rolls: { playerId: string; roll: number }[]
+    /** roll = die + bonus (Barbarian +2, Paladin Renown); die/bonus let the overlay show the d6 and the bonus separately */
+    rolls: { playerId: string; roll: number; die?: number; bonus?: number }[]
     winnerId: string | null
     spoils: { winnerId: string; cardName: string; fromName: string }[]
     /** IDs of participants who have clicked Continue — turn advances once all have acknowledged */

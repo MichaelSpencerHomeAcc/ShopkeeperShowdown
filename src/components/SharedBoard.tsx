@@ -12,6 +12,14 @@ import { LOCATIONS } from '../data/locations'
 import { DiceRollModal } from './DiceRollModal'
 import { PublicWorkOrdersRow, PublicWorkOrdersReference } from './PublicWorkOrders'
 import { VisitorPrizeInfo, VisitorPrizeModal } from './VisitorPrizes'
+import { TargetPicker, WindowPicker, type TargetChoice } from './TargetPicker'
+import { IncidentSpotlight } from './IncidentSpotlight'
+import {
+  AppraiseKeepModal, HexChoiceModal, HotStreakModal, MirrorModal, SurgeModal, TwistModal,
+} from './NewClassModals'
+import { CURSE_BY_ID } from '../data/curses'
+import { useIncidentFeed, useIncidentStore } from '../store/incidentStore'
+import { breakWindowRule, heistWindowRule, stealRule, windowTargetRule } from '../utils/targets'
 
 const DEMAND_COLORS: Record<string, string> = {
   ARM: 'bg-orange-600 text-orange-100',
@@ -160,6 +168,7 @@ export function SharedBoard({ canAct = true, localPlayerName }: SharedBoardProps
     auction, tradeWithFleaMarket, breakWindow,
     resourceDeck, resourceDiscard,
     townCrierPeek, completeTownCrier, activeVisitors, visitorDemandRemaining, visitorPrizeQueue,
+    surge, mirrorPending, hotStreak, twistPending, hexPeek, imp,
     professionalSlots,
     actionLog, lastGuildFencedCard,
     steal, heist,
@@ -178,29 +187,19 @@ export function SharedBoard({ canAct = true, localPlayerName }: SharedBoardProps
     return p?.name === localPlayerName
   }
 
+  /** The person looking at this screen, for "YOU" wording: the online seat, or the only human vs bots. */
+  function isViewer(id: string) {
+    const p = players.find(pl => pl.id === id)
+    if (!p || p.bot) return false
+    if (localPlayerName) return p.name === localPlayerName
+    return players.filter(pl => !pl.bot).length === 1
+  }
+
   const [selectedLocation, setSelectedLocation] = useState<Location | null>(null)
   const [sellPhaseOpen, setSellPhaseOpen] = useState(false)
   const [draggedCounterfeit, setDraggedCounterfeit] = useState<DraggedCounterfeit>(null)
 
   const [ambushBreakWinIdx, setAmbushBreakWinIdx] = useState<number | null>(null)
-  // Window-break shatter animation
-  const [shatterInfo, setShatterInfo] = useState<{ windowLines: string[]; cause: string } | null>(null)
-  const prevWindowsRef = useRef<{ id: string; windows: Player['windows'] }[]>([])
-  // Steal toast notification
-  const [stealToasts, setStealToasts] = useState<Array<{
-    id: string
-    aggressorClassId: string; aggressorName: string
-    victimClassId: string; victimName: string
-    cardName: string; cardImageFile: string | null
-  }>>([])
-  const [breakToasts, setBreakToasts] = useState<Array<{
-    id: string
-    victimName: string
-    victimClassId: string
-    windowText: string
-    cause: string
-  }>>([])
-  const prevLogIdRef = useRef<string | null>(null)
   // Night Watcher transfer toast
   const [nightWatcherToast, setNightWatcherToast] = useState<{
     recipientName: string; recipientClassId: string
@@ -250,20 +249,6 @@ export function SharedBoard({ canAct = true, localPlayerName }: SharedBoardProps
   const overflowPlayer = players.find(p => p.hoard.length > 8) ?? null
   const patienceForagePeek = foragePeek?.source === 'patience' ? foragePeek : null
 
-  function pushStealToast(toast: Omit<(typeof stealToasts)[number], 'id'>) {
-    const id = `${Date.now()}-${Math.random()}`
-    setStealToasts(prev => [{ id, ...toast }, ...prev].slice(0, 3))
-    playSfx('steal')
-    setTimeout(() => setStealToasts(prev => prev.filter(t => t.id !== id)), 4000)
-  }
-
-  function pushBreakToast(toast: Omit<(typeof breakToasts)[number], 'id'>) {
-    const id = `${Date.now()}-${Math.random()}`
-    setBreakToasts(prev => [{ id, ...toast }, ...prev].slice(0, 3))
-    playSfx('break')
-    setTimeout(() => setBreakToasts(prev => prev.filter(t => t.id !== id)), 4200)
-  }
-
   function pushCoinToast(toast: Omit<(typeof coinToasts)[number], 'id'>) {
     const id = `${Date.now()}-${Math.random()}`
     setCoinToasts(prev => [{ id, ...toast }, ...prev].slice(0, 4))
@@ -298,94 +283,14 @@ export function SharedBoard({ canAct = true, localPlayerName }: SharedBoardProps
     }
   }, [round])
 
-  // Shatter animation: fire when the local player's window (online) or any player's window (local) is newly broken
+  // Steals, breaks, heists …: detected from state changes and shown in the IncidentSpotlight
+  useIncidentFeed()
+  const spotlight = useIncidentStore(s => s.queue[0])
   useEffect(() => {
-    const prev = prevWindowsRef.current
-    const watchedPlayers = localPlayerName
-      ? players.filter(p => p.name === localPlayerName)  // online: only local player
-      : players                                           // local: any player
-    const windowLines: string[] = []
-    const brokenEvents: Array<{ player: Player; windowIdx: number; cardName?: string }> = []
-    watchedPlayers.forEach(p => {
-      const prevEntry = prev.find(e => e.id === p.id)
-      if (!prevEntry) return
-      p.windows.forEach((w, i) => {
-        if (w.status === 'broken' && prevEntry.windows[i]?.status !== 'broken') {
-          windowLines.push(`${p.name}'s Window ${i + 1}${w.card ? ` (${w.card.name})` : ''} shattered!`)
-          brokenEvents.push({ player: p, windowIdx: i, cardName: w.card?.name })
-        }
-      })
-    })
-    // Always snapshot current state so future renders don't re-fire
-    prevWindowsRef.current = players.map(p => ({ id: p.id, windows: p.windows }))
-
-    if (windowLines.length > 0) {
-      // The most recent log entry describes who caused the break
-      const cause = actionLog[0]?.message ?? ''
-      brokenEvents.forEach(event => {
-        pushBreakToast({
-          victimName: event.player.name,
-          victimClassId: event.player.classId,
-          windowText: `Window ${event.windowIdx + 1}${event.cardName ? ` - ${event.cardName}` : ''}`,
-          cause,
-        })
-      })
-      setShatterInfo({ windowLines, cause })
-      const t = setTimeout(() => setShatterInfo(null), 2800)
-      return () => clearTimeout(t)
-    }
-  }, [players]) // eslint-disable-line react-hooks/exhaustive-deps
-
-  // Steal toast: fire when any new log entry describes a card being taken.
-  // We scan ALL entries newer than prevLogIdRef so that batched updates (e.g. steal()
-  // followed immediately by movePawn() in the same event handler) don't cause the steal
-  // entry to be pushed to actionLog[1] and missed.
-  useEffect(() => {
-    if (actionLog.length === 0) return
-    // Collect every entry added since the last render
-    const newEntries = []
-    for (const entry of actionLog) {
-      if (entry.id === prevLogIdRef.current) break
-      newEntries.push(entry)
-    }
-    if (newEntries.length === 0) return
-    prevLogIdRef.current = actionLog[0].id
-
-    function findCardImage(cardName: string) {
-      for (const p of players) {
-        const hoardCard = p.hoard.find(c => c.name === cardName)
-        if (hoardCard) return hoardCard.imageFile
-        const windowCard = p.windows.find(w => w.card?.name === cardName)?.card
-        if (windowCard) return windowCard.imageFile
-      }
-      const fleaCard = fleaMarket.find(c => c?.name === cardName)
-      return fleaCard?.imageFile ?? null
-    }
-
-    for (const entry of newEntries) {
-      const msg = entry.message
-      if (msg.includes('Night Watcher blocked') || msg.includes('from the Flea Market')) continue
-      // Match "stole/took CARD from VICTIM" — covers steal(), springAmbush, rn06 Reckoning, rn09 Shadow
-      const match = msg.match(/\b(?:stole|took)\s+(.+?)\s+from\s+(.+?)(?:\s*[.!,]|\s*—|$)/i)
-      if (!match) continue
-
-      const cardName = match[1].trim()
-      const victimName = match[2].trim()
-
-      const victim = players.find(p => victimName.startsWith(p.name))
-      if (!victim) continue
-
-      const aggressor = entry.playerId ? players.find(p => p.id === entry.playerId) : null
-      pushStealToast({
-        aggressorClassId: aggressor?.classId ?? 'unknown',
-        aggressorName: aggressor?.name ?? '?',
-        victimClassId: victim.classId,
-        victimName: victim.name,
-        cardName,
-        cardImageFile: findCardImage(cardName),
-      })
-    }
-  }, [actionLog]) // eslint-disable-line react-hooks/exhaustive-deps
+    if (!spotlight) return
+    if (spotlight.kind === 'break') playSfx('break')
+    else if (spotlight.kind !== 'blocked') playSfx('steal')
+  }, [spotlight?.id]) // eslint-disable-line react-hooks/exhaustive-deps
 
   useEffect(() => {
     if (actionLog.length === 0) return
@@ -454,6 +359,8 @@ export function SharedBoard({ canAct = true, localPlayerName }: SharedBoardProps
     if (!newHolder) return
     if (newHolder.id === prevHolderId) return
 
+    // Moving because they were just hit? The incident spotlight already says so
+    if (useIncidentStore.getState().queue.some(i => i.victimId === newHolder.id)) return
     setNightWatcherToast({ recipientName: newHolder.name, recipientClassId: newHolder.classId })
     const t = setTimeout(() => setNightWatcherToast(null), 4000)
     return () => clearTimeout(t)
@@ -549,7 +456,6 @@ export function SharedBoard({ canAct = true, localPlayerName }: SharedBoardProps
   const actionsLeft = Math.max(0, maxActions - turnActionsUsed)
   const turnOver = turnActionsUsed >= maxActions
   const yourTurnToast = false
-  const stealToast = stealToasts[0] ?? null
   const passiveCoinToast = coinToasts[0] ?? null
   const currentTheme = currentPlayer ? (CLASS_THEME[currentPlayer.classId] ?? DEFAULT_CLASS_THEME) : DEFAULT_CLASS_THEME
 
@@ -575,23 +481,7 @@ export function SharedBoard({ canAct = true, localPlayerName }: SharedBoardProps
     <>
       <DrawnCardsToast localPlayerId={localPlayerId} suppress={!!currentPlayer?.bot} />
 
-      {/* Window-break shatter overlay */}
-      {shatterInfo && (
-        <div className="fixed inset-0 z-[600] pointer-events-none shatter-overlay flex flex-col items-center justify-center px-6">
-          <div className="bg-black/75 rounded-2xl border border-red-900/60 px-8 py-5 text-center space-y-2 shadow-2xl">
-            {shatterInfo.windowLines.map((line, i) => (
-              <div key={i} className="text-xl font-display font-bold text-amber-200">
-                💥 {line}
-              </div>
-            ))}
-            {shatterInfo.cause && (
-              <div className="text-sm text-parchment-200 font-semibold max-w-xs mx-auto leading-snug">
-                {shatterInfo.cause}
-              </div>
-            )}
-          </div>
-        </div>
-      )}
+      <IncidentSpotlight isMe={isViewer} />
 
       {/* "Your Turn" toast — prominent banner for the local player */}
       {yourTurnToast && (
@@ -632,78 +522,8 @@ export function SharedBoard({ canAct = true, localPlayerName }: SharedBoardProps
         )
       })()}
 
-      {(stealToasts.length > 0 || breakToasts.length > 0 || nightWatcherToast || coinToasts.length > 0 || rogueToasts.length > 0) && (
+      {(nightWatcherToast || coinToasts.length > 0 || rogueToasts.length > 0) && (
         <div className="fixed top-8 left-0 right-0 flex flex-col items-center gap-3 z-[590] pointer-events-none">
-
-          {/* Steal toast */}
-          {stealToast && (() => {
-            const CLASS_BG: Record<string, string> = {
-              barbarian: 'bg-red-950 border-red-400',
-              monk:      'bg-amber-950 border-amber-400',
-              paladin:   'bg-blue-950 border-blue-400',
-              ranger:    'bg-green-950 border-green-400',
-              rogue:     'bg-purple-950 border-purple-400',
-              shaman:    'bg-teal-950 border-teal-400',
-              sorcerer:  'bg-violet-950 border-violet-400',
-              warlock:   'bg-indigo-950 border-indigo-400',
-            }
-            return (
-            <div className={`steal-toast ${CLASS_BG[stealToast.aggressorClassId] ?? 'bg-ink-950 border-amber-500'} border-2 rounded-2xl px-10 py-6 shadow-2xl shadow-black/60 flex items-center gap-6`}>
-              {/* Aggressor */}
-              <div className="flex flex-col items-center gap-2">
-                <div className="w-28 h-28 rounded-full overflow-hidden border-2 border-red-500/80 shadow-lg shadow-red-900/50">
-                  <img src={markerSrc(stealToast.aggressorClassId)} alt={stealToast.aggressorName} className="w-full h-full object-cover" />
-                </div>
-                <span className="text-sm text-parchment-300 max-w-[100px] truncate font-semibold">{stealToast.aggressorName}</span>
-              </div>
-              {/* Stolen card */}
-              <div className="flex flex-col items-center gap-2">
-                <div className="text-white font-display font-bold text-xl leading-none">stole</div>
-                <div className="relative">
-                  {stealToast.cardImageFile ? (
-                    <div className="w-20 h-[112px] rounded-md overflow-hidden border-2 border-amber-500/60 shadow-lg">
-                      <img src={stealToast.cardImageFile} alt={stealToast.cardName} className="w-full h-full object-cover" />
-                    </div>
-                  ) : (
-                    <div className="w-20 h-[112px] rounded-md bg-ink-800 border-2 border-amber-500/40 flex items-center justify-center">
-                      <span className="text-xs text-parchment-400 text-center px-2 leading-tight">{stealToast.cardName}</span>
-                    </div>
-                  )}
-                  {/* Animated steal hand swooping onto the card */}
-                  <div className="steal-hand absolute inset-0 flex items-center justify-center pointer-events-none">
-                    <span className="text-5xl drop-shadow-[0_2px_8px_rgba(0,0,0,0.9)] select-none">🤚</span>
-                  </div>
-                </div>
-                <span className="text-sm text-parchment-100 font-semibold max-w-[88px] truncate">{stealToast.cardName}</span>
-              </div>
-              {/* Victim */}
-              <div className="flex flex-col items-center gap-2">
-                <div className="text-parchment-500 text-base">from</div>
-                <div className="w-28 h-28 rounded-full overflow-hidden border-2 border-parchment-600/60 shadow-lg opacity-80">
-                  <img src={markerSrc(stealToast.victimClassId)} alt={stealToast.victimName} className="w-full h-full object-cover" />
-                </div>
-                <span className="text-sm text-parchment-300 max-w-[100px] truncate">{stealToast.victimName}</span>
-              </div>
-            </div>
-            )
-          })()}
-
-          {breakToasts[0] && (() => {
-            const toast = breakToasts[0]
-            const theme = CLASS_THEME[toast.victimClassId] ?? DEFAULT_CLASS_THEME
-            return (
-              <div className={`steal-toast ${theme.panel} ${theme.border} border-2 rounded-2xl px-7 py-5 shadow-2xl ${theme.glow} flex items-center gap-4`}>
-                <div className="w-16 h-16 rounded-full overflow-hidden border-2 border-red-400/80 shadow-lg flex-shrink-0">
-                  <img src={markerSrc(toast.victimClassId)} alt={toast.victimName} className="w-full h-full object-cover" />
-                </div>
-                <div className="flex flex-col gap-0.5">
-                  <div className="text-red-300 font-display font-bold text-xl leading-tight">Window Broken</div>
-                  <div className="text-parchment-100 text-sm font-semibold">{toast.victimName} - {toast.windowText}</div>
-                  {toast.cause && <div className="text-parchment-400 text-xs leading-snug max-w-[360px]">{toast.cause}</div>}
-                </div>
-              </div>
-            )
-          })()}
 
           {rogueToasts[0] && (() => {
             const toast = rogueToasts[0]
@@ -976,6 +796,14 @@ export function SharedBoard({ canAct = true, localPlayerName }: SharedBoardProps
               Sell phase pending
             </button>
           )}
+          {currentPlayer?.curse && (
+            <span
+              title={CURSE_BY_ID[currentPlayer.curse.id].text}
+              className="text-[10px] bg-purple-900/50 border border-purple-500/50 text-purple-200 px-2 py-0.5 rounded font-semibold"
+            >
+              {CURSE_BY_ID[currentPlayer.curse.id].icon} Cursed: {CURSE_BY_ID[currentPlayer.curse.id].name} — {CURSE_BY_ID[currentPlayer.curse.id].text}
+            </span>
+          )}
         </div>
         <div className="justify-self-end">
         {canAct && (
@@ -1118,6 +946,16 @@ export function SharedBoard({ canAct = true, localPlayerName }: SharedBoardProps
                           <img src="/cards/tokens/Clan.png" alt="Clan marker" className="w-6 h-6 rounded-full border border-red-400/60" />
                           <span className="text-[10px] font-bold text-red-300 whitespace-nowrap">Clan</span>
                         </div>
+                      </div>
+                    </div>
+                  )}
+
+                  {/* Warlock's Imp */}
+                  {imp?.location === loc.id && (
+                    <div className="absolute bottom-1.5 left-1.5 z-10" title={`${players.find(p => p.id === imp.warlockId)?.name}'s Imp — the next player here rolls: 1–2 it steals a card, 3–4 it breaks a window, 5–6 banished`}>
+                      <div className="relative flex items-center gap-1 bg-purple-950/90 border-2 border-purple-400 rounded-full px-2 py-0.5 shadow-lg shadow-purple-900/60 animate-pulse">
+                        <span className="text-base leading-none">👹</span>
+                        <span className="text-[10px] font-bold text-purple-200 whitespace-nowrap">Imp</span>
                       </div>
                     </div>
                   )}
@@ -1457,28 +1295,15 @@ export function SharedBoard({ canAct = true, localPlayerName }: SharedBoardProps
                   )}
                   {isBreak && breakableWindows.length > 0 && (
                     <div className="space-y-1.5">
-                      <div className="text-sm text-parchment-400">Choose which window to break:</div>
-                      <div className="flex gap-2 justify-center flex-wrap">
-                        {breakableWindows.map(({ w, i }) => (
-                          <button
-                            key={w.id}
-                            onClick={() => setAmbushBreakWinIdx(i)}
-                            className={`flex flex-col items-center gap-1 rounded-lg border-2 p-1.5 transition-all ${
-                              ambushBreakWinIdx === i
-                                ? 'bg-red-900/40 border-red-400 text-red-200'
-                                : 'bg-ink-700 border-parchment-700/30 text-parchment-300 hover:border-red-500/50'
-                            }`}
-                          >
-                            <div className="w-16 h-24 rounded overflow-hidden border border-parchment-700/30 bg-ink-900/60 flex items-center justify-center">
-                              {w.card
-                                ? <img src={w.card.imageFile} alt={w.card.name} className="w-full h-full object-cover" />
-                                : <span className="text-[9px] text-parchment-600">Empty</span>
-                              }
-                            </div>
-                            <span className="text-[10px] font-semibold">Win {i + 1}</span>
-                            {w.card && <span className="text-[9px] max-w-[70px] truncate">{w.card.name}</span>}
-                          </button>
-                        ))}
+                      <div className="text-sm text-parchment-400">Choose which of {target!.name}&apos;s windows to break:</div>
+                      <div className="flex justify-center">
+                        <WindowPicker
+                          player={target!}
+                          selected={ambushBreakWinIdx !== null ? [ambushBreakWinIdx] : []}
+                          onToggle={i => setAmbushBreakWinIdx(prev => (prev === i ? null : i))}
+                          windowRule={breakWindowRule}
+                          verb="Break"
+                        />
                       </div>
                     </div>
                   )}
@@ -1658,6 +1483,24 @@ export function SharedBoard({ canAct = true, localPlayerName }: SharedBoardProps
             />
           : <WaitingOverlay name={ranger?.name} action="choosing Trick Shot bonus" classId={ranger?.classId} />
       })()}
+
+      {/* Sorcerer, Monk and Warlock prompts */}
+      {twistPending && (isMe(twistPending.warlockId)
+        ? <TwistModal />
+        : <WaitingOverlay name={players.find(p => p.id === twistPending.warlockId)?.name} action="deciding whether to Twist Fate" classId="warlock" />)}
+      {hexPeek && (isMe(hexPeek.warlockId)
+        ? <HexChoiceModal />
+        : <WaitingOverlay name={players.find(p => p.id === hexPeek.warlockId)?.name} action="choosing a curse" classId="warlock" />)}
+      {surge && !twistPending && (isMe(surge.playerId)
+        ? <SurgeModal />
+        : <WaitingOverlay name={players.find(p => p.id === surge.playerId)?.name} action="unleashing a Wild Surge" classId="sorcerer" />)}
+      {mirrorPending && !surge && (isMe(mirrorPending.playerId)
+        ? <MirrorModal />
+        : <WaitingOverlay name={players.find(p => p.id === mirrorPending.playerId)?.name} action="copying a Professional (Mirror Image)" classId="sorcerer" />)}
+      {hotStreak && (isMe(hotStreak.playerId)
+        ? <HotStreakModal />
+        : <WaitingOverlay name={players.find(p => p.id === hotStreak.playerId)?.name} action="on a Hot Streak" classId="sorcerer" />)}
+      {appraisePeek?.source && isMe(appraisePeek.playerId) && <AppraiseKeepModal />}
 
       {/* Visitor contribution prize that needs a choice */}
       {visitorPrizeQueue.length > 0 && (() => {
@@ -2095,8 +1938,12 @@ function ClashRollOffOverlay({
   localPlayerId: string | null
   onAcknowledge: (playerId: string | null) => void
 }) {
-  const rollValues = result.rolls.map(r => r.roll)
-  const [phase, setPhase] = useState<'rolling' | 'landing' | 'settled'>('rolling')
+  // The d6 face and the class bonus (Barbarian +2, Paladin Renown) are shown separately
+  const dieOf = (r: (typeof result.rolls)[number]) => r.die ?? Math.min(6, Math.max(1, r.roll))
+  const bonusOf = (r: (typeof result.rolls)[number]) => r.bonus ?? Math.max(0, r.roll - dieOf(r))
+  const rollValues = result.rolls.map(dieOf)
+  const hasBonus = result.rolls.some(r => bonusOf(r) > 0)
+  const [phase, setPhase] = useState<'rolling' | 'landing' | 'bonus' | 'settled'>('rolling')
   const [displayed, setDisplayed] = useState<number[]>(() =>
     result.rolls.map(() => Math.ceil(Math.random() * 6))
   )
@@ -2117,7 +1964,11 @@ function ClashRollOffOverlay({
         finishedRef.current = true
         setDisplayed(rollValues)
         setPhase('landing')
-        timerRef.current = setTimeout(() => setPhase('settled'), 400)
+        timerRef.current = setTimeout(() => {
+          if (!hasBonus) { setPhase('settled'); return }
+          setPhase('bonus')
+          timerRef.current = setTimeout(() => setPhase('settled'), 1100)
+        }, 450)
         return
       }
       setDisplayed(rollValues.map(rv => {
@@ -2171,19 +2022,38 @@ function ClashRollOffOverlay({
                   className="w-7 h-7 rounded-full border border-white/30 object-cover"
                 />
                 <div className="text-sm font-semibold">{player?.name.split(' ')[0]}</div>
-                <div
-                  className={`text-[64px] leading-none select-none ${
-                    phase === 'rolling' ? 'dice-tumbling' :
-                    phase === 'landing' ? 'dice-landing'  : ''
-                  }`}
-                >
-                  {FACES_CLASH[(displayed[i] ?? 1) - 1]}
+                <div className="relative">
+                  <div
+                    className={`text-[64px] leading-none select-none ${
+                      phase === 'rolling' ? 'dice-tumbling' :
+                      phase === 'landing' ? 'dice-landing'  :
+                      phase === 'bonus' && bonusOf(r) > 0 ? 'die-struck' : ''
+                    }`}
+                  >
+                    {FACES_CLASH[(displayed[i] ?? 1) - 1]}
+                  </div>
+                  {(phase === 'bonus' || phase === 'settled') && bonusOf(r) > 0 && (
+                    <>
+                      <span className="bonus-axe absolute -right-8 top-1 text-4xl drop-shadow-[0_2px_6px_rgba(0,0,0,0.8)] pointer-events-none">
+                        {player?.classId === 'barbarian' ? '🪓' : player?.classId === 'paladin' ? '🛡️' : '✨'}
+                      </span>
+                      <span className="bonus-pop absolute -right-5 bottom-0 rounded-full bg-red-600 text-white text-sm font-black px-1.5 py-0.5 shadow-lg pointer-events-none">
+                        +{bonusOf(r)}
+                      </span>
+                    </>
+                  )}
                 </div>
-                {phase === 'settled' && (
-                  <div className="dice-result-in text-2xl font-bold font-display">{r.roll}</div>
-                )}
-                {phase !== 'settled' && (
-                  <div style={{ height: '2rem' }} />
+                {phase === 'settled' ? (
+                  <div className="dice-result-in flex flex-col items-center leading-tight">
+                    <div className="text-2xl font-bold font-display">{r.roll}</div>
+                    {bonusOf(r) > 0 && (
+                      <div className="text-[10px] text-parchment-400">
+                        {dieOf(r)} + {bonusOf(r)} {player?.classId === 'barbarian' ? 'Fearsome Champion' : player?.classId === 'paladin' ? 'Renown' : 'bonus'}
+                      </div>
+                    )}
+                  </div>
+                ) : (
+                  <div style={{ height: '2.6rem' }} />
                 )}
                 {phase === 'settled' && isWinner && (
                   <div className="text-xs text-gold-400 font-semibold">WINNER</div>
@@ -3705,7 +3575,7 @@ function RogueShadowsInterruptModal({
 
   return (
     <div className="fixed inset-0 z-[360] flex items-center justify-center bg-black/65 px-4">
-      <div className="bg-ink-900 border-2 border-slate-400/70 rounded-xl p-5 shadow-2xl max-w-lg w-full text-center space-y-3">
+      <div className="bg-ink-900 border-2 border-slate-400/70 rounded-xl p-5 shadow-2xl max-w-2xl w-full text-center space-y-3 max-h-[90vh] overflow-y-auto">
         <div className="flex items-center justify-center gap-4">
           <img src={markerSrc(rogue.classId)} alt={rogue.name} className="w-14 h-14 rounded-full border-2 border-slate-400/70 object-cover shadow-lg" />
           <div className="hidden">
@@ -3786,31 +3656,24 @@ function RogueCounterfeitStealModal({
   onSkip: () => void
 }) {
   const rogue = players.find(p => p.id === pending.rogueId)
-  const stealTargets = players.filter(p => p.id !== pending.rogueId && !p.hasNightWatcher && p.hoard.length > 0)
-  const heistTargets = players.filter(p => p.id !== pending.rogueId && !p.hasNightWatcher && p.windows.some(w => w.status !== 'shuttered' && w.card))
   const [mode, setMode] = useState<'steal' | 'heist'>('steal')
-  const [targetId, setTargetId] = useState(stealTargets[0]?.id ?? heistTargets[0]?.id ?? '')
-  const target = players.find(p => p.id === targetId) ?? stealTargets[0] ?? heistTargets[0]
-  const heistWindows = target?.windows.map((w, i) => ({ w, i })).filter(({ w }) => w.status !== 'shuttered' && w.card) ?? []
-  const [windowIdx, setWindowIdx] = useState(heistWindows[0]?.i ?? 0)
-  const [counterfeitId, setCounterfeitId] = useState(rogue?.counterfeitHand[0]?.id ?? '')
-  const selectedCounterfeit = rogue?.counterfeitHand.find(c => c.id === counterfeitId) ?? rogue?.counterfeitHand[0]
-  const canSteal = mode === 'steal' && !!target && stealTargets.some(p => p.id === target.id)
-  const canHeist = mode === 'heist' && !!target && heistWindows.length > 0 && !!selectedCounterfeit
+  const [target, setTarget] = useState<TargetChoice | null>(null)
+  const [counterfeitId, setCounterfeitId] = useState('')
+  const selectedCounterfeit = rogue?.counterfeitHand.find(c => c.id === counterfeitId)
+  const targetPlayer = target ? players.find(p => p.id === target.playerId) : undefined
+  const canSteal = mode === 'steal' && !!targetPlayer
+  const canHeist = mode === 'heist' && !!targetPlayer && target!.windowIdxs.length === 1 && !!selectedCounterfeit
 
   if (!rogue) return null
 
   function chooseMode(nextMode: 'steal' | 'heist') {
     setMode(nextMode)
-    const nextTarget = (nextMode === 'steal' ? stealTargets : heistTargets)[0]
-    setTargetId(nextTarget?.id ?? '')
-    const nextWindow = nextTarget?.windows.findIndex(w => w.status !== 'shuttered' && w.card) ?? -1
-    setWindowIdx(nextWindow >= 0 ? nextWindow : 0)
+    setTarget(null)
   }
 
   return (
     <div className="fixed inset-0 z-[370] flex items-center justify-center bg-black/70 px-4">
-      <div className="bg-ink-900 border-2 border-slate-400/70 rounded-xl p-5 shadow-2xl max-w-lg w-full text-center space-y-3">
+      <div className="bg-ink-900 border-2 border-slate-400/70 rounded-xl p-5 shadow-2xl max-w-2xl w-full text-center space-y-3 max-h-[90vh] overflow-y-auto">
         <div className="flex items-center justify-center gap-3">
           <img src={pending.cardImageFile} alt={pending.cardName} className="w-16 h-24 rounded object-cover border border-slate-400/60 shadow-lg" />
           <div className="text-left">
@@ -3829,51 +3692,22 @@ function RogueCounterfeitStealModal({
           </button>
         </div>
 
-        <div className="text-xs text-parchment-500 text-left">Target:</div>
-        <div className="flex flex-wrap gap-1.5 justify-center">
-          {(mode === 'steal' ? stealTargets : heistTargets).map(p => (
-            <button
-              key={p.id}
-              type="button"
-              onClick={() => {
-                setTargetId(p.id)
-                const firstWindow = p.windows.findIndex(w => w.status !== 'shuttered' && w.card)
-                if (firstWindow >= 0) setWindowIdx(firstWindow)
-              }}
-              className={`text-xs px-2 py-1 rounded border ${target?.id === p.id ? 'bg-slate-600/60 border-slate-300 text-slate-100' : 'bg-ink-700 border-parchment-700/30 text-parchment-400'}`}
-            >
-              {p.name}
-            </button>
-          ))}
-        </div>
-
-        {mode === 'heist' && (
+        {mode === 'steal' ? (
+          <TargetPicker actorId={rogue.id} players={players} value={target} onChange={setTarget} playerRule={stealRule} verb="Steal" accent="slate" />
+        ) : (
           <>
-            <div className="text-xs text-parchment-500 text-left">Window:</div>
-            <div className="flex flex-wrap gap-2 justify-center">
-              {heistWindows.map(({ w, i }) => (
-                <button key={w.id} type="button" onClick={() => setWindowIdx(i)} className={`flex flex-col items-center gap-1 rounded-lg border-2 p-1.5 transition-all ${windowIdx === i ? 'bg-slate-700/60 border-slate-300 text-slate-100' : 'bg-ink-700 border-parchment-700/30 text-parchment-400 hover:border-slate-400/70'}`}>
-                  <img src={w.card!.imageFile} alt={w.card!.name} className="w-16 h-24 rounded object-cover border border-parchment-700/30" />
-                  <span className="text-[10px] font-semibold">Win {i + 1}</span>
-                  <span className="text-[9px] max-w-[70px] truncate">{w.card!.name}</span>
-                </button>
-              ))}
-            </div>
-
-            <div className="text-xs text-parchment-500 text-left">Counterfeit replacement:</div>
+            <TargetPicker
+              actorId={rogue.id} players={players} value={target} onChange={setTarget}
+              playerRule={windowTargetRule(heistWindowRule)} windowRule={heistWindowRule} verb="Heist" accent="slate"
+            />
+            <div className="text-xs text-parchment-500 text-left">Counterfeit to leave behind:</div>
             <div className="flex flex-wrap gap-1.5 justify-center">
               {rogue.counterfeitHand.map(c => (
-                <ResourceCardMini key={c.id} card={c} size="lg" selected={(counterfeitId || selectedCounterfeit?.id) === c.id} onClick={() => setCounterfeitId(c.id)} />
+                <ResourceCardMini key={c.id} card={c} size="lg" selected={counterfeitId === c.id} onClick={() => setCounterfeitId(c.id)} />
               ))}
             </div>
           </>
         )}
-
-        {(mode === 'steal' && stealTargets.length === 0) || (mode === 'heist' && (heistTargets.length === 0 || rogue.counterfeitHand.length === 0)) ? (
-          <div className="text-xs text-red-400 font-semibold">
-            {mode === 'steal' ? 'No steal targets available.' : rogue.counterfeitHand.length === 0 ? 'No Counterfeits in hand.' : 'No heist targets available.'}
-          </div>
-        ) : null}
 
         <div className="flex gap-2 pt-1">
           <button type="button" onClick={onSkip} className="btn-secondary flex-1 text-sm py-2">
@@ -3882,9 +3716,9 @@ function RogueCounterfeitStealModal({
           <button
             type="button"
             onClick={() => {
-              if (!target) return
-              if (mode === 'steal' && canSteal) onSteal(target.id)
-              if (mode === 'heist' && canHeist && selectedCounterfeit) onHeist(target.id, windowIdx, selectedCounterfeit.id)
+              if (!targetPlayer) return
+              if (mode === 'steal' && canSteal) onSteal(targetPlayer.id)
+              if (mode === 'heist' && canHeist && selectedCounterfeit) onHeist(targetPlayer.id, target!.windowIdxs[0], selectedCounterfeit.id)
             }}
             disabled={!canSteal && !canHeist}
             className="btn-primary flex-1 text-sm py-2 disabled:opacity-50"
@@ -3921,8 +3755,7 @@ function RogueCounterfeitActionModal({
   const [pendingAuctionRoll, setPendingAuctionRoll] = useState<number | null>(null)
   const [tradeCardIds, setTradeCardIds] = useState<string[]>([])
   const [tradeFleaIdxs, setTradeFleaIdxs] = useState<number[]>([])
-  const [breakTargetId, setBreakTargetId] = useState('')
-  const [breakWindowIdx, setBreakWindowIdx] = useState(1)
+  const [breakTarget, setBreakTarget] = useState<TargetChoice | null>(null)
 
   if (!rogue) return null
 
@@ -3935,10 +3768,6 @@ function RogueCounterfeitActionModal({
     ...rogue.windows.flatMap(w => w.card && w.status !== 'broken' ? [w.card] : []),
   ]
   const fleaOptions = fleaMarket.map((c, i) => ({ c, i })).filter(({ c }) => c !== null)
-  const breakTargets = players
-    .filter(p => p.id !== rogue.id && !p.hasNightWatcher)
-    .flatMap(p => p.windows.map((w, i) => ({ player: p, w, i })))
-    .filter(({ w, i }) => i > 0 && i < 4 && w.status === 'normal')
 
   function toggleTradeCard(cardId: string) {
     setTradeCardIds(prev =>
@@ -3962,7 +3791,7 @@ function RogueCounterfeitActionModal({
     if (!cardId) return
     onAuction(cardId, auctionZone, auctionZone === 'window' ? auctionWindowIdx : undefined)
     const store = useGameStore.getState()
-    if (store.trickShotPending || store.rn04RerollPending) {
+    if (store.trickShotPending || store.rn04RerollPending || store.twistPending) {
       onDone()
       return
     }
@@ -3980,8 +3809,8 @@ function RogueCounterfeitActionModal({
   }
 
   function resolveBreak() {
-    if (!breakTargetId) return
-    onBreak(breakTargetId, breakWindowIdx)
+    if (!breakTarget || breakTarget.windowIdxs.length === 0) return
+    onBreak(breakTarget.playerId, breakTarget.windowIdxs[0])
     onDone()
   }
 
@@ -4084,25 +3913,10 @@ function RogueCounterfeitActionModal({
         )}
 
         {pending.effect.kind === 'break' && (
-          <div className="space-y-2">
-            <div className="flex flex-wrap gap-2 justify-center">
-              {breakTargets.map(({ player, w, i }) => (
-                <button
-                  key={`${player.id}-${i}`}
-                  type="button"
-                  onClick={() => {
-                    setBreakTargetId(player.id)
-                    setBreakWindowIdx(i)
-                  }}
-                  className={`flex flex-col items-center gap-1 rounded-lg border-2 p-1.5 ${breakTargetId === player.id && breakWindowIdx === i ? 'bg-slate-700/60 border-slate-300 text-slate-100' : 'bg-ink-700 border-parchment-700/30 text-parchment-400'}`}
-                >
-                  <div className="text-[10px] font-semibold">{player.name} W{i + 1}</div>
-                  {w.card ? <img src={w.card.imageFile} alt={w.card.name} className="w-16 h-24 rounded object-cover border border-parchment-700/30" /> : <div className="w-16 h-24 rounded border border-parchment-700/30 bg-ink-950/60" />}
-                </button>
-              ))}
-              {breakTargets.length === 0 && <div className="text-xs text-red-400 font-semibold">No break targets available.</div>}
-            </div>
-          </div>
+          <TargetPicker
+            actorId={rogue.id} players={players} value={breakTarget} onChange={setBreakTarget}
+            playerRule={windowTargetRule(breakWindowRule)} windowRule={breakWindowRule} verb="Break"
+          />
         )}
 
         <div className="flex gap-2 pt-1">
@@ -4119,7 +3933,7 @@ function RogueCounterfeitActionModal({
             disabled={
               (pending.effect.kind === 'auction' && (auctionZone === 'hoard' ? !auctionCardId : !rogue.windows[auctionWindowIdx]?.card)) ||
               (pending.effect.kind === 'trade' && (tradeCardIds.length === 0 || tradeCardIds.length !== tradeFleaIdxs.length)) ||
-              (pending.effect.kind === 'break' && !breakTargetId)
+              (pending.effect.kind === 'break' && !breakTarget?.windowIdxs.length)
             }
             className="btn-primary flex-1 text-sm py-2 disabled:opacity-50"
           >
@@ -4280,15 +4094,9 @@ function TrickShotBonusModal({
   onBreak: (windowId: string) => void
 }) {
   const [choice, setChoice] = useState<'launder' | 'break' | null>(null)
-  const [selectedWindowId, setSelectedWindowId] = useState('')
-
-  const breakableWindows = breakTargets.flatMap(p =>
-    p.hasNightWatcher
-      ? []
-      : p.windows
-        .map((w, i) => ({ playerId: p.id, playerName: p.name, windowId: w.id, idx: i, status: w.status, card: w.card }))
-        .filter(w => w.idx > 0 && w.idx < 4 && w.status === 'normal')
-  )
+  const [target, setTarget] = useState<TargetChoice | null>(null)
+  const targetPlayer = target ? breakTargets.find(p => p.id === target.playerId) : undefined
+  const selectedWindowId = targetPlayer && target!.windowIdxs.length ? targetPlayer.windows[target!.windowIdxs[0]].id : ''
 
   function confirm() {
     if (choice === 'launder') { onLaunder(); return }
@@ -4297,7 +4105,7 @@ function TrickShotBonusModal({
 
   return (
     <div className="fixed inset-0 z-[325] flex items-center justify-center bg-black/60">
-      <div className="bg-ink-900 border-2 border-green-500/60 rounded-xl p-5 shadow-2xl max-w-md w-full mx-4 space-y-3">
+      <div className="bg-ink-900 border-2 border-green-500/60 rounded-xl p-5 shadow-2xl max-w-2xl w-full mx-4 space-y-3 max-h-[90vh] overflow-y-auto">
         <div className="text-center">
           {ranger && (
             <div className="flex justify-center mb-2">
@@ -4342,38 +4150,10 @@ function TrickShotBonusModal({
           </button>
         </div>
         {choice === 'break' && (
-          <>
-            {breakTargets.some(p => p.hasNightWatcher) && (
-              <div className="text-xs text-parchment-500 italic">Night Watcher holders cannot be targeted for Break.</div>
-            )}
-            {breakableWindows.length === 0 ? (
-              <div className="text-xs text-parchment-500 italic">No breakable middle windows available.</div>
-            ) : (
-              <div className="flex flex-wrap gap-2 mt-1 justify-center">
-                {breakableWindows.map(w => (
-                  <button
-                    key={w.windowId}
-                    type="button"
-                    onClick={() => setSelectedWindowId(w.windowId)}
-                    className={`flex flex-col items-center gap-1 rounded-lg border-2 p-1.5 transition-all ${
-                      selectedWindowId === w.windowId
-                        ? 'bg-red-900/40 border-red-400 text-red-200'
-                        : 'bg-ink-700 border-parchment-700/30 text-parchment-400 hover:border-red-500/50'
-                    }`}
-                  >
-                    <div className="w-16 h-24 rounded overflow-hidden border border-parchment-700/30 bg-ink-900/60 flex items-center justify-center">
-                      {w.card
-                        ? <img src={w.card.imageFile} alt={w.card.name} className="w-full h-full object-cover" />
-                        : <span className="text-[9px] text-parchment-600">Empty</span>
-                      }
-                    </div>
-                    <span className="text-[10px] font-semibold">{w.playerName} · Win {w.idx + 1}</span>
-                    {w.card && <span className="text-[9px] max-w-[80px] truncate">{w.card.name}</span>}
-                  </button>
-                ))}
-              </div>
-            )}
-          </>
+          <TargetPicker
+            actorId={ranger?.id ?? ''} players={breakTargets} value={target} onChange={setTarget}
+            playerRule={windowTargetRule(breakWindowRule)} windowRule={breakWindowRule} verb="Break"
+          />
         )}
         <button
           onClick={confirm}

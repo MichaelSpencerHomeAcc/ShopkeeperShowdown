@@ -1,9 +1,9 @@
 import { useState } from 'react'
-import {
-  useGameStore, describePrize, rankContributors, prizeStealTargets, prizeBreakTargets,
-} from '../store/gameStore'
+import { useGameStore, describePrize, rankContributors } from '../store/gameStore'
 import type { RepType, VisitorPrize } from '../types'
 import { ResourceCardMini } from './ResourceCardMini'
+import { TargetPicker, type TargetChoice } from './TargetPicker'
+import { breakWindowRule, stealRule, windowTargetRule } from '../utils/targets'
 
 const PRIZE_ICON: Record<VisitorPrize['kind'], string> = {
   coins: '💰', rep: '⭐', refresh: '🔄', take: '🛒', draw: '🃏', steal: '🗝️', break: '🔨',
@@ -50,14 +50,14 @@ export function VisitorPrizeModal() {
   const resolveVisitorPrize = useGameStore(s => s.resolveVisitorPrize)
   const skipVisitorPrize = useGameStore(s => s.skipVisitorPrize)
   const [fleaIdxs, setFleaIdxs] = useState<number[]>([])
-  const [target, setTarget] = useState<{ id: string; windowIdx?: number } | null>(null)
+  const [target, setTarget] = useState<TargetChoice | null>(null)
 
   if (!pending) return null
   const winner = players.find(p => p.id === pending.playerId)
   const { prize } = pending
 
-  const stealTargets = prize.kind === 'steal' ? prizeStealTargets({ players }, pending.playerId) : []
-  const breakTargets = prize.kind === 'break' ? prizeBreakTargets({ players }, pending.playerId) : []
+  const breakTargetRule = windowTargetRule(breakWindowRule)
+  const others = players.filter(p => p.id !== pending.playerId)
 
   function done(choice: Parameters<typeof resolveVisitorPrize>[0]) {
     resolveVisitorPrize(choice)
@@ -71,12 +71,12 @@ export function VisitorPrizeModal() {
 
   const noOptions =
     (prize.kind === 'take' && fleaMarket.every(c => !c)) ||
-    (prize.kind === 'steal' && stealTargets.length === 0) ||
-    (prize.kind === 'break' && breakTargets.length === 0)
+    (prize.kind === 'steal' && others.every(p => stealRule(p))) ||
+    (prize.kind === 'break' && others.every(p => breakTargetRule(p)))
 
   return (
     <div className="fixed inset-0 z-[400] flex items-center justify-center bg-black/60">
-      <div className="bg-ink-900 border-2 border-gold-500/60 rounded-xl p-5 shadow-2xl max-w-xl w-full mx-4 space-y-4 max-h-[90vh] overflow-y-auto">
+      <div className="bg-ink-900 border-2 border-gold-500/60 rounded-xl p-5 shadow-2xl max-w-2xl w-full mx-4 space-y-4 max-h-[90vh] overflow-y-auto">
         <div className="text-center space-y-1">
           <div className="text-base font-display font-bold text-gold-300">
             🏆 {pending.visitorName} — {pending.place === 1 ? '1st' : '2nd'} prize
@@ -108,42 +108,32 @@ export function VisitorPrizeModal() {
         )}
 
         {prize.kind === 'steal' && (
-          <div className="space-y-2">
-            <div className="text-xs text-parchment-500 text-center">Steal a random hoard card from:</div>
-            <div className="flex flex-wrap gap-2 justify-center">
-              {stealTargets.map(p => (
-                <button
-                  key={p.id}
-                  type="button"
-                  onClick={() => setTarget({ id: p.id })}
-                  className={`rounded-lg border-2 px-3 py-2 text-sm font-semibold ${target?.id === p.id ? 'bg-slate-700/60 border-slate-300 text-slate-100' : 'bg-ink-700 border-parchment-700/30 text-parchment-400'}`}
-                >
-                  {p.name} <span className="text-[10px] text-parchment-500">({p.hoard.length} in hoard)</span>
-                </button>
-              ))}
-            </div>
-          </div>
+          <TargetPicker
+            actorId={pending.playerId}
+            players={players}
+            value={target}
+            onChange={setTarget}
+            playerRule={stealRule}
+            verb="Steal"
+            accent="amber"
+          />
         )}
 
         {prize.kind === 'break' && (
-          <div className="flex flex-wrap gap-2 justify-center">
-            {breakTargets.map(({ player, windowIdx }) => {
-              const w = player.windows[windowIdx]
-              const selected = target?.id === player.id && target.windowIdx === windowIdx
-              return (
-                <button
-                  key={`${player.id}-${windowIdx}`}
-                  type="button"
-                  onClick={() => setTarget({ id: player.id, windowIdx })}
-                  className={`flex flex-col items-center gap-1 rounded-lg border-2 p-1.5 ${selected ? 'bg-slate-700/60 border-slate-300 text-slate-100' : 'bg-ink-700 border-parchment-700/30 text-parchment-400'}`}
-                >
-                  <div className="text-[10px] font-semibold">{player.name} W{windowIdx + 1}</div>
-                  {w.card
-                    ? <img src={w.card.imageFile} alt={w.card.name} className="w-16 h-24 rounded object-cover border border-parchment-700/30" />
-                    : <div className="w-16 h-24 rounded border border-parchment-700/30 bg-ink-950/60" />}
-                </button>
-              )
-            })}
+          <TargetPicker
+            actorId={pending.playerId}
+            players={players}
+            value={target}
+            onChange={setTarget}
+            playerRule={breakTargetRule}
+            windowRule={breakWindowRule}
+            verb="Break"
+          />
+        )}
+
+        {prize.amount > 1 && (prize.kind === 'steal' || prize.kind === 'break') && (
+          <div className="text-[11px] text-parchment-500 text-center">
+            One {prize.kind} at a time — you&apos;ll pick the next target after this one. The Night Watcher moves to whoever you hit.
           </div>
         )}
 
@@ -158,11 +148,16 @@ export function VisitorPrizeModal() {
               type="button"
               onClick={() => done(prize.kind === 'take'
                 ? { fleaSlotIdxs: fleaIdxs }
-                : { targetId: target?.id, windowIdx: target?.windowIdx })}
-              disabled={prize.kind === 'take' ? fleaIdxs.length === 0 : !target}
+                : { targetId: target?.playerId, windowIdx: target?.windowIdxs[0] })}
+              disabled={prize.kind === 'take' ? fleaIdxs.length === 0 : !target || (prize.kind === 'break' && target.windowIdxs.length === 0)}
               className="btn-primary flex-1 text-sm py-2 disabled:opacity-50"
             >
-              {prize.kind === 'take' ? 'Take' : prize.kind === 'steal' ? 'Steal' : 'Break'}
+              {prize.kind === 'take'
+                ? 'Take'
+                : !target ? 'Pick a target'
+                : prize.kind === 'steal' ? `Steal from ${players.find(p => p.id === target.playerId)?.name}`
+                : target.windowIdxs.length === 0 ? 'Pick a window'
+                : `Break ${players.find(p => p.id === target.playerId)?.name}'s Window ${target.windowIdxs[0] + 1}`}
             </button>
           )}
         </div>
