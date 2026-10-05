@@ -1,15 +1,15 @@
 import { useState, type ReactNode } from 'react'
-import type { MomentumSpendId, PactOffer, Player, RepType } from '../types'
+import type { Location, MomentumSpendId, Player, RepType } from '../types'
 import {
-  useGameStore, MAX_MOMENTUM, MOMENTUM_COSTS, FLOW_STATE_MAX, SHARED_REP_MAX, RIPPLE_LAUNDER,
-  WARLOCK_DEBT_SUPPLY, PACT_COINS, PACT_REFUSED_COINS, HARVEST_COINS_PER_TOKEN,
-  debtOnBoard, debtSupply, pactProblem, describePact,
+  useGameStore, MAX_MOMENTUM, MOMENTUM_COSTS, FLOW_STATE_MAX, SHARED_REP_MAX,
+  MAX_CHARGE, MAX_OMENS, SURGE_REROLL_COST, SURGE_SHIFT_COST,
 } from '../store/gameStore'
 import { TargetPicker, type TargetChoice } from './TargetPicker'
-import { FleaTradePicker, RepTypePicker, type TradeChoice } from './NewClassModals'
+import { ChargePips, FleaTradePicker, OmenJar, RepTypePicker, SurgeTable, type TradeChoice } from './NewClassModals'
 import { ProfessionalUI } from './LocationActionPanel'
 import { breakWindowRule, markerSrc, stealRule, windowTargetRule } from '../utils/targets'
-import { ResourceCardMini } from './ResourceCardMini'
+import { LOCATIONS } from '../data/locations'
+import { CURSES, CURSE_BY_ID } from '../data/curses'
 
 // ─────────────────────────────────────────────────────────────────────────────
 // Shared bits
@@ -106,35 +106,29 @@ function TokenCost({ player }: { player: Player }) {
 // ─────────────────────────────────────────────────────────────────────────────
 
 export function SorcererAbilities({ player, isActiveTurn }: { player: Player; isActiveTurn: boolean }) {
-  const { ripple, hotStreak, classAbilitiesUsedThisTurn, realityRipple, startHotStreak } = useGameStore()
+  const { surge, hotStreak, classAbilitiesUsedThisTurn, castWildSurge, startHotStreak } = useGameStore()
+  const [showTable, setShowTable] = useState(false)
   const canAct = isActiveTurn && player.activeTokens >= 1
-  const myRipple = ripple?.playerId === player.id ? ripple : null
   const streakUsed = classAbilitiesUsedThisTurn.includes('hotStreak')
-  const rippleUsed = classAbilitiesUsedThisTurn.includes('realityRipple')
+  const surgeUsed = classAbilitiesUsedThisTurn.includes('wildSurge')
 
   return (
     <div className="border-t border-parchment-800/30 pt-3 space-y-3">
-      <ClassHeader player={player} right={<ActiveTokens player={player} />} />
+      <ClassHeader player={player} right={
+        <div className="flex flex-col items-end gap-1"><ActiveTokens player={player} /><ChargePips charge={player.charge} max={MAX_CHARGE} /></div>
+      } />
 
-      <Passive title="Passive · Uncontrollable Magic">
-        <div>Whenever you roll a die and keep a <b className="text-violet-300">6</b>, choose one: Refresh 1 · Draw 2 · Trade 2 · Steal 1 · Appraise 2.</div>
-        <div className="text-xs text-parchment-500">Every die you roll counts — Gather, Auction, Clashes, Duels, Mascot…</div>
-      </Passive>
-
-      {myRipple && (
-        <div className="rounded-xl border border-violet-500/60 bg-violet-950/40 px-3 py-2 text-sm text-violet-200">
-          🌀 <b>Reality Ripple active</b> until your next turn — re-roll any roll up to twice.
-          <div className="text-xs text-violet-300/80 mt-0.5">
-            {myRipple.rerolled ? 'You’ve re-rolled, so no Launder.' : `Not used yet — if it runs out unused you Launder ${RIPPLE_LAUNDER}.`}
-            {' '}In Clashes and Duels it re-rolls for you automatically while you’re behind.
-          </div>
+      <Passive title="Passive · Wild Magic">
+        <div>Whenever you keep a <b className="text-violet-300">6</b> on any die — Gather, Auction, Clash, Duel, Mascot — a <b>Wild Surge</b> erupts: roll 2d6 on the Surge Table.</div>
+        <div className="text-xs text-parchment-500">
+          Arcane Charge: +1 when you cast a spell or roll a 1 (max {MAX_CHARGE}). Spend {SURGE_REROLL_COST} to re-roll a Surge, or {SURGE_SHIFT_COST} to nudge it up or down by 1.
         </div>
-      )}
+      </Passive>
 
       <AbilityButton
         icon="🔥"
         title="Hot Streak!"
-        detail={streakUsed ? '✓ Used this turn' : 'Name a resource type, then Draw 1. Correct? Go again! On a miss, Break 1 of another player’s windows.'}
+        detail={streakUsed ? '✓ Used this turn' : 'Name a type and draw. Right? Bank it, or go again for +1 Charge. Wrong? Lose every card after the first and Break 1.'}
         cost={<TokenCost player={player} />}
         disabled={!canAct || streakUsed || !!hotStreak}
         tone="red"
@@ -142,12 +136,17 @@ export function SorcererAbilities({ player, isActiveTurn }: { player: Player; is
       />
       <AbilityButton
         icon="🌀"
-        title="Reality Ripple"
-        detail={rippleUsed || myRipple ? '✓ Active' : `Until your next turn, re-roll up to twice per roll. Never re-rolled? Launder ${RIPPLE_LAUNDER} when it ends.`}
+        title="Wild Surge"
+        detail={surgeUsed ? '✓ Used this turn' : 'Unleash the chaos: roll on the Surge Table now (+1 Charge to bend it).'}
         cost={<TokenCost player={player} />}
-        disabled={!canAct || rippleUsed || !!ripple}
-        onClick={() => realityRipple(player.id)}
+        disabled={!canAct || surgeUsed || !!surge}
+        onClick={() => castWildSurge(player.id)}
       />
+
+      <button type="button" onClick={() => setShowTable(v => !v)} className="text-xs text-violet-300 hover:text-violet-100">
+        📜 {showTable ? 'Hide' : 'Show'} the Surge Table
+      </button>
+      {showTable && <SurgeTable />}
     </div>
   )
 }
@@ -314,138 +313,99 @@ export function MonkAbilities({ player, isActiveTurn }: { player: Player; isActi
 // Warlock
 // ─────────────────────────────────────────────────────────────────────────────
 
-type OfferKind = PactOffer['kind']
-
-const OFFERS: { kind: OfferKind; icon: string; label: string }[] = [
-  { kind: 'coins', icon: '💰', label: `Pay them ${PACT_COINS.min}–${PACT_COINS.max} of your coins` },
-  { kind: 'resource', icon: '🎁', label: 'Give them 1 resource from your hoard' },
-  { kind: 'draw', icon: '🃏', label: 'They draw 2 resources' },
-  { kind: 'repair', icon: '🔧', label: 'Repair 1 of their windows' },
-  { kind: 'refresh', icon: '🔄', label: 'Refresh 1 of their Active tokens' },
-]
-
 export function WarlockAbilities({ player, isActiveTurn }: { player: Player; isActiveTurn: boolean }) {
-  const { players, pactPending, classAbilitiesUsedThisTurn, offerPact, harvest } = useGameStore()
-  const [open, setOpen] = useState(false)
+  const { players, imp, hexPeek, classAbilitiesUsedThisTurn, hex, summonImp } = useGameStore()
+  const [open, setOpen] = useState<'hex' | 'imp' | null>(null)
   const [target, setTarget] = useState<TargetChoice | null>(null)
-  const [kind, setKind] = useState<OfferKind | null>(null)
-  const [coins, setCoins] = useState(PACT_COINS.min)
-  const [cardId, setCardId] = useState('')
-  const [windowIdx, setWindowIdx] = useState<number | null>(null)
-  const [repType, setRepType] = useState<RepType[]>([])
-
-  const supply = debtSupply(players)
-  const onBoard = debtOnBoard(players)
-  const bargainUsed = classAbilitiesUsedThisTurn.includes('darkBargain')
-  const harvestUsed = classAbilitiesUsedThisTurn.includes('harvest')
+  const [loc, setLoc] = useState<Location | null>(null)
+  const [showDeck, setShowDeck] = useState(false)
+  const canAct = isActiveTurn && player.activeTokens >= 1
+  const hexUsed = classAbilitiesUsedThisTurn.includes('hex')
+  const impUsed = classAbilitiesUsedThisTurn.includes('imp')
+  const hexRule = (p: Player) => p.hasNightWatcher ? 'Protected by the Night Watcher'
+    : p.curse ? `Already cursed (${CURSE_BY_ID[p.curse.id].name})` : null
   const targetPlayer = target ? players.find(p => p.id === target.playerId) : undefined
+  const myImp = imp?.warlockId === player.id ? imp : null
+  const cursed = players.filter(p => p.curse?.warlockId === player.id)
 
-  const offer: PactOffer | null = !kind ? null
-    : kind === 'coins' ? { kind, amount: coins }
-    : kind === 'resource' ? (cardId ? { kind, cardId } : null)
-    : kind === 'repair' ? (windowIdx !== null ? { kind, windowIdx } : null)
-    : { kind }
-  const problem = targetPlayer && offer ? pactProblem(player, targetPlayer, offer) : null
-  const ready = !!targetPlayer && !!offer && !problem && repType.length === 1
-
-  function reset() { setTarget(null); setKind(null); setCardId(''); setWindowIdx(null); setRepType([]); setCoins(PACT_COINS.min) }
+  function toggle(which: 'hex' | 'imp') {
+    setOpen(prev => (prev === which ? null : which))
+    setTarget(null)
+    setLoc(null)
+  }
 
   return (
     <div className="border-t border-parchment-800/30 pt-3 space-y-3">
       <ClassHeader player={player} right={<ActiveTokens player={player} />} />
 
-      <Passive title="Passive · Master Manipulator">
-        <div>Pact accepted: gain 1 Rep. Pact refused: gain {PACT_REFUSED_COINS} coins. At the start of your turn, gain 1 coin per Debt token on the board.</div>
-        <div className="flex flex-wrap items-center gap-2 pt-1">
-          <span className="text-xs font-bold text-purple-200">⛓ Debt: {onBoard} out · {supply}/{WARLOCK_DEBT_SUPPLY} in your supply</span>
-          {players.filter(p => p.debtTokens > 0).map(p => (
-            <span key={p.id} className="text-xs rounded-full bg-purple-900/60 border border-purple-500/50 px-2 py-0.5 text-purple-100">{p.name} ×{p.debtTokens}</span>
-          ))}
-        </div>
+      <Passive title="Passive · Twist of Fate">
+        <div>After <b>any</b> die is rolled — by anyone — spend an Omen to change it to the Omen&apos;s number. Twisting someone else&apos;s roll earns you 1 coin.</div>
+        <div className="text-xs text-parchment-500">Bottled Fate: every 1 or 6 rolled at the table goes into your jar (max {MAX_OMENS}). In Clashes and Duels you Twist automatically when it turns a loss into a win.</div>
+        <div className="pt-1"><OmenJar omens={player.omens} max={MAX_OMENS} /></div>
       </Passive>
 
+      {(myImp || cursed.length > 0) && (
+        <div className="rounded-xl border border-purple-600/50 bg-purple-950/30 px-3 py-2 text-xs text-purple-200 space-y-0.5">
+          {myImp && <div>👹 Your Imp lurks at the <b>{LOCATIONS.find(l => l.id === myImp.location)?.label ?? myImp.location}</b> until your next turn.</div>}
+          {cursed.map(p => <div key={p.id}>{CURSE_BY_ID[p.curse!.id].icon} {p.name} carries <b>{CURSE_BY_ID[p.curse!.id].name}</b>.</div>)}
+        </div>
+      )}
+
       <AbilityButton
-        icon="😈"
-        title="Dark Bargain"
-        detail={bargainUsed ? '✓ Used this turn' : pactPending ? 'Waiting for an answer…' : supply === 0 ? 'All your Debt tokens are out' : 'Offer any player a Pact from your Bargain card — usable on any turn.'}
+        icon="🕯️"
+        title="Hex"
+        detail={hexUsed ? '✓ Used this turn' : `Curse a player: draw 2 Curse cards and choose one. Curses trigger once, then return to your deck (${player.curseDeck.length} left).`}
         cost={<TokenCost player={player} />}
-        open={open}
-        disabled={player.activeTokens < 1 || bargainUsed || !!pactPending || supply === 0}
-        onClick={() => { setOpen(v => !v); reset() }}
+        open={open === 'hex'}
+        disabled={!canAct || hexUsed || !!hexPeek || player.curseDeck.length === 0}
+        onClick={() => toggle('hex')}
       >
-        <TargetPicker actorId={player.id} players={players} value={target} onChange={v => { setTarget(v); setWindowIdx(null) }} playerRule={() => null} verb="Bargain with" accent="slate"
-          playerDetail={p => p.debtTokens > 0 ? <span className="text-purple-300">⛓ Debt ×{p.debtTokens}</span> : null} />
-        {targetPlayer && (
-          <>
-            <div className="text-xs font-semibold text-parchment-400 uppercase tracking-wide">The Pact you offer {targetPlayer.name}</div>
-            <div className="space-y-1.5">
-              {OFFERS.map(o => {
-                const sample: PactOffer = o.kind === 'coins' ? { kind: 'coins', amount: Math.min(coins, Math.max(PACT_COINS.min, player.coins)) }
-                  : o.kind === 'resource' ? { kind: 'resource', cardId: player.hoard[0]?.id ?? '' }
-                  : o.kind === 'repair' ? { kind: 'repair', windowIdx: targetPlayer.windows.findIndex(w => w.status === 'broken') }
-                  : { kind: o.kind }
-                const why = o.kind === 'resource' && player.hoard.length === 0 ? 'Your hoard is empty'
-                  : o.kind === 'coins' && player.coins < PACT_COINS.min ? `You need ${PACT_COINS.min} coins`
-                  : pactProblem(player, targetPlayer, sample)
-                return (
-                  <button key={o.kind} type="button" disabled={!!why} onClick={() => setKind(o.kind)}
-                    className={`w-full flex items-center gap-2 rounded-lg border-2 px-3 py-1.5 text-left text-sm ${
-                      kind === o.kind ? 'border-purple-400 bg-purple-950/50 text-purple-100' : 'border-parchment-700/40 bg-ink-800/60 text-parchment-300 hover:border-parchment-400'
-                    } disabled:opacity-40 disabled:cursor-not-allowed`}>
-                    <span>{o.icon}</span>
-                    <span className="flex-1">{o.label}</span>
-                    {why && <span className="text-[10px] text-parchment-500">{why}</span>}
-                  </button>
-                )
-              })}
-            </div>
-
-            {kind === 'coins' && (
-              <div className="flex items-center gap-2 text-sm">
-                <span className="text-parchment-400">Coins:</span>
-                {Array.from({ length: PACT_COINS.max - PACT_COINS.min + 1 }, (_, i) => PACT_COINS.min + i).map(n => (
-                  <button key={n} type="button" disabled={player.coins < n} onClick={() => setCoins(n)}
-                    className={`w-9 h-8 rounded-lg border-2 font-bold ${coins === n ? 'border-gold-400 bg-gold-500/20 text-gold-200' : 'border-parchment-700/40 text-parchment-300'} disabled:opacity-40`}>{n}</button>
-                ))}
-                <span className="text-xs text-parchment-500">(you have {player.coins})</span>
-              </div>
-            )}
-            {kind === 'resource' && (
-              <div className="flex flex-wrap gap-1.5">
-                {player.hoard.map(c => <ResourceCardMini key={c.id} card={c} size="md" selected={cardId === c.id} onClick={() => setCardId(c.id)} />)}
-              </div>
-            )}
-            {kind === 'repair' && (
-              <div className="flex gap-2">
-                {targetPlayer.windows.map((w, i) => (
-                  <button key={w.id} type="button" disabled={w.status !== 'broken'} onClick={() => setWindowIdx(i)}
-                    className={`rounded-lg border-2 px-3 py-2 text-xs font-bold ${windowIdx === i ? 'border-emerald-400 bg-emerald-950/50 text-emerald-200' : 'border-parchment-700/40 text-parchment-300'} disabled:opacity-30`}>
-                    W{i + 1}{w.status === 'broken' ? ' 💥' : ''}
-                  </button>
-                ))}
-              </div>
-            )}
-
-            <div className="text-xs text-parchment-400">If they accept, you gain 1 Rep of type:</div>
-            <RepTypePicker count={1} value={repType} onChange={setRepType} />
-            {problem && <div className="text-xs text-red-300">{problem}</div>}
-            <button type="button" className="btn-primary w-full text-sm py-2 disabled:opacity-50" disabled={!ready}
-              onClick={() => { if (offer && targetPlayer && offerPact(player.id, targetPlayer.id, offer, repType[0])) { setOpen(false); reset() } }}>
-              {ready ? `Offer ${targetPlayer.name}: ${describePact(offer!, player)} for 1 Debt` : 'Choose the Pact'}
-            </button>
-          </>
-        )}
+        <TargetPicker actorId={player.id} players={players} value={target} onChange={setTarget} playerRule={hexRule} verb="Hex" accent="slate" />
+        <button type="button" className="btn-primary w-full text-sm py-2 disabled:opacity-50" disabled={!targetPlayer}
+          onClick={() => { if (targetPlayer && hex(player.id, targetPlayer.id)) setOpen(null) }}>
+          {targetPlayer ? `Hex ${targetPlayer.name} — draw 2 Curses` : 'Pick a victim'}
+        </button>
       </AbilityButton>
 
       <AbilityButton
-        icon="🌾"
-        title="The Harvest"
-        detail={harvestUsed ? '✓ Used this turn' : onBoard === 0 ? 'No Debt on the board to collect' : `Collect all ${onBoard} Debt. Each player pays 1 resource or ${HARVEST_COINS_PER_TOKEN} coins per token.`}
+        icon="👹"
+        title="Summon Imp"
+        detail={impUsed || myImp ? '✓ Your Imp is out' : 'Your Imp lurks at a location until your next turn. The first other player there rolls: 1–2 it steals a card, 3–4 it breaks a window, 5–6 it’s banished.'}
         cost={<TokenCost player={player} />}
-        tone="amber"
-        disabled={!isActiveTurn || player.activeTokens < 1 || harvestUsed || onBoard === 0}
-        onClick={() => harvest(player.id)}
-      />
+        tone="red"
+        open={open === 'imp'}
+        disabled={!canAct || impUsed || !!imp}
+        onClick={() => toggle('imp')}
+      >
+        <div className="text-xs text-parchment-400">Where does it lurk? (Everyone can see it.)</div>
+        <div className="grid grid-cols-3 gap-1.5">
+          {LOCATIONS.map(l => (
+            <button key={l.id} type="button" onClick={() => setLoc(l.id)}
+              className={`rounded-lg border-2 px-2 py-1.5 text-xs font-bold ${loc === l.id ? 'border-red-400 bg-red-950/50 text-red-100' : 'border-parchment-700/40 text-parchment-300 hover:border-parchment-400'}`}>
+              {l.label}
+            </button>
+          ))}
+        </div>
+        <button type="button" className="btn-primary w-full text-sm py-2 disabled:opacity-50" disabled={!loc}
+          onClick={() => { if (loc) { summonImp(player.id, loc); setOpen(null) } }}>
+          {loc ? `Summon the Imp at the ${LOCATIONS.find(l => l.id === loc)?.label}` : 'Pick a location'}
+        </button>
+      </AbilityButton>
+
+      <button type="button" onClick={() => setShowDeck(v => !v)} className="text-xs text-purple-300 hover:text-purple-100">
+        🃏 {showDeck ? 'Hide' : 'Show'} the Curse deck
+      </button>
+      {showDeck && (
+        <div className="space-y-1">
+          {CURSES.map(c => (
+            <div key={c.id} className="flex gap-2 rounded-lg border border-purple-800/40 bg-ink-800/50 px-2 py-1 text-xs">
+              <span className="text-base">{c.icon}</span>
+              <span className="font-bold text-purple-100 w-28 flex-shrink-0">{c.name}</span>
+              <span className="text-parchment-400">{c.text}</span>
+            </div>
+          ))}
+        </div>
+      )}
     </div>
   )
 }
