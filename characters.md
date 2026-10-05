@@ -95,29 +95,37 @@ Use one Elemental die per turn maximum. A used die is set aside until the start 
 **Identity:** The Wildcard
 **Difficulty:** 2/5
 
-### Passive — Uncontrollable Magic
-Whenever you roll a die and keep a 6, immediately choose one bonus effect:
-- Refresh 1 Active token
-- Draw 2 resources
-- Trade 2 with the Flea Market
-- Steal 1 from a chosen player's Hoard
-- Appraise 2 (look at top 4 of deck, keep 2)
+### Passive — Wild Magic
+Whenever you keep a **5 or 6** on any die — Gather, Auction, Clash, Duel, Mascot — a **Wild Surge** erupts: roll 2d6 on the Surge Table.
+
+### Class Feature — Arcane Charge (0–3)
+- Gain 1 Charge each time you cast a spell (use an Active) or roll a 1.
+- Spend 1 Charge to re-roll a Surge, or 2 Charge to shift it up or down by 1.
 
 ### Active — Hot Streak!
-Name a resource type (Armament, Consumable, Trinket, or Trade Good). Draw 1 resource from the deck.
-- If it matches the type you named: go again (name a type, draw another).
-- When you fail (draw doesn't match): Break 1 of another player's windows.
-- You keep every card you drew, including the miss.
+Name a resource type and draw 1.
+- If it matches: **bank** everything you've drawn, or **go again** (+1 Charge).
+- On a miss: lose every card drawn this streak **except the first**, then Break 1 of another player's windows.
 
-### Active — Reality Ripple
-Until the start of your next turn, you may re-roll any die you roll up to twice, keeping the final result. When it runs out (the start of your next turn), if you never re-rolled, Launder 4 resources.
+### Active — Wild Surge
+Roll on the Surge Table **twice**, one after the other (casting it gives the usual +1 Charge to bend them).
 
-*In the app:* Gather, Auction and Mascot rolls ask you "Keep or re-roll?". Clash and Duel rolls are made all at once, so the app re-rolls for you while you're behind (and that counts as using it).
+### Surge Table (2d6)
+| Roll | Surge | Effect |
+|---|---|---|
+| 2 | Backfire | Break one of your own windows |
+| 3 | Butterfingers | Discard a random hoard card |
+| 4 | Sheep! | Your best window card swaps with a random Flea Market card |
+| 5 | Swap Meet | Every player passes a random hoard card to the next player |
+| 6 | Gold Rain | Every player gains 1 coin; you gain 2 more |
+| 7 | Arcane Bloom | Draw 2 |
+| 8 | Blink | +1 action this turn (Draw 1 if it isn't your turn) |
+| 9 | Transmute | Change one of your cards into any type |
+| 10 | Mirror Image | Copy any Professional in play |
+| 11 | Fireball | Break 1 window of every other player (Night Watcher protects) |
+| 12 | Wish | Choose any result |
 
-### Class Feature — Dice Rolling
-Your abilities trigger any time you roll a die — including Gather rolls, Clash rolls, Auction rolls, etc. The Sorcerer is the "die-rolling" class; many of their bonuses key off rolling.
-
-**Custom components:** None (standard d6 + Active tokens)
+**Custom components:** Surge Table card, Charge tracker (0–3)
 
 ---
 
@@ -132,12 +140,12 @@ Your abilities trigger any time you roll a die — including Gather rolls, Clash
 
 ### Active — Momentum Spend (no token cost; spend Momentum points instead)
 You may spend Momentum during your turn from this list. Spending is free (no action), and each option can be used once per turn:
-- **2 Momentum:** Draw 2 resources
-- **2 Momentum:** Trade 2 with the Flea Market
-- **4 Momentum:** Appraise 2 (look at top 4 of deck, keep 2)
-- **4 Momentum:** Break 1 or Steal 1
-- **7 Momentum:** Copy any face-up Professional currently in play and resolve it (without paying any associated costs of "visiting the Guildhall")
-- **7 Momentum:** Gain 1 Reputation per other player sharing a location with you this turn (max 3 Rep)
+- **1 Momentum:** Draw 2 resources
+- **1 Momentum:** Trade 2 with the Flea Market
+- **3 Momentum:** Appraise 2 (look at top 4 of deck, keep 2)
+- **3 Momentum:** Break 1 or Steal 1
+- **5 Momentum:** Copy any face-up Professional currently in play and resolve it (without paying any associated costs of "visiting the Guildhall")
+- **5 Momentum:** Gain 1 Reputation per other player sharing a location with you this turn (max 3 Rep)
 
 ### Class Feature — Momentum
 - The Monk does NOT have Active tokens. Their player board has a Momentum tracker (0–8) instead.
@@ -234,38 +242,43 @@ Discard 1 Renown Card from your hand. Immediately resolve its Spend effect.
 
 ## 8. Warlock — Kaelan Mortisbane
 
-**Identity:** The Manipulator
-**Difficulty:** 5/5
+**Identity:** The Manipulator — curses, demons and stolen luck
+**Difficulty:** 4/5
 
-### Passive — Master Manipulator
-- When a Pact you offer is **accepted**: gain 1 Reputation token.
-- When a Pact you offer is **refused**: gain 2 coins.
-- Always on: At the start of your turn, gain 1 coin for each Debt token currently on the board (across all players).
+### Class Feature — Bottled Fate
+Keep up to 3 **Omen** dice. Whenever **any** player rolls a 1 or a 6, bottle it as an Omen showing that number.
 
-### Active — Dark Bargain (any turn)
-Offer any player a benefit from your Bargain Card (see below).
-- If they **accept**: deliver the chosen benefit and place 1 Debt token on their player board.
-- If they **refuse**: gain 2 coins.
-- This can be triggered on another player's turn.
+### Passive — Twist of Fate
+After any die is rolled (by anyone, at any time), spend an Omen to change that die to the Omen's number. A twisted die can't be re-rolled. Twisting another player's roll earns you 1 coin.
 
-### Active — The Harvest
-Collect all Debt tokens currently on the board. For each Debt token collected from a player, that player must pay you either 1 resource from their Hoard OR 2 coins (their choice). Then return the Debt tokens to your supply.
+*In the app:* Clash and Duel rolls are made all at once, so the Warlock Twists automatically when that turns a loss into a win.
 
-### Class Feature — Pacts and Debts
-- Debt tokens are placed on player boards when they accept a Pact.
-- Players may voluntarily pay off 1 Debt token at the start of their turn (before taking any actions) by paying the Warlock 2 coins.
-- Debt tokens have no negative effect until The Harvest is used or voluntarily paid off.
-- The Warlock starts the game with 6 Debt tokens available to place.
+### Active — Hex
+Choose a player (not the Night Watcher holder, and not someone already cursed). Draw 2 Curse cards, lay one on them, put the other on the bottom of your deck. A Hex moves the Night Watcher to the victim, like any attack.
+- A curse triggers once, then returns to the bottom of your deck.
+- If it hasn't triggered by the end of the victim's next turn, it fizzles.
 
-### Bargain Card — Valid Pact Offers
-When the Warlock offers a Pact, they choose ONE benefit from this list to deliver if accepted:
-- Pay them 2–4 coins from your supply
-- Give them 1 resource from your Hoard
-- Draw 2 resources on their behalf (target player keeps them)
-- Repair 1 of their windows
-- Refresh 1 of their Active tokens (a Monk gains 1 Momentum instead)
+### Curse deck (8 cards)
+| Curse | Effect on the victim |
+|---|---|
+| Jinx | Their next die roll is 1 lower (minimum 1) |
+| Butterfingers | Their next Gather or Mascot draws 1 fewer card |
+| Tithe | Their next Visitor sale pays you 1 of the coins |
+| Hexed Goods | Their next Visitor sale earns no Reputation from the cards |
+| Leaky Pockets | At the start of their next turn, their cheapest hoard card is discarded |
+| Toll of Shadows | Their next location action costs 1 coin, paid to you |
+| Unsettled Shelves | At the start of their next turn, a random window card slides back into their hoard |
+| Bad Omen | No effect on them — you bottle a 1 |
 
-**Custom components:** Debt tokens (6, Warlock-coloured), Bargain Card (reference card for valid offers), player boards of other players need space for Debt tokens
+### Active — Summon Imp
+Place your Imp on a location (everyone can see it) until your next turn. The first other player to use that location rolls a d6:
+- **1–2:** the Imp steals a random card from their hoard for you
+- **3–4:** it breaks one of their windows
+- **5–6:** it's banished
+
+You may Twist that roll. The Night Watcher drives the Imp off.
+
+**Custom components:** 3 Omen dice, Curse deck (8 cards), Imp figure
 
 ---
 

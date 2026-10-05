@@ -15,9 +15,9 @@ import { VisitorPrizeInfo, VisitorPrizeModal } from './VisitorPrizes'
 import { TargetPicker, WindowPicker, type TargetChoice } from './TargetPicker'
 import { IncidentSpotlight } from './IncidentSpotlight'
 import {
-  AppraiseKeepModal, HarvestPayModal, HotStreakModal, PactAnswerModal, RippleRerollModal, SorcererMagicModal,
+  AppraiseKeepModal, HexChoiceModal, HotStreakModal, MirrorModal, SurgeModal, TwistModal,
 } from './NewClassModals'
-import { DEBT_PAYOFF_COST } from '../store/gameStore'
+import { CURSE_BY_ID } from '../data/curses'
 import { useIncidentFeed, useIncidentStore } from '../store/incidentStore'
 import { breakWindowRule, heistWindowRule, stealRule, windowTargetRule } from '../utils/targets'
 
@@ -168,7 +168,7 @@ export function SharedBoard({ canAct = true, localPlayerName }: SharedBoardProps
     auction, tradeWithFleaMarket, breakWindow,
     resourceDeck, resourceDiscard,
     townCrierPeek, completeTownCrier, activeVisitors, visitorDemandRemaining, visitorPrizeQueue,
-    rippleRerollPending, sorcererMagicPending, hotStreak, pactPending, harvestQueue, debtPaidThisTurn, payOffDebt,
+    surge, mirrorPending, hotStreak, twistPending, hexPeek, imp,
     professionalSlots,
     actionLog, lastGuildFencedCard,
     steal, heist,
@@ -796,15 +796,13 @@ export function SharedBoard({ canAct = true, localPlayerName }: SharedBoardProps
               Sell phase pending
             </button>
           )}
-          {canAct && currentPlayer && currentPlayer.debtTokens > 0 && !debtPaidThisTurn && turnActionsUsed === 0 && (
-            <button
-              onClick={() => payOffDebt(currentPlayer.id)}
-              disabled={currentPlayer.coins < DEBT_PAYOFF_COST}
-              title="Before your first action you may pay off 1 Debt"
-              className="text-[10px] bg-purple-900/50 border border-purple-500/50 text-purple-200 px-2 py-0.5 rounded font-semibold hover:bg-purple-800/60 transition-colors disabled:opacity-40"
+          {currentPlayer?.curse && (
+            <span
+              title={CURSE_BY_ID[currentPlayer.curse.id].text}
+              className="text-[10px] bg-purple-900/50 border border-purple-500/50 text-purple-200 px-2 py-0.5 rounded font-semibold"
             >
-              ⛓ Pay off 1 Debt ({DEBT_PAYOFF_COST}$ to the Warlock) · {currentPlayer.debtTokens} held
-            </button>
+              {CURSE_BY_ID[currentPlayer.curse.id].icon} Cursed: {CURSE_BY_ID[currentPlayer.curse.id].name} — {CURSE_BY_ID[currentPlayer.curse.id].text}
+            </span>
           )}
         </div>
         <div className="justify-self-end">
@@ -948,6 +946,16 @@ export function SharedBoard({ canAct = true, localPlayerName }: SharedBoardProps
                           <img src="/cards/tokens/Clan.png" alt="Clan marker" className="w-6 h-6 rounded-full border border-red-400/60" />
                           <span className="text-[10px] font-bold text-red-300 whitespace-nowrap">Clan</span>
                         </div>
+                      </div>
+                    </div>
+                  )}
+
+                  {/* Warlock's Imp */}
+                  {imp?.location === loc.id && (
+                    <div className="absolute bottom-1.5 left-1.5 z-10" title={`${players.find(p => p.id === imp.warlockId)?.name}'s Imp — the next player here rolls: 1–2 it steals a card, 3–4 it breaks a window, 5–6 banished`}>
+                      <div className="relative flex items-center gap-1 bg-purple-950/90 border-2 border-purple-400 rounded-full px-2 py-0.5 shadow-lg shadow-purple-900/60 animate-pulse">
+                        <span className="text-base leading-none">👹</span>
+                        <span className="text-[10px] font-bold text-purple-200 whitespace-nowrap">Imp</span>
                       </div>
                     </div>
                   )}
@@ -1477,21 +1485,21 @@ export function SharedBoard({ canAct = true, localPlayerName }: SharedBoardProps
       })()}
 
       {/* Sorcerer, Monk and Warlock prompts */}
-      {rippleRerollPending && (isMe(rippleRerollPending.playerId)
-        ? <RippleRerollModal />
-        : <WaitingOverlay name={players.find(p => p.id === rippleRerollPending.playerId)?.name} action="deciding whether to re-roll (Reality Ripple)" classId="sorcerer" />)}
-      {sorcererMagicPending && !rippleRerollPending && (isMe(sorcererMagicPending.playerId)
-        ? <SorcererMagicModal />
-        : <WaitingOverlay name={players.find(p => p.id === sorcererMagicPending.playerId)?.name} action="choosing Uncontrollable Magic" classId="sorcerer" />)}
+      {twistPending && (isMe(twistPending.warlockId)
+        ? <TwistModal />
+        : <WaitingOverlay name={players.find(p => p.id === twistPending.warlockId)?.name} action="deciding whether to Twist Fate" classId="warlock" />)}
+      {hexPeek && (isMe(hexPeek.warlockId)
+        ? <HexChoiceModal />
+        : <WaitingOverlay name={players.find(p => p.id === hexPeek.warlockId)?.name} action="choosing a curse" classId="warlock" />)}
+      {surge && !twistPending && (isMe(surge.playerId)
+        ? <SurgeModal />
+        : <WaitingOverlay name={players.find(p => p.id === surge.playerId)?.name} action="unleashing a Wild Surge" classId="sorcerer" />)}
+      {mirrorPending && !surge && (isMe(mirrorPending.playerId)
+        ? <MirrorModal />
+        : <WaitingOverlay name={players.find(p => p.id === mirrorPending.playerId)?.name} action="copying a Professional (Mirror Image)" classId="sorcerer" />)}
       {hotStreak && (isMe(hotStreak.playerId)
         ? <HotStreakModal />
         : <WaitingOverlay name={players.find(p => p.id === hotStreak.playerId)?.name} action="on a Hot Streak" classId="sorcerer" />)}
-      {pactPending && (isMe(pactPending.targetId)
-        ? <PactAnswerModal />
-        : <WaitingOverlay name={players.find(p => p.id === pactPending.targetId)?.name} action="considering a Dark Bargain" classId={players.find(p => p.id === pactPending.targetId)?.classId} />)}
-      {harvestQueue.length > 0 && (isMe(harvestQueue[0].playerId)
-        ? <HarvestPayModal />
-        : <WaitingOverlay name={players.find(p => p.id === harvestQueue[0].playerId)?.name} action="paying for The Harvest" classId={players.find(p => p.id === harvestQueue[0].playerId)?.classId} />)}
       {appraisePeek?.source && isMe(appraisePeek.playerId) && <AppraiseKeepModal />}
 
       {/* Visitor contribution prize that needs a choice */}
@@ -3783,7 +3791,7 @@ function RogueCounterfeitActionModal({
     if (!cardId) return
     onAuction(cardId, auctionZone, auctionZone === 'window' ? auctionWindowIdx : undefined)
     const store = useGameStore.getState()
-    if (store.trickShotPending || store.rn04RerollPending || store.rippleRerollPending) {
+    if (store.trickShotPending || store.rn04RerollPending || store.twistPending) {
       onDone()
       return
     }

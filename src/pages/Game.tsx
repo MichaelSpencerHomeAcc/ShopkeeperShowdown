@@ -1,6 +1,7 @@
 import { useState, useEffect, useRef } from 'react'
 import { createPortal } from 'react-dom'
-import { useGameStore, turnOrder, debtOnBoard, MAX_MOMENTUM, WARLOCK_DEBT_SUPPLY } from '../store/gameStore'
+import { useGameStore, turnOrder, MAX_MOMENTUM } from '../store/gameStore'
+import { CURSE_BY_ID } from '../data/curses'
 import { PlayerArea } from '../components/PlayerArea'
 import { SharedBoard } from '../components/SharedBoard'
 import { ActionLog } from '../components/ActionLog'
@@ -53,12 +54,12 @@ const WINDOW_STATUS_STYLE: Record<string, string> = {
   TRI: 'border-green-400/80 bg-green-600 text-white',
   TRG: 'border-pink-400/80 bg-pink-600 text-white',
 }
-function classStatus(player: Player, players: Player[], rippling: boolean) {
+function classStatus(player: Player) {
   if (player.classId === 'paladin') return `Renown ${player.renownCards.length}`
   if (player.classId === 'rogue') return `CF ${player.counterfeitHand.length}`
   if (player.classId === 'ranger') return `Ambushes ${player.ambushesPlaced.length}/3`
-  if (player.classId === 'warlock') return `Debt ${debtOnBoard(players)}/${WARLOCK_DEBT_SUPPLY}`
-  if (player.classId === 'sorcerer' && rippling) return '🌀 Ripple'
+  if (player.classId === 'warlock') return player.omens.length ? `🔮 ${player.omens.join(' ')}` : '🔮 —'
+  if (player.classId === 'sorcerer') return `⚡ ${player.charge}/3`
   return null
 }
 
@@ -76,7 +77,7 @@ interface Props {
 
 export function Game({ localPlayerName, roomId, isHost, onLeave }: Props) {
   const {
-    players, round, resetGame, startPlayerOffset, ripple,
+    players, round, resetGame, startPlayerOffset,
     currentTurnPlayerId, startingDraft, completeStartingDraftPick,
   } = useGameStore()
 
@@ -314,7 +315,7 @@ export function Game({ localPlayerName, roomId, isHost, onLeave }: Props) {
             const classAccent = CLASS_ACCENTS[p.classId] ?? '#d4901e'
             const classTint = CLASS_PANEL_TINTS[p.classId] ?? 'rgba(212, 144, 30, 0.32)'
             const playerColor = PAWN_COLOR_HEX[i % PAWN_COLOR_HEX.length]
-            const extraStatus = classStatus(p, players, ripple?.playerId === p.id)
+            const extraStatus = classStatus(p)
             const hit = incidentHits[p.id]
             return (
               <div key={p.id} className="relative flex-shrink-0 pt-5">
@@ -362,8 +363,10 @@ export function Game({ localPlayerName, roomId, isHost, onLeave }: Props) {
                     {extraStatus && (
                       <div className="truncate text-center text-[11px] font-bold leading-tight text-white/95">{extraStatus}</div>
                     )}
-                    {p.debtTokens > 0 && (
-                      <div className="text-center text-[11px] font-bold leading-tight text-purple-200" title="Debt tokens from the Warlock">⛓ Debt ×{p.debtTokens}</div>
+                    {p.curse && (
+                      <div className="truncate text-center text-[11px] font-bold leading-tight text-purple-200" title={`${CURSE_BY_ID[p.curse.id].name}: ${CURSE_BY_ID[p.curse.id].text}`}>
+                        {CURSE_BY_ID[p.curse.id].icon} {CURSE_BY_ID[p.curse.id].name}
+                      </div>
                     )}
                   </div>
 

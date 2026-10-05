@@ -9,25 +9,32 @@ export interface ResourceCard {
   imageFile: string
 }
 
-/** Warlock Dark Bargain offers (the Bargain card). Coins and resources come from the Warlock's own supply. */
-export type PactOffer =
-  | { kind: 'coins'; amount: number }
-  | { kind: 'resource'; cardId: string }
-  | { kind: 'draw' }
-  | { kind: 'repair'; windowIdx: number }
-  | { kind: 'refresh' }
+/** Warlock Curse cards (see data/curses.ts). */
+export type CurseId =
+  | 'jinx' | 'butterfingers' | 'tithe' | 'hexedGoods' | 'leakyPockets' | 'tollOfShadows' | 'unsettledShelves' | 'badOmen'
 
-/** Sorcerer Uncontrollable Magic: what a kept 6 can be turned into. */
-export interface SorcererMagicChoice {
-  kind: 'refresh' | 'draw' | 'trade' | 'steal' | 'appraise'
-  /** Trade 2: your cards and the Flea Market slots they swap with */
-  cardIds?: string[]
-  fleaSlotIdxs?: number[]
-  /** Steal 1 */
-  targetId?: string
+/** A curse sitting on a player. armed = their turn has started, so it fizzles when that turn ends. */
+export interface ActiveCurse {
+  id: CurseId
+  warlockId: string
+  armed: boolean
 }
 
-/** Monk Momentum spends: [cost, once per turn each]. */
+/** Rolls the Warlock can Twist and that the Sorcerer's dice abilities watch. */
+export type RollKind = 'gather' | 'auction' | 'mascot' | 'imp'
+
+/** Choices some Wild Surge results need. */
+export interface SurgeChoice {
+  /** 12 Wish: which result (2–11) to take */
+  wish?: number
+  /** 9 Transmute: the card and its new type */
+  cardId?: string
+  type?: ResourceType
+  /** 10 Mirror Image: the Professional to copy */
+  professionalId?: string
+}
+
+/** Monk Momentum spends: [cost, once per turn each]. *//** Monk Momentum spends: [cost, once per turn each]. */
 export type MomentumSpendId = 'draw2' | 'trade2' | 'appraise2' | 'breakOrSteal' | 'copyPro' | 'sharedRep'
 
 export interface MomentumChoice {
@@ -193,8 +200,15 @@ export interface Player {
   counterfeitCards: CounterfeitCard[]
   /** Rogue only — Counterfeit cards currently in hand and available to place */
   counterfeitHand: CounterfeitCard[]
-  debtTokens: number
   momentumTokens: number
+  /** Warlock: bottled Omen dice (each a 1 or a 6), max 3 */
+  omens: number[]
+  /** Warlock: Curse deck (top first) */
+  curseDeck: CurseId[]
+  /** A Warlock's curse on this player, if any */
+  curse: ActiveCurse | null
+  /** Sorcerer: Arcane Charge, 0–3 */
+  charge: number
   clanLocation: Location | null
   hasNightWatcher: boolean
   stolenHoardCardIds: string[]
@@ -284,38 +298,37 @@ export interface GameState {
   visitorPrizeQueue: PendingVisitorPrize[]
 
   // ── Sorcerer ──
-  /** Reality Ripple is active for this Sorcerer until their next turn starts */
-  ripple: { playerId: string; rerolled: boolean } | null
-  /** A Gather / Auction / Mascot roll waiting on the Sorcerer's keep-or-re-roll choice */
-  rippleRerollPending: {
+  /** A Wild Surge waiting to be bent (Charge) and resolved; backlog = more surges queued behind it */
+  surge: { playerId: string; dice: [number, number]; total: number; backlog: number } | null
+  /** Surge 10 Mirror Image: the Professional the Sorcerer is copying */
+  mirrorPending: { playerId: string; professionalId: string } | null
+  /** Hot Streak! in progress. The first card is safe; the rest are lost on a miss unless banked. */
+  hotStreak: { playerId: string; drawn: { card: ResourceCard; guess: ResourceType }[]; missed: boolean } | null
+
+  // ── Warlock ──
+  /** A roll the Warlock may Twist with an Omen before it takes effect */
+  twistPending: {
+    warlockId: string
     playerId: string
-    rollType: 'gather' | 'auction' | 'mascot'
+    rollType: RollKind
     roll: number
-    rerollsLeft: number
-    history: number[]
+    note: string
     auctionCardId?: string
     auctionFromZone?: 'hoard' | 'window'
     auctionWindowIdx?: number
     auctionVisitorIdx?: number
+    impWarlockId?: string
   } | null
-  /** Kept 6s waiting for the Sorcerer to pick an Uncontrollable Magic effect */
-  sorcererMagicPending: { playerId: string; count: number } | null
-  /** Hot Streak! in progress: cards drawn so far; missed = time to Break */
-  hotStreak: { playerId: string; drawn: { card: ResourceCard; guess: ResourceType }[]; missed: boolean } | null
+  /** Hex: the two Curse cards drawn, waiting for the Warlock to pick one */
+  hexPeek: { warlockId: string; targetId: string; cards: CurseId[] } | null
+  /** The Warlock's Imp, lurking at a location until their next turn */
+  imp: { warlockId: string; location: Location } | null
 
-  // ── Monk ──
+  // ── Monk ──  // ── Monk ──
   /** Players the Monk has shared a location with this turn (Flow State + the 7-Momentum Rep spend) */
   monkSharedWith: string[]
   /** Momentum gained from Flow State sharing this turn (max 2) */
   monkFlowGained: number
-
-  // ── Warlock ──
-  /** A Dark Bargain waiting for the target's answer */
-  pactPending: { warlockId: string; targetId: string; offer: PactOffer; repType: RepType } | null
-  /** The Harvest: players still to pay for the Debt just collected from them */
-  harvestQueue: { warlockId: string; playerId: string; tokens: number }[]
-  /** The current player already paid off a Debt this turn */
-  debtPaidThisTurn: boolean
 
   // Turn management
   /** Seats the first player has moved left since round 1 — turn order rotates each round */

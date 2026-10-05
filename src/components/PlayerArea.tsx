@@ -133,9 +133,6 @@ export function PlayerArea({ player, playerIndex, isOwn = true, isMyTurn = true 
       <div className="flex items-center gap-2">
 
         {/* Class-specific tokens */}
-        {player.debtTokens > 0 && (
-          <TokenCounter label="Debt" value={player.debtTokens} color="bg-purple-900/60" />
-        )}
         {player.classId === 'monk' && (
           <TokenCounter label="Momentum" value={player.momentumTokens} max={8} color="bg-blue-900/60" />
         )}
