@@ -16,11 +16,11 @@ describe('scoring', () => {
     expect(repScore(12)).toBe(22)
   })
 
-  it('adds coins, rep per type and 6 per complete set', () => {
+  it('adds coins, rep per type and 10 per complete set', () => {
     const s = scorePlayer(player({ coins: 40, rep: { ARM: 2, CON: 2, TRI: 1, TRG: 3 } }))
     expect(s.repPoints).toBe(3 + 3 + 1 + 5)
     expect(s.sets).toBe(1)
-    expect(s.total).toBe(40 + 12 + 6)
+    expect(s.total).toBe(40 + 12 + 10)
   })
 
   it('counts Monk momentum as coins', () => {

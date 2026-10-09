@@ -28,7 +28,7 @@ export function marginalRep(rep: RepTokens, t: RepType, n = 1): number {
 
 /**
  * Value of one more Reputation token of type `t`, including a little credit for
- * progressing toward a full set (medium/hard bots plan for the +6 set bonus).
+ * progressing toward a full set (medium/hard bots plan for the +10 set bonus).
  */
 export function repValue(rep: RepTokens, t: RepType, difficulty: BotDifficulty): number {
   const exact = marginalRep(rep, t)

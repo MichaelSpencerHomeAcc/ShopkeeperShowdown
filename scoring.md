@@ -68,7 +68,7 @@ Alice's Reputation points = 8 + 3 + 11 + 1 = **23 points**
 
 ## Set Bonus
 
-For each complete set of all four Reputation types (at least 1 of each: Armament, Consumable, Trinket, Trade Good), gain **+6 points**.
+For each complete set of all four Reputation types (at least 1 of each: Armament, Consumable, Trinket, Trade Good), gain **+10 points**.
 
 You can score multiple set bonuses if you have multiple of each type. The number of complete sets equals the lowest count across all four types.
 
@@ -78,13 +78,13 @@ You can score multiple set bonuses if you have multiple of each type. The number
 Bob has 4 Armament, 2 Consumable, 5 Trinket, 1 Trade Good.
 Minimum across types = 1 (Trade Good).
 Number of sets = 1.
-Set bonus = **+6 points**
+Set bonus = **+10 points**
 
 **Example 2 — Multiple sets:**
 Charlie has 3 Armament, 2 Consumable, 4 Trinket, 2 Trade Good.
 Minimum across types = 2 (Consumable and Trade Good).
 Number of sets = 2.
-Set bonus = **+12 points**
+Set bonus = **+20 points**
 
 **Example 3 — No complete set:**
 Diana has 5 Armament, 3 Consumable, 4 Trinket, 0 Trade Good.
@@ -106,9 +106,9 @@ Calculate:
 - Consumable Rep (2): **3 points**
 - Trinket Rep (5): **11 points**
 - Trade Good Rep (1): **1 point**
-- Set bonus: minimum across types = 1, so **+6 points**
+- Set bonus: minimum across types = 1, so **+10 points**
 
-**Alice's final score = 38 + 8 + 3 + 11 + 1 + 6 = 67 points**
+**Alice's final score = 38 + 8 + 3 + 11 + 1 + 10 = 71 points**
 
 ---
 
@@ -149,7 +149,7 @@ For automated scoring, the app should:
 2. **After all final sells are done, calculate scores per player:**
    - Sum coins
    - For each of the 4 Rep token types, look up scaling table value
-   - Calculate set bonus: `min(armRep, conRep, triRep, trdRep) * 6`
+   - Calculate set bonus: `min(armRep, conRep, triRep, trdRep) * 10`
    - For Monk: add unspent Momentum to coin total
    - Total = coins + sum(rep points) + set bonus
 3. **Show a final scoreboard** with breakdown per player:

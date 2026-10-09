@@ -4,7 +4,7 @@ import type { Player, RepTokens } from '../types'
 export const REP_SCORE_TABLE = [0, 1, 3, 5, 8, 11, 14, 18, 22]
 
 /** Bonus points for each complete set of all four Reputation types. */
-export const SET_BONUS = 6
+export const SET_BONUS = 10
 
 export function repScore(tokens: number) {
   return REP_SCORE_TABLE[Math.min(Math.max(tokens, 0), REP_SCORE_TABLE.length - 1)]
@@ -32,7 +32,7 @@ export interface ScoreBreakdown {
   brokenWindows: number
 }
 
-/** Final-scoring formula: coins (+ Monk momentum) + rep table per type + 6 per full set. */
+/** Final-scoring formula: coins (+ Monk momentum) + rep table per type + 10 per full set. */
 export function scorePlayer(p: Player): ScoreBreakdown {
   const coins = p.coins + (p.classId === 'monk' ? p.momentumTokens : 0)
   const armPts = repScore(p.rep.ARM)
