@@ -141,7 +141,8 @@ describe('Auction into a Visitor', () => {
     patchPlayer(p0.id, { hoard: [con] })
     st().auction(p0.id, con.id, 'hoard', undefined, 0)
     expect(player(p0.id).hoard).toHaveLength(0)
-    expect(player(p0.id).coins - p0.coins).toBe(st().diceResult)
+    // Auctions pay half the roll, rounded up
+    expect(player(p0.id).coins - p0.coins).toBe(Math.ceil((st().diceResult ?? 0) / 2))
     expect(st().visitorContributions[v.id]).toBeUndefined()
     expect(st().visitorDemandRemaining[v.id].ARM).toBe(2)
   })

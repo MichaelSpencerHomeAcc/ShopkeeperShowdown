@@ -8,7 +8,7 @@ export const CLASSES: ClassCard[] = [
     tagline: 'Smash first, sell later',
     imageFile: '/cards/player-boards/Barbarian.png',
     status: 'BETA',
-    passive: 'Fearsome Champion — Add 2 to all Clash rolls. Other players may give you 2 resources from their Hoard to make you retreat from a Clash (you forfeit; they skip the roll). At the start of your turn, gain 1 coin for each Broken window currently on the board (maximum 2).',
+    passive: 'Fearsome Champion — Add 2 to all Clash rolls. Other players may give you 2 resources from their Hoard to make you retreat from a Clash (you forfeit; they skip the roll). At the start of your turn, gain 1 coin if there is at least one Broken window on the board.',
     actives: [
       'Reckless Swing — Break 1 of another player\'s windows. If that player has more Reputation tokens than you, Break 2 of their windows instead.',
       'Raiding Party — Place your Clan marker on any location; any other player who uses that location pays you 1 coin first. Then Appraise 1 (look at the top 4 resource cards; keep 1, the rest go to the bottom of the deck).',
@@ -49,7 +49,7 @@ export const CLASSES: ClassCard[] = [
     tagline: 'Always knows where to find it',
     imageFile: '/cards/player-boards/Ranger.png',
     status: 'BETA',
-    passive: 'Master of the Wilderness — At the start of your turn, Gather resources equal to half your d6 roll (round up). Whenever any Visitor is completed (by any player), Trade 1 (swap 1 of your resources with 1 from the Flea Market).',
+    passive: 'Master of the Wilderness — At the start of your turn, Gather resources equal to half your d6 roll (round up, minimum 2). Whenever any Visitor is completed (by any player), Trade 1 (swap 1 of your resources with 1 from the Flea Market).',
     actives: [
       'Ambush — Place 2 Ambush cards face-down on locations of your choice. When a player uses a matching location, flip and activate it. You may hold up to 3 active Ambush cards. Cannot target the Night Watcher holder.',
       'Trick Shot — Force a player to re-roll a die they just rolled. If they roll higher: Refresh 1 Active token. If equal or lower: choose one — Break 1 window for a player you didn\'t target OR Launder 1 resource.',
@@ -79,7 +79,7 @@ export const CLASSES: ClassCard[] = [
     status: 'BETA',
     passive: 'Dominion of the Elements — At game start, roll all 4 Elemental dice. Each die\'s face rolled determines its effect for the whole game. Use each die once on your turn; all used dice recharge at the start of round 4. Effects: 1=Draw 3, 2=Trade 5, 3=Repair 2, 4=Refresh 2 tokens, 5=Appraise 1 (top 4 keep 1), 6=Gain 1 extra action.',
     actives: [
-      'Call Lightning — Choose 1 player. That player discards 2 resources from their Hoard (their choice). Then you Draw 1 resource.',
+      'Call Lightning — Choose 1 player. That player discards 2 resources from their Hoard (their choice). Then you Draw 2 resources.',
       'Patience of Stone — For each unused Elemental die still in your possession, choose one effect: Repair 1, Trade 1, Draw 1, or Forage 2. Each effect may only be chosen once per use of this ability.',
     ],
     playstyle: 'The Patient. Difficulty 2/5. Uniquely powerful resource toolkit defined at game start by 4 dice rolls — you might have a great Trade die, a Draw die, or an extra-action die. Plan your whole game around what you rolled — your dice come back once, at the start of round 4. Call Lightning strips opponents\' hoards when they\'re most vulnerable. Patience of Stone squeezes value from your remaining dice. High game-to-game variance but consistent execution once you know your loadout.',
@@ -91,7 +91,7 @@ export const CLASSES: ClassCard[] = [
     tagline: "Magic is easy. Aiming it is the hard part.",
     imageFile: '/cards/player-boards/Sorcerer.png',
     status: 'BETA',
-    passive: "Wild Magic — Whenever you keep a 5 or 6 on any die (Gather, Auction, Clash, Duel, Mascot…), a Wild Surge erupts: roll 2d6 on the Surge Table. Arcane Charge (max 3): gain 1 when you cast a spell or roll a 1. Spend 1 to re-roll a Surge, or 2 to shift it up or down by 1.",
+    passive: "Wild Magic — Whenever you keep a 5 or 6 on any die (Gather, Auction, Clash, Duel, Mascot…), a Wild Surge erupts: roll 2d6 on the Surge Table. Arcane Charge (max 3): gain 1 when you cast a spell or roll a 1. Spend 1 to re-roll a Surge or to shift it up or down by 1.",
     actives: [
       "Hot Streak! — Name a resource type and draw. If it matches, bank everything or go again (+1 Charge). On a miss, lose every card drawn after the first, then Break 1 of another player's windows. Your first card is always safe.",
       "Wild Surge — Roll on the Surge Table twice, one after the other (and gain 1 Charge to bend them).",
@@ -105,7 +105,7 @@ export const CLASSES: ClassCard[] = [
     tagline: "Fate is a currency. He collects.",
     imageFile: '/cards/player-boards/Warlock.png',
     status: 'BETA',
-    passive: "Twist of Fate — After any die is rolled, by anyone, spend an Omen to change it to the Omen's number. Twisting someone else's roll earns you 1 coin. Bottled Fate: whenever any player rolls a 1 or a 6, bottle it as an Omen (max 3). In Clashes and Duels you Twist automatically when it turns a loss into a win.",
+    passive: "Twist of Fate — After any die is rolled, by anyone, spend an Omen to change it to the Omen's number. Twisting someone else's roll earns you 1 coin. Bottled Fate: whenever any player rolls a 1 or a 6, bottle it as an Omen (max 2). In Clashes and Duels you Twist automatically when it turns a loss into a win.",
     actives: [
       "Hex — Draw 2 Curse cards and lay one face-up in front of a player. At the start of their next turn they resolve it (pay you a coin, give up a card of their choice, shutter a window…) and hand it back. The Night Watcher protects against Hexes.",
       "Summon Imp — Your Imp lurks at a location until someone banishes it. Every other player who uses that location rolls: 1–2 the Imp eats a random card from their hoard, 3–4 it breaks one of their windows, 5–6 it's banished. You can Twist that roll, and spend a token to move the Imp.",

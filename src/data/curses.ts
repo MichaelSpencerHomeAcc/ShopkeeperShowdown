@@ -18,7 +18,7 @@ export interface CurseCard {
 }
 
 export const CURSES: CurseCard[] = [
-  { id: 'tithe', name: 'Tithe', icon: '🪙', text: 'Pay the Warlock 1 coin.', flavour: 'The shadows always take their cut.' },
+  { id: 'tithe', name: 'Tithe', icon: '🪙', text: 'Pay the Warlock 2 coins.', flavour: 'The shadows always take their cut.' },
   { id: 'leakyPockets', name: 'Leaky Pockets', icon: '🕳️', text: 'Discard 1 card from your hoard (your choice).', flavour: 'Just a small hole. Just a small loss.', choice: 'hoardCard' },
   { id: 'stickyFingers', name: 'Sticky Fingers', icon: '🖐️', text: 'Give the Warlock 1 card from your hoard (your choice).', flavour: 'Something unseen tugs at the satchel.', choice: 'hoardCard' },
   { id: 'hexedShutters', name: 'Hexed Shutters', icon: '🪟', text: 'Shutter 1 of your open windows (your choice) until the start of your next turn.', flavour: 'The latch won’t budge, no matter how you pull.', choice: 'window' },

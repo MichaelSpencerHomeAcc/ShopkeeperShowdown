@@ -1,7 +1,7 @@
 import { useState, useEffect } from 'react'
 import type { Location, RepType, Player, ResourceCard, WorkOrderCard, DemandMap } from '../types'
 import { canPlayerCraft } from '../utils/crafting'
-import { useGameStore, fitsDemand, MAX_SALES_PER_VISITOR } from '../store/gameStore'
+import { useGameStore, fitsDemand, MAX_SALES_PER_VISITOR, CONSULT_COST, BODYGUARD_COST } from '../store/gameStore'
 import { VisitorPrizeInfo } from './VisitorPrizes'
 import { TargetPicker, type TargetChoice } from './TargetPicker'
 import { breakWindowRule, heistWindowRule, stealRule, windowTargetRule, type WindowRule } from '../utils/targets'
@@ -65,12 +65,12 @@ function getActionDisplay(action: ActionOption, _player?: Player): ActionOption 
 const LOCATION_ACTIONS: Record<Location, ActionOption[]> = {
   guildhall: [
     { id: 'hire',      label: 'Hire a Professional', icon: '🏛️', description: 'Use a Guild professional for a special ability.' },
-    { id: 'consult',   label: 'Consultation',         icon: '💰', description: 'Pay 3 coins for +1 Reputation token.' },
+    { id: 'consult',   label: 'Consultation',         icon: '💰', description: `Pay ${CONSULT_COST} coins for +1 Reputation token.` },
     { id: 'negotiate', label: 'Negotiate',             icon: '🤝', description: 'Propose a card swap with another player.' },
   ],
   tavern: [
     { id: 'refresh', label: 'Refresh Actives', icon: '🔄', description: 'Reset all your active tokens to ready.' },
-    { id: 'auction', label: 'Auction 1',        icon: '🔨', description: 'Roll d6 to sell a hoard or window card — into a Visitor, if it fits.' },
+    { id: 'auction', label: 'Auction 1',        icon: '🔨', description: 'Roll d6 and gain half (rounded up) to sell a hoard or window card — into a Visitor, if it fits.' },
     { id: 'trade',   label: 'Trade 3',          icon: '↔️',  description: 'Swap up to 3 cards with the Flea Market.' },
   ],
   wilderness: [
@@ -80,7 +80,7 @@ const LOCATION_ACTIONS: Record<Location, ActionOption[]> = {
   ],
   barracks: [
     { id: 'report',     label: 'Report the Crime', icon: '⚖️', description: 'Repair windows or report theft for Reputation.' },
-    { id: 'bodyguard',  label: 'Hire Bodyguard',   icon: '🛡️', description: 'Pay 2 coins for the Night Watcher token.' },
+    { id: 'bodyguard',  label: 'Hire Bodyguard',   icon: '🛡️', description: `Pay ${BODYGUARD_COST} coin for the Night Watcher token.` },
     { id: 'town-crier', label: 'Town Crier',        icon: '📯', description: 'Peek at upcoming Visitors and replace any.' },
   ],
   workshop: [
@@ -438,7 +438,7 @@ function GuildhallActions({ actionId, onAction, onBack }: { actionId: string; on
           <button
             type="button"
             onClick={() => { consultation(player.id, consultRep); onAction() }}
-            disabled={player.coins < 3}
+            disabled={player.coins < CONSULT_COST}
             className="btn-primary text-xs px-2 py-0.5 disabled:opacity-50 disabled:cursor-not-allowed"
           >
             Pay 3 → +1 {consultRep}
@@ -1587,10 +1587,10 @@ function BarracksActions({ actionId, onAction, onBack }: { actionId: string; onA
     return (
       <ConfirmActionBlock
         description="Hire a bodyguard — no cards can be stolen from your hoard this round."
-        confirmLabel="Pay 2 coins → Night Watcher"
+        confirmLabel={`Pay ${BODYGUARD_COST} coin → Night Watcher`}
         onConfirm={() => { hireBodyguard(player.id); onAction() }}
         onBack={onBack}
-        disabled={player.coins < 2 || player.hasNightWatcher}
+        disabled={player.coins < BODYGUARD_COST || player.hasNightWatcher}
         extraInfo={
           <div className="text-xs text-parchment-500">
             {player.hasNightWatcher

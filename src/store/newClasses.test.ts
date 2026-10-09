@@ -1,5 +1,5 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
-import { useGameStore, MOMENTUM_COSTS, SURGE_SHIFT_COST } from './gameStore'
+import { useGameStore, MOMENTUM_COSTS, SURGE_SHIFT_COST, SURGE_REROLL_COST } from './gameStore'
 import { cardsOf, patchPlayer, playerOf, seedRandom, st, startGame } from '../test/helpers'
 import type { ClassId } from '../types'
 
@@ -54,7 +54,7 @@ describe('Sorcerer', () => {
     rolls(5, 6)
     st().bendSurge('reroll')
     expect(st().surge?.total).toBe(11)
-    expect(me('sorcerer').charge).toBe(0)
+    expect(me('sorcerer').charge).toBe(3 - SURGE_SHIFT_COST - SURGE_REROLL_COST)
   })
 
   it('Wild Surge costs an Active token, gives 1 Charge and rolls the table twice', () => {
@@ -212,8 +212,8 @@ describe('Warlock', () => {
     const wCoins = me('warlock').coins
     untilTurnOf(t.id)
     expect(me('shaman').curse).toBeNull()
-    expect(me('shaman').coins).toBe(4)
-    expect(me('warlock').coins).toBeGreaterThanOrEqual(wCoins + 1)
+    expect(me('shaman').coins).toBe(3)
+    expect(me('warlock').coins).toBeGreaterThanOrEqual(wCoins + 2)
     expect(me('warlock').curseDeck).toEqual(['badOmen', 'weariness', 'tithe'])
   })
 

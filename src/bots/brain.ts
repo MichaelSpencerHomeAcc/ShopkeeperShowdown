@@ -1,6 +1,7 @@
 import {
   useGameStore, CLAN_TOLL, FEARSOME_CHAMPION_MAX, MAX_SALES_PER_VISITOR, rankContributors, type GameStore,
   MOMENTUM_COSTS, SHARED_REP_MAX, FLOW_STATE_MAX, MAX_OMENS, SURGE_REROLL_COST, SURGE_SHIFT_COST, WILD_SURGE_COUNT,
+  CONSULT_COST, BODYGUARD_COST,
 } from '../store/gameStore'
 import type {
   BotDifficulty, CurseId, DemandMap, DuelStake, Location, MomentumSpendId, Player, RepType, ResourceCard, ResourceType,
@@ -11,6 +12,7 @@ import {
   MIDDLE_WINDOWS, RESOURCE_TYPES, actionsLeft, averageWorth, bestRepType, buildContext, cardWorth,
   clamp, drawValue, harmWeight, heldCards, isCounterfeit, liveScore, marginalRep, rankOpponents,
   missingForOrder, repValue, saleValue, sellPhasesLeft, sortByWorth, targetWorkOrder, type ValueContext,
+  pts, AUCTION_AVG,
 } from './evaluate'
 
 /**
@@ -170,7 +172,7 @@ function promptStep(s: GameStore): BotStep | null {
     windows.sort((a, b) => cardWorth(seller!.windows[b].card!, ctx) - cardWorth(seller!.windows[a].card!, ctx))
     const best = windows[0]
     const worthIt = best !== undefined && counterfeit &&
-      (rogueBot.bot === 'easy' ? chance(0.4) : cardWorth(seller!.windows[best].card!, ctx) >= 2)
+      (rogueBot.bot === 'easy' ? chance(0.4) : cardWorth(seller!.windows[best].card!, ctx) >= pts(2))
     return step('shadows', rogueBot, 'think', () => {
       if (worthIt) st().fromTheShadows(rogueBot.id, shadows.sellerId, best!, counterfeit!.id)
       else st().skipRogueShadowsInterrupt()
@@ -217,7 +219,7 @@ function promptStep(s: GameStore): BotStep | null {
         (neg.paladinRepType ? repValue(negBot.rep, neg.paladinRepType, negBot.bot!) : 0)
       // The proposer also gains 2 coins — hard bots won't feed the leader for free
       const feedsLeader = negBot.bot === 'hard' && proposer && rankOpponents(s, negBot.id)[0]?.id === proposer.id
-      accept = gain > (feedsLeader ? 2.5 : 0.5)
+      accept = gain > (feedsLeader ? 2.5 : pts(0.5))
     } else if (accept) {
       accept = chance(0.7)
     }
@@ -341,7 +343,7 @@ function promptStep(s: GameStore): BotStep | null {
   if (mi && miBot) {
     const ctx = buildContext(s, miBot, miBot.bot!)
     const avgDraw = averageWorth(s.resourceDeck.length > 0 ? s.resourceDeck : s.resourceDiscard, ctx, 1)
-    const windowWorth = 2.5 * clamp(sellPhasesLeft(s, miBot.id) / 3, 0.3, 1)
+    const windowWorth = pts(2.5) * clamp(sellPhasesLeft(s, miBot.id) / 3, 0.3, 1)
     const c = professionalCandidate(s, miBot, ctx, mi.professionalId, avgDraw, windowWorth, tokenValue(miBot))
     return step('mirror', miBot, 'think', () => { if (c) c.fn(st()); st().finishMirror() })
   }
@@ -564,9 +566,9 @@ function prizeWorth(s: GameStore, me: Player, ctx: ValueContext, prize: VisitorP
       const flea = s.fleaMarket.filter((c): c is ResourceCard => c !== null)
       return flea.length ? n * averageWorth(flea, ctx, 1) * 1.1 : 0
     }
-    case 'draw': return drawValue(n, 2.6, me)
-    case 'steal': return s.players.some(p => p.id !== me.id && p.hoard.length > 0) ? n * 2.8 : 0
-    case 'break': return n * 1.6 * (s.players.length - 1) * 0.6
+    case 'draw': return drawValue(n, pts(2.6), me)
+    case 'steal': return s.players.some(p => p.id !== me.id && p.hoard.length > 0) ? n * pts(2.8) : 0
+    case 'break': return n * pts(1.6) * (s.players.length - 1) * 0.6
   }
 }
 
@@ -758,7 +760,7 @@ function turnStep(s: GameStore, me: Player, memory: BotMemory): BotStep | null {
 }
 
 function chooseCandidate(candidates: Candidate[], difficulty: BotDifficulty): Candidate | null {
-  const threshold = difficulty === 'easy' ? 0 : difficulty === 'medium' ? 0.5 : 0.3
+  const threshold = difficulty === 'easy' ? 0 : pts(difficulty === 'medium' ? 0.5 : 0.3)
   const scored = candidates.map(c => ({ c, v: noisy(c.value, difficulty) })).filter(x => x.v > threshold)
   if (scored.length === 0) return null
   scored.sort((a, b) => b.v - a.v)
@@ -767,7 +769,7 @@ function chooseCandidate(candidates: Candidate[], difficulty: BotDifficulty): Ca
 }
 
 function noisy(value: number, difficulty: BotDifficulty) {
-  if (difficulty === 'easy') return value * (0.5 + Math.random()) + (Math.random() - 0.5) * 3
+  if (difficulty === 'easy') return value * (0.5 + Math.random()) + (Math.random() - 0.5) * pts(3)
   if (difficulty === 'medium') return value * (0.85 + Math.random() * 0.3)
   return value * (0.97 + Math.random() * 0.06)
 }
@@ -795,7 +797,7 @@ function arrangeStep(me: Player, ctx: ValueContext, memory: BotMemory): BotStep 
   const windowScore = (c: ResourceCard) => {
     const demand = ctx.demanded[c.type] > 0 ? 1 : 0.55
     // Rogue's own counterfeits sell for coins *and* fire their return effect
-    const bonus = me.classId === 'rogue' && isCounterfeit(c) ? 1.5 : 0
+    const bonus = me.classId === 'rogue' && isCounterfeit(c) ? pts(1.5) : 0
     return saleValue(c, ctx) * demand + bonus
   }
   const ranked = [...pool].sort((a, b) => windowScore(b) - windowScore(a) || a.id.localeCompare(b.id))
@@ -848,7 +850,7 @@ function locationCandidates(s: GameStore, me: Player, ctx: ValueContext): Candid
   const deckPool = s.resourceDeck.length > 0 ? s.resourceDeck : s.resourceDiscard
   const avgDraw = averageWorth(deckPool, ctx, 1)
   const phases = sellPhasesLeft(s, me.id)
-  const windowWorth = 2.5 * clamp(phases / 3, 0.3, 1)
+  const windowWorth = pts(2.5) * clamp(phases / 3, 0.3, 1)
   const tokenVal = tokenValue(me)
 
   const usable = (loc: Location, coinsNeeded = 0) => {
@@ -873,9 +875,9 @@ function locationCandidates(s: GameStore, me: Player, ctx: ValueContext): Candid
   }
 
   // ── Guildhall ──
-  if (usable('guildhall', 3)) {
+  if (usable('guildhall', CONSULT_COST)) {
     const t = bestRepType(me.rep, difficulty)
-    add('guildhall', `consult:${t}`, repValue(me.rep, t, difficulty) - 3, g => g.consultation(me.id, t), true)
+    add('guildhall', `consult:${t}`, repValue(me.rep, t, difficulty) - CONSULT_COST, g => g.consultation(me.id, t), true)
   }
   if (usable('guildhall')) {
     for (const prof of s.professionalSlots) {
@@ -943,14 +945,14 @@ function locationCandidates(s: GameStore, me: Player, ctx: ValueContext): Candid
         const value = repGain + card.value * 0.6 * harmWeight(s, me, target, difficulty) * (s.players.length - 1)
         add('barracks', `report:${target.id}:${card.id}`, value, g => g.reportCrimeB(me.id, target.id, card.id, t))
       }
-      if (me.coins >= 2 && !me.hasNightWatcher && s.players.length > 2) {
+      if (me.coins >= BODYGUARD_COST && !me.hasNightWatcher && s.players.length > 2) {
         const hoardWorth = me.hoard.reduce((n, c) => n + cardWorth(c, ctx), 0)
         const leading = rankOpponents(s, me.id).every(p => liveScore(p) <= liveScore(me))
-        add('barracks', 'bodyguard', hoardWorth * 0.1 + (leading ? 1.2 : 0) - 2, g => g.hireBodyguard(me.id))
+        add('barracks', 'bodyguard', hoardWorth * 0.1 + (leading ? pts(1.2) : 0) - BODYGUARD_COST, g => g.hireBodyguard(me.id))
       }
       const deadSlots = s.activeVisitors.filter(v => v && visitorPotential(s, me, v) === 0).length
       if (s.visitorDeck.length + s.visitorDiscard.length >= 3 && phases > 1) {
-        add('barracks', 'town-crier', deadSlots > 0 ? 2.2 : 0.6, g => {
+        add('barracks', 'town-crier', pts(deadSlots > 0 ? 2.2 : 0.6), g => {
           g.peekTownCrier(me.id)
           const peek = st().townCrierPeek
           if (peek && peek.playerId === me.id) {
@@ -1001,7 +1003,7 @@ function locationCandidates(s: GameStore, me: Player, ctx: ValueContext): Candid
     const stealTarget = bestStealTarget(s, me, ctx)
     if (stealTarget) {
       const value = averageWorth(stealTarget.hoard, ctx, 1) * 0.85 +
-        4 * harmWeight(s, me, stealTarget, difficulty) * (s.players.length - 1) * 0.5
+        pts(4) * harmWeight(s, me, stealTarget, difficulty) * (s.players.length - 1) * 0.5
       add('thieves-guild', `steal:${stealTarget.id}`, value, g => g.steal(me.id, stealTarget.id), true)
     }
     if (me.classId === 'rogue' && me.counterfeitHand.length > 0 && difficulty !== 'easy') {
@@ -1041,12 +1043,12 @@ function tokenValue(me: Player): number {
   switch (me.classId) {
     case 'barbarian':
     case 'rogue':
-      return 3
+      return pts(3)
     case 'shaman':
     case 'ranger':
     case 'sorcerer':
     case 'warlock':
-      return 2.5
+      return pts(2.5)
     case 'monk':
       // A Refresh only gives a Monk 1 Momentum
       return 0.6
@@ -1112,19 +1114,19 @@ function surgeValues(s: GameStore, me: Player): Record<number, number> {
   const avgDraw = averageWorth(s.resourceDeck.length > 0 ? s.resourceDeck : s.resourceDiscard, ctx, 1)
   const others = s.players.length - 1
   const ownWindow = me.windows.find((w, i) => i > 0 && i < 4 && w.status === 'normal')
-  const windowWorth = 2.5 * clamp(sellPhasesLeft(s, me.id) / 3, 0.3, 1)
+  const windowWorth = pts(2.5) * clamp(sellPhasesLeft(s, me.id) / 3, 0.3, 1)
   const bestPro = Math.max(0, ...s.professionalSlots.map(p => (p ? professionalCandidate(s, me, ctx, p.id, avgDraw, windowWorth, tokenValue(me))?.value ?? 0 : 0)))
   const v: Record<number, number> = {
-    2: ownWindow ? -(windowWorth + (ownWindow.card ? 1 : 0)) : 0,
+    2: ownWindow ? -(windowWorth + (ownWindow.card ? pts(1) : 0)) : 0,
     3: me.hoard.length ? -averageWorth(me.hoard, ctx, 0) : 0,
-    4: -0.5,
+    4: -pts(0.5),
     5: 0,
     6: 3 - others * 0.6,
     7: drawValue(2, avgDraw, me),
-    8: s.currentTurnPlayerId === me.id ? 4 : avgDraw,
-    9: 2,
+    8: s.currentTurnPlayerId === me.id ? pts(4) : avgDraw,
+    9: pts(2),
     10: bestPro,
-    11: others * 1.4,
+    11: others * pts(1.4),
   }
   v[12] = Math.max(...Object.values(v))
   return v
@@ -1136,7 +1138,7 @@ const TWO_D6: Record<number, number> = { 2: 1, 3: 2, 4: 3, 5: 4, 6: 5, 7: 6, 8: 
 /** A bot Sorcerer's Surge plan: bend it with Charge if worth it, otherwise resolve with the best choices. */
 function planSurge(s: GameStore, me: Player, total: number): { bend?: 'reroll' | 'up' | 'down'; choice: SurgeChoice } {
   const v = surgeValues(s, me)
-  const chargeWorth = 1.2
+  const chargeWorth = pts(1.2)
   const now = v[total]
   const avg = Object.entries(TWO_D6).reduce((n, [t, w]) => n + v[Number(t)] * w, 0) / 36
   if (me.bot !== 'easy') {
@@ -1145,7 +1147,7 @@ function planSurge(s: GameStore, me: Player, total: number): { bend?: 'reroll' |
     if (me.charge >= SURGE_SHIFT_COST && total < 12) opts.push({ bend: 'up', gain: v[total + 1] - now - chargeWorth * SURGE_SHIFT_COST })
     if (me.charge >= SURGE_SHIFT_COST && total > 2) opts.push({ bend: 'down', gain: v[total - 1] - now - chargeWorth * SURGE_SHIFT_COST })
     const best = opts.sort((a, b) => b.gain - a.gain)[0]
-    if (best && best.gain > 0.5) return { bend: best.bend, choice: {} }
+    if (best && best.gain > pts(0.5)) return { bend: best.bend, choice: {} }
   }
   // Wish: take the best result
   const wish = total === 12 ? Number(Object.entries(v).filter(([t]) => t !== '12').sort((a, b) => b[1] - a[1])[0][0]) : undefined
@@ -1162,7 +1164,7 @@ function planSurge(s: GameStore, me: Player, total: number): { bend?: 'reroll' |
   if (effective === 10) {
     const ctx = buildContext(s, me, me.bot ?? 'medium')
     const avgDraw = averageWorth(s.resourceDeck.length > 0 ? s.resourceDeck : s.resourceDiscard, ctx, 1)
-    const windowWorth = 2.5 * clamp(sellPhasesLeft(s, me.id) / 3, 0.3, 1)
+    const windowWorth = pts(2.5) * clamp(sellPhasesLeft(s, me.id) / 3, 0.3, 1)
     const best = s.professionalSlots
       .flatMap(p => (p ? [{ id: p.id, value: professionalCandidate(s, me, ctx, p.id, avgDraw, windowWorth, tokenValue(me))?.value ?? -1 }] : []))
       .sort((a, b) => b.value - a.value)[0]
@@ -1188,7 +1190,7 @@ function bestTrades(s: GameStore, me: Player, ctx: ValueContext, max: number, ho
   const swaps: Swap[] = []
   for (let n = 0; n < Math.min(max, mine.length, flea.length); n++) {
     const gain = cardWorth(flea[n].c, ctx) - cardWorth(mine[n], ctx)
-    if (gain <= 0.4) break
+    if (gain <= pts(0.4)) break
     swaps.push({ cardId: mine[n].id, fleaIdx: flea[n].i, gain })
   }
   return swaps
@@ -1202,7 +1204,7 @@ function bestAuction(s: GameStore, me: Player, ctx: ValueContext) {
   ]
   let best: SaleOption & { gain: number; visitorIdx?: number } | null = null
   for (const o of options) {
-    const base = 3.5 + o.card.repTokens * repValue(me.rep, o.card.type, ctx.difficulty) - cardWorth(o.card, ctx)
+    const base = AUCTION_AVG + o.card.repTokens * repValue(me.rep, o.card.type, ctx.difficulty) - cardWorth(o.card, ctx)
     // Selling into a Visitor it fits pays the same roll and counts toward that Visitor's prizes
     let visitorIdx: number | undefined
     let extra = 0
@@ -1211,7 +1213,7 @@ function bestAuction(s: GameStore, me: Player, ctx: ValueContext) {
       const rem = demandAfter(remainingOf(s, v), [o.card])
       if (!rem) return
       const completes = demandTotal(rem) === 0
-      const value = contributionValue(s, me, ctx, v, 1, completes) + (completes ? 1 : 0)
+      const value = contributionValue(s, me, ctx, v, 1, completes) + (completes ? pts(1) : 0)
       if (visitorIdx === undefined || value > extra) { visitorIdx = i; extra = value }
     })
     const gain = base + Math.max(0, extra)
@@ -1225,8 +1227,8 @@ function bestStealTarget(s: GameStore, me: Player, ctx: ValueContext): Player | 
   if (targets.length === 0) return null
   if (ctx.difficulty === 'easy') return pickRandom(targets)!
   return targets.sort((a, b) =>
-    (averageWorth(b.hoard, ctx) + 4 * harmWeight(s, me, b, ctx.difficulty)) -
-    (averageWorth(a.hoard, ctx) + 4 * harmWeight(s, me, a, ctx.difficulty)))[0]
+    (averageWorth(b.hoard, ctx) + pts(4) * harmWeight(s, me, b, ctx.difficulty)) -
+    (averageWorth(a.hoard, ctx) + pts(4) * harmWeight(s, me, a, ctx.difficulty)))[0]
 }
 
 function bestBreak(s: GameStore, me: Player, ctx: ValueContext) {
@@ -1237,7 +1239,7 @@ function bestBreak(s: GameStore, me: Player, ctx: ValueContext) {
     for (const i of MIDDLE_WINDOWS) {
       const w = target.windows[i]
       if (w.status !== 'normal') continue
-      const loss = w.card ? w.card.value * 0.5 + 2 : 1.2
+      const loss = w.card ? w.card.value * 0.5 + pts(2) : pts(1.2)
       // Barbarian passive pays 1 coin per broken window (capped) at each of their turn starts
       const brokenOnBoard = s.players.reduce((n, p) => n + p.windows.filter(x => x.status === 'broken').length, 0)
       const passive = me.classId === 'barbarian' && brokenOnBoard < FEARSOME_CHAMPION_MAX ? Math.min(3, Math.max(0, 6 - s.round)) * 0.5 : 0
@@ -1256,7 +1258,7 @@ function bestHeist(s: GameStore, me: Player, ctx: ValueContext) {
     if (target.id === me.id || target.hasNightWatcher) continue
     for (const [i, w] of target.windows.entries()) {
       if (!w.card || w.status === 'shuttered') continue
-      const value = cardWorth(w.card, ctx, 1) + w.card.value * harmWeight(s, me, target, ctx.difficulty) + 1
+      const value = cardWorth(w.card, ctx, 1) + w.card.value * harmWeight(s, me, target, ctx.difficulty) + pts(1)
       if (!best || value > best.value) best = { target, windowIdx: i, counterfeitId: counterfeit.id, value }
     }
   }
@@ -1270,7 +1272,7 @@ function bestFence(s: GameStore, me: Player, ctx: ValueContext) {
   ].filter(c => !isCounterfeit(c) && c.type !== s.lastGuildFenceType)
   let best: { card: ResourceCard; value: number } | null = null
   for (const card of stolen) {
-    const value = card.value + 0.5 - cardWorth(card, ctx)
+    const value = card.value + pts(0.5) - cardWorth(card, ctx)
     if (!best || value > best.value) best = { card, value }
   }
   return best
@@ -1375,7 +1377,7 @@ function professionalCandidate(
       for (const [i, c] of s.fleaMarket.entries()) {
         if (!c) continue
         const n = c.repTokens > 0 ? c.repTokens : 1
-        const v = marginalRep(me.rep, c.type, n) + (difficulty === 'hard' ? 0.5 : 0)
+        const v = marginalRep(me.rep, c.type, n) + (difficulty === 'hard' ? pts(0.5) : 0)
         if (!best || v > best.value) best = { value: v, tag: c.id, fn: g => g.distribute(me.id, i) }
       }
       return best
@@ -1396,7 +1398,7 @@ function professionalCandidate(
         for (const i of MIDDLE_WINDOWS) {
           const w = target.windows[i]
           if (w.status !== 'normal' || !w.card) continue
-          const v = Math.floor(w.card.value / 2) + (w.card.value * 0.5 + 2) * harmWeight(s, me, target, difficulty) * (s.players.length - 1) * 0.6
+          const v = Math.floor(w.card.value / 2) + (w.card.value * 0.5 + pts(2)) * harmWeight(s, me, target, difficulty) * (s.players.length - 1) * 0.6
           if (!best || v > best.value) best = { value: v, tag: `${target.id}:${i}`, fn: g => g.shadySaboteur(me.id, target.id, i) }
         }
       }
@@ -1406,7 +1408,7 @@ function professionalCandidate(
       const deck = s.resourceDeck
       const pRep = deck.length > 0 ? deck.filter(c => c.repTokens > 0).length / deck.length : 0.4
       const expected = clamp(1 / Math.max(pRep, 0.15), 1, 5)
-      return { value: drawValue(expected, avgDraw, me) + 1, tag: 'draw', fn: g => g.skilfulStocker(me.id) }
+      return { value: drawValue(expected, avgDraw, me) + pts(1), tag: 'draw', fn: g => g.skilfulStocker(me.id) }
     }
     case 'p09': { // Spirited Summoner — Appraise 3
       if (s.resourceDeck.length === 0) return null
@@ -1436,7 +1438,7 @@ function abilityCandidates(s: GameStore, me: Player, ctx: ValueContext): Candida
   const avgDraw = averageWorth(s.resourceDeck.length > 0 ? s.resourceDeck : s.resourceDiscard, ctx, 1)
   const tokenCost = tokenValue(me) * 0.6
   // Medium bots are a little hesitant to spend tokens
-  const minGain = difficulty === 'medium' ? 1.5 : 0.8
+  const minGain = pts(difficulty === 'medium' ? 1.5 : 0.8)
   const push = (key: string, value: number, run: () => void) => {
     if (value >= minGain) out.push({ key: `ability:${key}`, value, run })
   }
@@ -1454,7 +1456,7 @@ function abilityCandidates(s: GameStore, me: Player, ctx: ValueContext): Candida
           .slice(0, count)
         if (windows.length === 0) continue
         const harm = harmWeight(s, me, target, difficulty) * (s.players.length - 1) * 0.6
-        const value = windows.reduce((n, i) => n + ((target.windows[i].card?.value ?? 0) * 0.5 + 1.5) * harm + 0.8, 0)
+        const value = windows.reduce((n, i) => n + ((target.windows[i].card?.value ?? 0) * 0.5 + pts(1.5)) * harm + pts(0.8), 0)
         if (!best || value > best.value) best = { target, windows, value }
       }
       if (best) {
@@ -1479,7 +1481,7 @@ function abilityCandidates(s: GameStore, me: Player, ctx: ValueContext): Candida
         if (target.id === me.id) continue
         for (const [i, w] of target.windows.entries()) {
           if (!w.card || w.status === 'shuttered') continue
-          const value = cardWorth(w.card, ctx, 1) + w.card.value * harmWeight(s, me, target, difficulty) * 0.6 + 1
+          const value = cardWorth(w.card, ctx, 1) + w.card.value * harmWeight(s, me, target, difficulty) * 0.6 + pts(1)
           if (!best || value > best.value) best = { target, windowIdx: i, value }
         }
       }
@@ -1495,7 +1497,7 @@ function abilityCandidates(s: GameStore, me: Player, ctx: ValueContext): Candida
     ].filter(c => !isCounterfeit(c))
     for (const card of stolen) {
       const rv = repValue(me.rep, card.type, difficulty)
-      const value = 3.5 + card.repTokens * rv + (2 / 6) * rv - cardWorth(card, ctx)
+      const value = AUCTION_AVG + card.repTokens * rv + (2 / 6) * rv - cardWorth(card, ctx)
       push(`guild:${card.id}`, value - tokenCost, () => st().guildContacts(me.id, card.id))
     }
   }
@@ -1503,10 +1505,10 @@ function abilityCandidates(s: GameStore, me: Player, ctx: ValueContext): Candida
   if (me.classId === 'shaman') {
     me.elementalDice.forEach((die, idx) => {
       if (die.used) return
-      const keep = 1.5 // option value of saving a one-shot die for later
+      const keep = pts(1.5) // option value of saving a one-shot die for later
       switch (die.face) {
         case 1:
-          push(`die:${idx}`, drawValue(3, avgDraw, me) - keep - 2, () => st().activateElementalDie(me.id, idx))
+          push(`die:${idx}`, drawValue(3, avgDraw, me) - keep - pts(2), () => st().activateElementalDie(me.id, idx))
           break
         case 2: {
           const swaps = bestTrades(s, me, ctx, 5, true)
@@ -1519,7 +1521,7 @@ function abilityCandidates(s: GameStore, me: Player, ctx: ValueContext): Candida
         }
         case 3: {
           const broken = me.windows.map((w, i) => (w.status === 'broken' ? i : -1)).filter(i => i >= 0).slice(0, 2)
-          if (broken.length > 0) push(`die:${idx}`, broken.length * 2.5 - keep, () => st().activateElementalDie(me.id, idx, { windowIndices: broken }))
+          if (broken.length > 0) push(`die:${idx}`, broken.length * pts(2.5) - keep, () => st().activateElementalDie(me.id, idx, { windowIndices: broken }))
           break
         }
         case 4:
@@ -1530,14 +1532,14 @@ function abilityCandidates(s: GameStore, me: Player, ctx: ValueContext): Candida
           break
         case 6:
           // Extra action is worth most at the start of the turn
-          if (s.turnActionsUsed === 0) push(`die:${idx}`, 5 - keep, () => st().activateElementalDie(me.id, idx))
+          if (s.turnActionsUsed === 0) push(`die:${idx}`, pts(5) - keep, () => st().activateElementalDie(me.id, idx))
           break
       }
     })
     if (me.activeTokens >= 1 && !used('callLightning') && !s.shamanCallLightning) {
       const target = rankOpponents(s, me.id).find(p => p.hoard.length >= 2)
       if (target) {
-        const value = avgDraw + 4 * harmWeight(s, me, target, difficulty) * (s.players.length - 1) * 0.5
+        const value = drawValue(2, avgDraw, me) + pts(4) * harmWeight(s, me, target, difficulty) * (s.players.length - 1) * 0.5
         push(`lightning:${target.id}`, value - tokenCost, () => st().callLightning(me.id, target.id))
       }
     }
@@ -1547,12 +1549,12 @@ function abilityCandidates(s: GameStore, me: Player, ctx: ValueContext): Candida
     if (!used('hotStreak') && !s.hotStreak) {
       // One safe card, ~25% for each extra, and a Break on the usual miss
       const hit = bestBreak(s, me, ctx)
-      push('hotStreak', avgDraw * 1.3 + (hit ? hit.value * 0.7 : 0) + 0.5 - tokenCost, () => st().startHotStreak(me.id))
+      push('hotStreak', avgDraw * 1.3 + (hit ? hit.value * 0.7 : 0) + pts(0.5) - tokenCost, () => st().startHotStreak(me.id))
     }
     if (!used('wildSurge') && !s.surge) {
       const v = surgeValues(s, me)
       const ev = Object.entries(TWO_D6).reduce((n, [t, w]) => n + v[Number(t)] * w, 0) / 36
-      push('wildSurge', ev * WILD_SURGE_COUNT + 0.6 - tokenCost, () => st().castWildSurge(me.id))
+      push('wildSurge', ev * WILD_SURGE_COUNT + pts(0.6) - tokenCost, () => st().castWildSurge(me.id))
     }
   }
 
@@ -1583,7 +1585,7 @@ function abilityCandidates(s: GameStore, me: Player, ctx: ValueContext): Candida
       }
     }
     if (can('copyPro')) {
-      const windowWorth = 2.5 * clamp(sellPhasesLeft(s, me.id) / 3, 0.3, 1)
+      const windowWorth = pts(2.5) * clamp(sellPhasesLeft(s, me.id) / 3, 0.3, 1)
       for (const prof of s.professionalSlots) {
         if (!prof) continue
         const c = professionalCandidate(s, me, ctx, prof.id, avgDraw, windowWorth, tokenValue(me))
@@ -1609,7 +1611,7 @@ function abilityCandidates(s: GameStore, me: Player, ctx: ValueContext): Candida
     if (!used('hex') && !s.hexPeek && me.curseDeck.length > 0) {
       const victim = rankOpponents(s, me.id).find(p => !p.hasNightWatcher && !p.curse)
       if (victim) {
-        const value = 1.8 + 2 * harmWeight(s, me, victim, difficulty) * (s.players.length - 1) * 0.4
+        const value = pts(1.8) + pts(2) * harmWeight(s, me, victim, difficulty) * (s.players.length - 1) * 0.4
         push(`hex:${victim.id}`, value - tokenCost, () => st().hex(me.id, victim.id))
       }
     }
@@ -1619,7 +1621,7 @@ function abilityCandidates(s: GameStore, me: Player, ctx: ValueContext): Candida
       const busy: Location[] = ['wilderness', 'guildhall', 'workshop', 'barracks', 'tavern', 'thieves-guild']
       const loc = difficulty === 'easy' ? pickRandom(busy)! : busy[0]
       const omenBoost = me.omens.includes(1) ? 0.8 : 0
-      push(`imp:${loc}`, 2.6 * Math.min(1.5, (s.players.length - 1) / 2) + omenBoost - tokenCost, () => st().summonImp(me.id, loc))
+      push(`imp:${loc}`, pts(2.6) * Math.min(1.5, (s.players.length - 1) / 2) + omenBoost - tokenCost, () => st().summonImp(me.id, loc))
     }
   }
 
@@ -1632,7 +1634,7 @@ function abilityCandidates(s: GameStore, me: Player, ctx: ValueContext): Candida
       .slice(0, Math.min(2, room))
     if (cards.length > 0 && s.round < 6) {
       // Keep one token in reserve for Trick Shot
-      const value = cards.length * 1.6 * Math.min(1, (s.players.length - 1) / 2) - tokenCost - (me.activeTokens === 1 ? 1 : 0)
+      const value = cards.length * pts(1.6) * Math.min(1, (s.players.length - 1) / 2) - tokenCost - (me.activeTokens === 1 ? pts(1) : 0)
       push(`ambush:${cards.map(c => c.id).join(',')}`, value, () => st().placeAmbush(me.id, cards.map(c => c.id)))
     }
   }

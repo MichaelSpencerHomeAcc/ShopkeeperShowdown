@@ -14,7 +14,7 @@ Used by: Spirited Summoner (Appraise 3), Barbarian Raiding Party (Appraise 1), M
 
 ## Auction
 
-Choose 1 resource from your windows or hoard. Roll d6 and gain the rolled coin value. If the resource has a Reputation icon, gain the matching Rep token. You may sell it into a Visitor that still needs it, which counts toward that Visitor's contribution prizes. Otherwise it goes to the discard pile.
+Choose 1 resource from your windows or hoard. Roll d6 and gain half the roll in coins, rounded up (1–3). If the resource has a Reputation icon, gain the matching Rep token. You may sell it into a Visitor that still needs it, which counts toward that Visitor's contribution prizes. Otherwise it goes to the discard pile.
 
 Used by: Tavern (Auction 1), Counterfeit "Orcish Bitter" return effect.
 
@@ -64,7 +64,7 @@ Used by: Wilderness (Forage 2), Shaman (Patience of Stone alternative).
 
 Roll your d6. Draw that many resources from the top of the resource deck.
 
-Used by: Wilderness (main action), Ranger passive (half roll, round up), Marvellous Mascot Professional.
+Used by: Wilderness (main action), Ranger passive (half roll, round up, minimum 2), Marvellous Mascot Professional.
 
 ---
 

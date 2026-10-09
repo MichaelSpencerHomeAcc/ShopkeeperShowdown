@@ -117,7 +117,7 @@ function BarbarianAbilities({ player, isActiveTurn }: { player: Player; isActive
           <span className="text-sm font-bold text-parchment-300 uppercase tracking-wide">Passive · Fearsome Champion</span>
         </div>
         <div className="px-3 py-2 text-sm text-parchment-400 leading-relaxed">
-          +2 to all Clash rolls. <span className="text-green-400">At turn start: gain 1 coin per broken window on the board (max {FEARSOME_CHAMPION_MAX}).</span>
+          +2 to all Clash rolls. <span className="text-green-400">At turn start: gain {FEARSOME_CHAMPION_MAX} coin if any window on the board is broken.</span>
           <br />Others may pay you 2 resources to make you retreat from a Clash (handled in Clash prompt).
           {player.clanLocation && (
             <div className="flex items-center gap-1 text-xs text-amber-400 font-semibold mt-1">

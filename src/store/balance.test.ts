@@ -34,8 +34,8 @@ describe('Barbarian — Fearsome Champion', () => {
     expect(barbarianIncome(1)).toBe(1)
   })
   it(`caps at ${FEARSOME_CHAMPION_MAX} coins`, () => {
-    expect(FEARSOME_CHAMPION_MAX).toBe(2)
-    expect(barbarianIncome(5)).toBe(2)
+    expect(FEARSOME_CHAMPION_MAX).toBe(1)
+    expect(barbarianIncome(5)).toBe(1)
   })
 })
 

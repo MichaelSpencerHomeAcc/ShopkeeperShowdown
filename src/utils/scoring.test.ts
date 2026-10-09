@@ -12,15 +12,15 @@ const player = (over: Partial<Player>): Player => ({
 
 describe('scoring', () => {
   it('uses the accelerating Reputation table, capped at 8 tokens', () => {
-    expect([0, 1, 2, 3, 4, 8].map(repScore)).toEqual([0, 1, 3, 5, 8, 22])
-    expect(repScore(12)).toBe(22)
+    expect([0, 1, 2, 3, 4, 8].map(repScore)).toEqual([0, 1, 2, 3, 4, 11])
+    expect(repScore(12)).toBe(11)
   })
 
-  it('adds coins, rep per type and 10 per complete set', () => {
+  it('adds coins, rep per type and 5 per complete set', () => {
     const s = scorePlayer(player({ coins: 40, rep: { ARM: 2, CON: 2, TRI: 1, TRG: 3 } }))
-    expect(s.repPoints).toBe(3 + 3 + 1 + 5)
+    expect(s.repPoints).toBe(2 + 2 + 1 + 3)
     expect(s.sets).toBe(1)
-    expect(s.total).toBe(40 + 12 + 10)
+    expect(s.total).toBe(40 + 8 + 5)
   })
 
   it('counts Monk momentum as coins', () => {

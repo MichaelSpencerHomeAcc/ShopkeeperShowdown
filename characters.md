@@ -19,7 +19,7 @@ Recommended starter classes for first-time play: **Barbarian, Ranger, Monk, Sorc
 ### Passive — Fearsome Champion
 - Add 2 to all Clash rolls.
 - Other players may give you 2 resources from their Hoard to make you retreat from any Clash you are part of (you forfeit the Clash; they don't have to roll).
-- Always on: At the start of your turn, gain 1 coin for each Broken window currently on the board (maximum 2).
+- Always on: At the start of your turn, gain 1 coin if there is at least one Broken window on the board.
 
 ### Active — Reckless Swing
 Break 1 of another player's windows. If that player has more Reputation tokens than you, Break 2 of their windows instead.
@@ -42,7 +42,7 @@ Place your Clan marker on any location. Appraise 1 (look at the top 4 resources,
 **Difficulty:** 1/5
 
 ### Passive — Master of the Wilderness
-- At the start of your turn: Gather half your d6 roll (round up).
+- At the start of your turn: Gather half your d6 roll (round up, minimum 2).
 - Always on: Whenever any Visitor is completed (by any player), Trade 1 (swap 1 of your resources with 1 from the Flea Market).
 
 ### Active — Ambush
@@ -70,7 +70,7 @@ Force a player to re-roll a die they just rolled.
 At game start, roll all 4 Elemental dice. You may use each die's effect once, on your turn; all used dice recharge at the start of round 4. The result rolled determines the effect available (see Class Feature).
 
 ### Active — Call Lightning
-Choose 1 player. That player must discard 2 resources from their Hoard (their choice). Then Draw 1 resource.
+Choose 1 player. That player must discard 2 resources from their Hoard (their choice). Then Draw 2 resources.
 
 ### Active — Patience of Stone
 For each unused Elemental die still in your possession, choose one effect: Repair 1, Trade 1, Draw 1, or Forage 2. Each effect may only be chosen once per use of this ability.
@@ -100,7 +100,7 @@ Whenever you keep a **5 or 6** on any die — Gather, Auction, Clash, Duel, Masc
 
 ### Class Feature — Arcane Charge (0–3)
 - Gain 1 Charge each time you cast a spell (use an Active) or roll a 1.
-- Spend 1 Charge to re-roll a Surge, or 2 Charge to shift it up or down by 1.
+- Spend 1 Charge to re-roll a Surge, or to shift it up or down by 1.
 
 ### Active — Hot Streak!
 Name a resource type and draw 1.
@@ -246,7 +246,7 @@ Discard 1 Renown Card from your hand. Immediately resolve its Spend effect.
 **Difficulty:** 4/5
 
 ### Class Feature — Bottled Fate
-Keep up to 3 **Omen** dice. Whenever **any** player rolls a 1 or a 6, bottle it as an Omen showing that number.
+Keep up to 2 **Omen** dice. Whenever **any** player rolls a 1 or a 6, bottle it as an Omen showing that number.
 
 ### Passive — Twist of Fate
 After any die is rolled (by anyone, at any time), spend an Omen to change that die to the Omen's number. A twisted die can't be re-rolled. Twisting another player's roll earns you 1 coin.
@@ -261,7 +261,7 @@ Choose a player (not the Night Watcher holder, and not someone already cursed). 
 ### Curse deck (8 cards)
 | Curse | At the start of their next turn, the victim… |
 |---|---|
-| Tithe | Pays you 1 coin |
+| Tithe | Pays you 2 coins |
 | Leaky Pockets | Discards 1 card from their hoard (their choice) |
 | Sticky Fingers | Gives you 1 card from their hoard (their choice) |
 | Hexed Shutters | Shutters 1 of their open windows (their choice) until the start of their following turn |
@@ -278,7 +278,7 @@ Place your Imp on a location, where everyone can see it. It **stays until someon
 
 You may Twist that roll. The Night Watcher holder is ignored by the Imp. Using Summon Imp again while it's out moves it to a new location.
 
-**Custom components:** 3 Omen dice, Curse deck (8 cards), Imp figure
+**Custom components:** 2 Omen dice, Curse deck (8 cards), Imp figure
 
 ---
 

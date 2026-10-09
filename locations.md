@@ -29,7 +29,7 @@ There are three ways to sell into a Visitor. Each card must match something the 
 Resolve one of the 3 face-up Professionals at the Guildhall.
 
 **Consultation**
-Pay 3 coins. Gain 1 Reputation token of your choice.
+Pay 2 coins. Gain 1 Reputation token of your choice.
 
 **Negotiate**
 Trade 1 resource directly with a willing player. Both players must agree. No Stolen marker is applied to either resource as a result of this trade. Proposing uses the action; if the trade is declined, the action (and any Clan toll paid to enter the Guildhall) is refunded.
@@ -42,7 +42,7 @@ Trade 1 resource directly with a willing player. Both players must agree. No Sto
 Ready all your expended Active tokens (flip them face-up).
 
 **Auction 1**
-Choose 1 resource from your hoard or windows, and optionally a Visitor that still needs it. Roll d6 and gain that many coins. If the resource has a Reputation icon, gain the matching Rep token. If you chose a Visitor, the resource is sold into it and counts toward its contribution prizes; otherwise it goes to the discard pile.
+Choose 1 resource from your hoard or windows, and optionally a Visitor that still needs it. Roll d6 and gain half that many coins, rounded up (1–3). If the resource has a Reputation icon, gain the matching Rep token. If you chose a Visitor, the resource is sold into it and counts toward its contribution prizes; otherwise it goes to the discard pile.
 
 **Trade 3**
 Swap up to 3 of your resources (from windows or hoard) with the same number of resources from the Flea Market.
@@ -70,7 +70,7 @@ Choose ONE:
 (b) Gain 1 Reputation token, AND name a player who must discard 1 Stolen resource from their Hoard (their choice) to the discard pile. Counterfeits cannot be discarded this way.
 
 **Hire Bodyguard**
-Pay 2 coins. Move the Night Watcher badge to yourself.
+Pay 1 coin. Move the Night Watcher badge to yourself.
 
 **Town Crier**
 Look at the top 3 Visitor cards. Place 1 of them into play, replacing a current Visitor of your choice. The replaced Visitor is discarded. Return the other 2 to the top of the Visitor deck in any order.

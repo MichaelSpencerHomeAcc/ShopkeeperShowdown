@@ -18,7 +18,7 @@ import { RENOWN_CARDS } from '../data/renown'
 import { AMBUSH_CARDS } from '../data/ambushCards'
 
 /** Barbarian Fearsome Champion: coins per turn = broken windows on the board, up to this cap. */
-export const FEARSOME_CHAMPION_MAX = 2
+export const FEARSOME_CHAMPION_MAX = 1
 /** Coins a player pays a Barbarian to use a location holding their Clan marker. */
 export const CLAN_TOLL = 1
 /** Shaman Elemental dice that have been used recharge at the start of this round. */
@@ -94,7 +94,7 @@ function makePlayer(id: string, name: string, classId: ClassId, bot?: BotDifficu
     name,
     classId,
     ...(bot ? { bot } : {}),
-    coins: 3,
+    coins: 2,
     rep: { ARM: 0, CON: 0, TRI: 0, TRG: 0 },
     activeTokens: classId === 'monk' ? 0 : 2,
     windows,
@@ -607,12 +607,16 @@ function negotiateRefundNote(s: GameState, deal: { actionCharged?: boolean; clan
 
 /** Most cards one player may sell into a single Visitor in one sell phase or Market sale. */
 export const MAX_SALES_PER_VISITOR = 2
+/** Auctions pay half the roll, rounded up (1–3 coins). */
+export const auctionCoins = (roll: number) => Math.ceil(roll / 2)
+export const CONSULT_COST = 2
+export const BODYGUARD_COST = 1
 
 export const VISITOR_PRIZE_KINDS: VisitorPrizeKind[] = ['coins', 'rep', 'refresh', 'take', 'draw', 'steal', 'break']
 
 /** Prize sizes as [1st place, 2nd place] for each Visitor size. */
 export const VISITOR_PRIZE_AMOUNTS: Record<VisitorPrizeKind, Record<VisitorCard['size'], [number, number]>> = {
-  coins:   { Small: [4, 2], Large: [6, 3] },
+  coins:   { Small: [2, 1], Large: [3, 2] },
   rep:     { Small: [1, 1], Large: [2, 1] },
   refresh: { Small: [1, 1], Large: [2, 1] },
   take:    { Small: [1, 1], Large: [2, 1] },
@@ -892,7 +896,7 @@ function payAuction(
   if (a.visitorIdx !== undefined) {
     const sold = sellIntoVisitors(get, set, a.playerId, [{
       visitorIdx: a.visitorIdx, cardId: card.id, zone: a.fromZone ?? 'hoard', windowIdx: a.windowIdx, coins: a.roll,
-    }], lines => `${player.name} auctioned ${lines.join(', ')} — rolled ${a.roll}${a.note}, gained ${a.roll} coins`, a.extra)
+    }], lines => `${player.name} auctioned ${lines.join(', ')} — rolled ${a.roll}${a.note}, gained ${auctionCoins(a.roll)} coins`, a.extra)
     if (sold > 0) return
   }
 
@@ -904,14 +908,14 @@ function payAuction(
       if (p.id !== a.playerId) return p
       const withCoinsRep = {
         ...p,
-        coins: p.coins + a.roll,
+        coins: p.coins + auctionCoins(a.roll),
         rep: repGain > 0 ? { ...p.rep, [card.type]: p.rep[card.type] + repGain } : p.rep,
       }
       return a.fromZone === 'hoard'
         ? { ...withCoinsRep, hoard: p.hoard.filter(c => c.id !== card.id), stolenHoardCardIds: p.stolenHoardCardIds.filter(id => id !== card.id) }
         : { ...withCoinsRep, windows: p.windows.map((w, i) => (i === a.windowIdx ? { ...w, card: null, stolen: false } : w)) }
     }),
-    actionLog: [logEntry(`${player.name} auctioned ${card.name} — rolled ${a.roll}${a.note}, gained ${a.roll} coins${repGain > 0 ? ` +${repGain} rep` : ''}.`, a.playerId), ...s.actionLog.slice(0, 49)],
+    actionLog: [logEntry(`${player.name} auctioned ${card.name} — rolled ${a.roll}${a.note}, gained ${auctionCoins(a.roll)} coins${repGain > 0 ? ` +${repGain} rep` : ''}.`, a.playerId), ...s.actionLog.slice(0, 49)],
   }))
   if (isCounterfeitCard(card)) get().returnCounterfeitsToRogue([card], a.playerId, 'auctioned')
 }
@@ -929,11 +933,11 @@ export const VISITOR_MOMENTUM = 2
 export const SHARED_REP_MAX = 3
 
 /** Warlock: Omen dice in the jar */
-export const MAX_OMENS = 3
+export const MAX_OMENS = 2
 /** Sorcerer: Arcane Charge cap, and what bending a Surge costs */
 export const MAX_CHARGE = 3
 export const SURGE_REROLL_COST = 1
-export const SURGE_SHIFT_COST = 2
+export const SURGE_SHIFT_COST = 1
 /** Wild Magic: a kept die of this or higher sets off a Surge */
 export const SURGE_ON = 5
 /** Casting Wild Surge rolls this many Surges */
@@ -1275,9 +1279,9 @@ function resolveCurseAtTurnStart(get: () => GameStore, set: SetFn, victim: Playe
     return
   }
   if (c.id === 'tithe') {
-    const pay = Math.min(1, victim.coins)
+    const pay = Math.min(2, victim.coins)
     set(s => ({ players: s.players.map(p => (p.id === victim.id ? { ...p, coins: p.coins - pay } : p.id === c.warlockId ? { ...p, coins: p.coins + pay } : p)) }))
-    liftCurse(get, set, victim.id, `${victim.name}'s Tithe — ${pay ? `pays ${w?.name} 1 coin` : 'has nothing to pay'}.`)
+    liftCurse(get, set, victim.id, `${victim.name}'s Tithe — ${pay ? `pays ${w?.name} ${pay} coin${pay !== 1 ? 's' : ''}` : 'has nothing to pay'}.`)
   } else if (c.id === 'weariness') {
     set(s => ({ players: s.players.map(p => (p.id !== victim.id ? p
       : p.classId === 'monk' ? { ...p, momentumTokens: Math.max(0, p.momentumTokens - 1) }
@@ -1425,7 +1429,7 @@ function applyFirstTurnStartBonuses(get: () => GameStore, set: (partial: Partial
       players: s.players.map(p => p.id === firstPlayer.id ? { ...p, trickShotAvailable: true } : p),
     }))
     const roll = Math.ceil(Math.random() * 6)
-    const count = Math.ceil(roll / 2)
+    const count = Math.max(2, Math.ceil(roll / 2))
     const st = get()
     const { drawn, deck, discard } = drawCards(st.resourceDeck, st.resourceDiscard, count, 0, Infinity)
     set(s => ({
@@ -1493,7 +1497,7 @@ export const useGameStore = create<GameStore>((set, get) => ({
         players: s.players.map(p => p.id === firstPlayer.id ? { ...p, trickShotAvailable: true } : p),
       }))
       const roll = Math.ceil(Math.random() * 6)
-      const count = Math.ceil(roll / 2)
+      const count = Math.max(2, Math.ceil(roll / 2))
       const st = get()
       const { drawn, deck, discard } = drawCards(st.resourceDeck, st.resourceDiscard, count, 0, Infinity)
       set(s => ({
@@ -2524,7 +2528,7 @@ export const useGameStore = create<GameStore>((set, get) => ({
         return {
           ...p,
           activeTokens: p.activeTokens - 1,
-          coins: p.coins + roll,
+          coins: p.coins + auctionCoins(roll),
           rep: repGain > 0 ? { ...p.rep, [card.type]: p.rep[card.type] + repGain } : p.rep,
           hoard: p.hoard.filter(c => c.id !== card.id),
           stolenHoardCardIds: p.stolenHoardCardIds.filter(id => id !== card.id),
@@ -2532,7 +2536,7 @@ export const useGameStore = create<GameStore>((set, get) => ({
         }
       }),
       actionLog: [logEntry(
-        `${rogue.name}'s Guild Contacts auctioned ${card.name} — rolled ${roll}, gained ${roll} coins` +
+        `${rogue.name}'s Guild Contacts auctioned ${card.name} — rolled ${roll}, gained ${auctionCoins(roll)} coins` +
         (printedRepGain > 0 ? `, gained ${printedRepGain} ${card.type} Rep` : '') +
         (bonusRepGain > 0 ? `${printedRepGain > 0 ? ' plus' : ', gained'} 1 bonus ${card.type} Rep` : '') + '.',
         rogueId
@@ -2779,7 +2783,7 @@ export const useGameStore = create<GameStore>((set, get) => ({
     const { players } = get()
     const player = players.find(p => p.id === playerId)
     if (!player) return
-    if (player.coins < 3) {
+    if (player.coins < CONSULT_COST) {
       console.error('consultation: not enough coins')
       return
     }
@@ -2789,12 +2793,12 @@ export const useGameStore = create<GameStore>((set, get) => ({
         p.id === playerId
           ? {
               ...p,
-              coins: p.coins - 3,
+              coins: p.coins - CONSULT_COST,
               rep: { ...p.rep, [repType]: p.rep[repType] + 1 },
             }
           : p
       ),
-      actionLog: [logEntry(`${player.name} paid 3 coins for consultation — gained 1 ${repType} rep.`, playerId), ...s.actionLog.slice(0, 49)],
+      actionLog: [logEntry(`${player.name} paid ${CONSULT_COST} coins for consultation — gained 1 ${repType} rep.`, playerId), ...s.actionLog.slice(0, 49)],
     }))
   },
 
@@ -2802,7 +2806,7 @@ export const useGameStore = create<GameStore>((set, get) => ({
     const { players } = get()
     const player = players.find(p => p.id === playerId)
     if (!player) return
-    if (player.coins < 2) {
+    if (player.coins < BODYGUARD_COST) {
       console.error('hireBodyguard: not enough coins')
       return
     }
@@ -2810,10 +2814,10 @@ export const useGameStore = create<GameStore>((set, get) => ({
     set(s => ({
       players: s.players.map(p =>
         p.id === playerId
-          ? { ...p, coins: p.coins - 2, hasNightWatcher: true }
+          ? { ...p, coins: p.coins - BODYGUARD_COST, hasNightWatcher: true }
           : { ...p, hasNightWatcher: false }
       ),
-      actionLog: [logEntry(`${player.name} hired the Bodyguard — paid 2 coins, now holds the Night Watcher.`, playerId), ...s.actionLog.slice(0, 49)],
+      actionLog: [logEntry(`${player.name} hired the Bodyguard — paid ${BODYGUARD_COST} coin${BODYGUARD_COST !== 1 ? 's' : ''}, now holds the Night Watcher.`, playerId), ...s.actionLog.slice(0, 49)],
     }))
   },
 
@@ -3310,7 +3314,7 @@ export const useGameStore = create<GameStore>((set, get) => ({
     const ranger = players.find(p => p.id === currentTurnPlayerId)
     if (ranger?.classId === 'ranger') {
       const roll = Math.ceil(Math.random() * 6)
-      const count = Math.ceil(roll / 2)
+      const count = Math.max(2, Math.ceil(roll / 2))
       const st = get()
       const { drawn, deck, discard } = drawCards(st.resourceDeck, st.resourceDiscard, count, 0, Infinity)
       set(s => ({
@@ -3872,7 +3876,7 @@ export const useGameStore = create<GameStore>((set, get) => ({
     if (!shaman || !target) return
 
     const discarded = target.hoard.filter(c => discardCardIds.includes(c.id))
-    const { drawn, deck, discard } = drawCards(resourceDeck, resourceDiscard, 1, 0, Infinity)
+    const { drawn, deck, discard } = drawCards(resourceDeck, resourceDiscard, 2, 0, Infinity)
 
     set(s => ({
       shamanCallLightning: null,
@@ -3884,7 +3888,7 @@ export const useGameStore = create<GameStore>((set, get) => ({
         if (p.id === shamanId) return { ...p, hoard: [...p.hoard, ...drawn] }
         return p
       }),
-      actionLog: [logEntry(`${target.name} discarded ${discarded.length} resource(s); ${shaman.name} drew 1.`, shamanId), ...s.actionLog.slice(0, 49)],
+      actionLog: [logEntry(`${target.name} discarded ${discarded.length} resource(s); ${shaman.name} drew ${drawn.length}.`, shamanId), ...s.actionLog.slice(0, 49)],
     }))
   },
 
@@ -4535,7 +4539,7 @@ export const useGameStore = create<GameStore>((set, get) => ({
       // From Round 2 onward it fires in completeSellPhase (after the sell phase UI).
       if (round !== 1) return
       const roll = Math.ceil(Math.random() * 6)
-      const count = Math.ceil(roll / 2)
+      const count = Math.max(2, Math.ceil(roll / 2))
       const st = get()
       const { drawn, deck, discard } = drawCards(st.resourceDeck, st.resourceDiscard, count, 0, Infinity)
       set(s => ({
