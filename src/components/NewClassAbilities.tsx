@@ -346,7 +346,7 @@ export function WarlockAbilities({ player, isActiveTurn }: { player: Player; isA
 
       {(myImp || cursed.length > 0) && (
         <div className="rounded-xl border border-purple-600/50 bg-purple-950/30 px-3 py-2 text-xs text-purple-200 space-y-0.5">
-          {myImp && <div>👹 Your Imp lurks at the <b>{LOCATIONS.find(l => l.id === myImp.location)?.label ?? myImp.location}</b> until your next turn.</div>}
+          {myImp && <div>👹 Your Imp lurks at the <b>{LOCATIONS.find(l => l.id === myImp.location)?.label ?? myImp.location}</b> until someone banishes it.</div>}
           {cursed.map(p => <div key={p.id}>{CURSE_BY_ID[p.curse!.id].icon} {p.name} carries <b>{CURSE_BY_ID[p.curse!.id].name}</b>.</div>)}
         </div>
       )}
@@ -354,7 +354,7 @@ export function WarlockAbilities({ player, isActiveTurn }: { player: Player; isA
       <AbilityButton
         icon="🕯️"
         title="Hex"
-        detail={hexUsed ? '✓ Used this turn' : `Curse a player: draw 2 Curse cards and choose one. Curses trigger once, then return to your deck (${player.curseDeck.length} left).`}
+        detail={hexUsed ? '✓ Used this turn' : `Lay a curse in front of a player: draw 2 Curse cards and choose one. It resolves at the start of their next turn, then comes back to your deck (${player.curseDeck.length} left).`}
         cost={<TokenCost player={player} />}
         open={open === 'hex'}
         disabled={!canAct || hexUsed || !!hexPeek || player.curseDeck.length === 0}
@@ -369,12 +369,14 @@ export function WarlockAbilities({ player, isActiveTurn }: { player: Player; isA
 
       <AbilityButton
         icon="👹"
-        title="Summon Imp"
-        detail={impUsed || myImp ? '✓ Your Imp is out' : 'Your Imp lurks at a location until your next turn. The first other player there rolls: 1–2 it steals a card, 3–4 it breaks a window, 5–6 it’s banished.'}
+        title={myImp ? 'Move the Imp' : 'Summon Imp'}
+        detail={impUsed ? '✓ Used this turn'
+          : myImp ? 'Your Imp is out — spend a token to send it somewhere else.'
+          : 'Your Imp lurks at a location until someone banishes it. Every other player who uses that location rolls: 1–2 it steals a card, 3–4 it breaks a window, 5–6 it’s banished.'}
         cost={<TokenCost player={player} />}
         tone="red"
         open={open === 'imp'}
-        disabled={!canAct || impUsed || !!imp}
+        disabled={!canAct || impUsed || (!!imp && !myImp)}
         onClick={() => toggle('imp')}
       >
         <div className="text-xs text-parchment-400">Where does it lurk? (Everyone can see it.)</div>
@@ -388,7 +390,7 @@ export function WarlockAbilities({ player, isActiveTurn }: { player: Player; isA
         </div>
         <button type="button" className="btn-primary w-full text-sm py-2 disabled:opacity-50" disabled={!loc}
           onClick={() => { if (loc) { summonImp(player.id, loc); setOpen(null) } }}>
-          {loc ? `Summon the Imp at the ${LOCATIONS.find(l => l.id === loc)?.label}` : 'Pick a location'}
+          {loc ? `${myImp ? 'Send' : 'Summon'} the Imp to the ${LOCATIONS.find(l => l.id === loc)?.label}` : 'Pick a location'}
         </button>
       </AbilityButton>
 

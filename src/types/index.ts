@@ -11,17 +11,16 @@ export interface ResourceCard {
 
 /** Warlock Curse cards (see data/curses.ts). */
 export type CurseId =
-  | 'jinx' | 'butterfingers' | 'tithe' | 'hexedGoods' | 'leakyPockets' | 'tollOfShadows' | 'unsettledShelves' | 'badOmen'
+  | 'tithe' | 'leakyPockets' | 'stickyFingers' | 'hexedShutters' | 'unsettledShelves' | 'weariness' | 'misfortune' | 'badOmen'
 
-/** A curse sitting on a player. armed = their turn has started, so it fizzles when that turn ends. */
+/** A Curse card laid in front of a player; it resolves at the start of their next turn. */
 export interface ActiveCurse {
   id: CurseId
   warlockId: string
-  armed: boolean
 }
 
 /** Rolls the Warlock can Twist and that the Sorcerer's dice abilities watch. */
-export type RollKind = 'gather' | 'auction' | 'mascot' | 'imp'
+export type RollKind = 'gather' | 'auction' | 'mascot' | 'imp' | 'misfortune'
 
 /** Choices some Wild Surge results need. */
 export interface SurgeChoice {
@@ -317,12 +316,15 @@ export interface GameState {
     auctionFromZone?: 'hoard' | 'window'
     auctionWindowIdx?: number
     auctionVisitorIdx?: number
-    impWarlockId?: string
+    /** The Warlock behind an Imp or Misfortune roll */
+    sourceWarlockId?: string
   } | null
   /** Hex: the two Curse cards drawn, waiting for the Warlock to pick one */
   hexPeek: { warlockId: string; targetId: string; cards: CurseId[] } | null
-  /** The Warlock's Imp, lurking at a location until their next turn */
+  /** The Warlock's Imp: it lurks at a location until someone banishes it */
   imp: { warlockId: string; location: Location } | null
+  /** A curse resolving at the start of its victim's turn that needs them to pick a card or window */
+  curseChoice: { playerId: string; curseId: CurseId } | null
 
   // ── Monk ──  // ── Monk ──
   /** Players the Monk has shared a location with this turn (Flow State + the 7-Momentum Rep spend) */

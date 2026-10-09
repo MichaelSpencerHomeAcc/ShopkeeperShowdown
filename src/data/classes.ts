@@ -107,8 +107,8 @@ export const CLASSES: ClassCard[] = [
     status: 'BETA',
     passive: "Twist of Fate — After any die is rolled, by anyone, spend an Omen to change it to the Omen's number. Twisting someone else's roll earns you 1 coin. Bottled Fate: whenever any player rolls a 1 or a 6, bottle it as an Omen (max 3). In Clashes and Duels you Twist automatically when it turns a loss into a win.",
     actives: [
-      "Hex — Curse a player: draw 2 Curse cards and lay one on them. Curses are mild, trigger once, then return to your deck; unused ones fizzle at the end of the victim's next turn. The Night Watcher protects against Hexes.",
-      "Summon Imp — Your Imp lurks at a location until your next turn. The first other player to use it rolls: 1–2 the Imp steals a card for you, 3–4 it breaks one of their windows, 5–6 it's banished. (You can Twist that roll.)",
+      "Hex — Draw 2 Curse cards and lay one face-up in front of a player. At the start of their next turn they resolve it (pay you a coin, give up a card of their choice, shutter a window…) and hand it back. The Night Watcher protects against Hexes.",
+      "Summon Imp — Your Imp lurks at a location until someone banishes it. Every other player who uses that location rolls: 1–2 the Imp steals a card for you, 3–4 it breaks one of their windows, 5–6 it's banished. You can Twist that roll, and spend a token to move the Imp.",
     ],
     playstyle: "The Manipulator. Difficulty 4/5. A shady dealer in curses, demons and stolen luck. Every 1 and 6 rolled at the table feeds your jar of Omens — spend them to bless your own rolls or ruin a rival's. Hexes nudge opponents off balance and the Imp punishes anyone who wanders into its lair. Summon an Imp, then Twist its roll: that's the signature move.",
   },

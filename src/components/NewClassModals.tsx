@@ -17,7 +17,11 @@ const TYPE_STYLE: Record<ResourceType, string> = {
   TRG: 'bg-pink-700/70 border-pink-400 text-pink-100',
 }
 const TYPE_NAME: Record<ResourceType, string> = { ARM: 'Armament', CON: 'Consumable', TRI: 'Trinket', TRG: 'Trade Good' }
-const ROLL_NAME = { gather: 'Gather', auction: 'Auction', mascot: 'Mascot', imp: 'the Imp' } as const
+const ROLL_NAME = { gather: 'Gather', auction: 'Auction', mascot: 'Mascot', imp: 'the Imp', misfortune: 'Misfortune' } as const
+const ROLL_STAKES: Partial<Record<keyof typeof ROLL_NAME, string>> = {
+  imp: ' — 1–2 it steals, 3–4 it breaks, 5–6 banished',
+  misfortune: ' — 1–3 pays the Warlock 2 coins',
+}
 
 function Modal({ border, children, wide = false }: { border: string; children: ReactNode; wide?: boolean }) {
   return (
@@ -360,7 +364,7 @@ export function TwistModal() {
       <Title player={w} icon="🔮" title="Twist of Fate" sub={<>{own ? 'You' : roller.name} rolled for {ROLL_NAME[pend.rollType]}</>} />
       <div className="flex flex-col items-center">
         <span className="text-7xl leading-none">{FACES[pend.roll - 1]}</span>
-        <span className="text-sm text-parchment-400 mt-1">{pend.roll}{pend.rollType === 'imp' ? ' — 1–2 steal, 3–4 break, 5–6 banished' : ''}</span>
+        <span className="text-sm text-parchment-400 mt-1">{pend.roll}{ROLL_STAKES[pend.rollType] ?? ''}</span>
       </div>
       <div className="text-xs text-parchment-400 text-center">
         Spend an Omen to change the die to its number.{!own && ' Twisting someone else’s roll earns you 1 coin.'}
@@ -388,7 +392,7 @@ export function HexChoiceModal() {
   const t = players.find(p => p.id === pk.targetId)
   return (
     <Modal border="border-purple-500/80" wide>
-      <Title player={w} icon="🕯️" title="Hex" sub={<>Choose the curse to lay on <b className="text-purple-200">{t?.name}</b>. The other goes to the bottom of your deck.</>} />
+      <Title player={w} icon="🕯️" title="Hex" sub={<>Choose the curse to lay in front of <b className="text-purple-200">{t?.name}</b> — it resolves at the start of their next turn. The other goes to the bottom of your deck.</>} />
       <div className={`grid gap-3 ${pk.cards.length > 1 ? 'grid-cols-2' : 'grid-cols-1'}`}>
         {pk.cards.map(id => {
           const c = CURSE_BY_ID[id]
@@ -403,6 +407,60 @@ export function HexChoiceModal() {
           )
         })}
       </div>
+    </Modal>
+  )
+}
+
+/** A curse resolving at the start of its victim's turn that lets them choose what it takes. */
+export function CurseChoiceModal() {
+  const cc = useGameStore(s => s.curseChoice)
+  const players = useGameStore(s => s.players)
+  const resolve = useGameStore(s => s.resolveCurseChoice)
+  const [cardId, setCardId] = useState('')
+  const [windowIdx, setWindowIdx] = useState<number | null>(null)
+  if (!cc) return null
+  const victim = players.find(p => p.id === cc.playerId)
+  const w = players.find(p => p.id === victim?.curse?.warlockId)
+  if (!victim) return null
+  const card = CURSE_BY_ID[cc.curseId]
+  const ready = card.choice === 'hoardCard' ? !!cardId : windowIdx !== null
+
+  function done() {
+    resolve({ cardId: cardId || undefined, windowIdx: windowIdx ?? undefined })
+    setCardId(''); setWindowIdx(null)
+  }
+
+  return (
+    <Modal border="border-purple-500/80" wide>
+      <Title player={w} icon={card.icon} title={card.name} sub={<>{w?.name}&apos;s curse takes hold of <b className="text-purple-200">{victim.name}</b></>} />
+      <div className="rounded-xl border border-purple-600/60 bg-purple-950/40 p-3 text-center">
+        <div className="text-sm text-parchment-100">{card.text}</div>
+        <div className="text-[11px] italic text-parchment-500 mt-1">“{card.flavour}”</div>
+      </div>
+      {card.choice === 'hoardCard' && (
+        <div className="flex flex-wrap justify-center gap-2">
+          {victim.hoard.map(c => <ResourceCardMini key={c.id} card={c} size="lg" selected={cardId === c.id} onClick={() => setCardId(c.id)} />)}
+        </div>
+      )}
+      {(card.choice === 'window' || card.choice === 'windowCard') && (
+        <div className="flex flex-wrap justify-center gap-2">
+          {victim.windows.map((x, i) => {
+            const ok = card.choice === 'window' ? x.status === 'normal' : !!x.card
+            return (
+              <button key={x.id} type="button" disabled={!ok} onClick={() => setWindowIdx(i)}
+                className={`flex flex-col items-center gap-1 rounded-xl border-2 p-1.5 w-[92px] ${windowIdx === i ? 'border-purple-300 bg-purple-900/50' : 'border-parchment-700/40 bg-ink-800/70 hover:border-parchment-400'} disabled:opacity-35 disabled:cursor-not-allowed`}>
+                <div className="w-[76px] h-[106px] rounded-lg overflow-hidden border border-parchment-700/30 bg-ink-900/70 flex items-center justify-center">
+                  {x.card ? <img src={x.card.imageFile} alt={x.card.name} className="w-full h-full object-cover" /> : <span className="text-[10px] text-parchment-600">{x.status === 'normal' ? 'Empty' : x.status}</span>}
+                </div>
+                <div className="text-[11px] font-bold text-parchment-200">Window {i + 1}</div>
+              </button>
+            )
+          })}
+        </div>
+      )}
+      <button type="button" className="btn-primary w-full text-sm py-2 disabled:opacity-50" disabled={!ready} onClick={done}>
+        {ready ? 'Resolve the curse' : card.choice === 'hoardCard' ? 'Pick a card' : 'Pick a window'}
+      </button>
     </Modal>
   )
 }

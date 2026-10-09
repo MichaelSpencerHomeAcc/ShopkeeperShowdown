@@ -15,7 +15,7 @@ import { VisitorPrizeInfo, VisitorPrizeModal } from './VisitorPrizes'
 import { TargetPicker, WindowPicker, type TargetChoice } from './TargetPicker'
 import { IncidentSpotlight } from './IncidentSpotlight'
 import {
-  AppraiseKeepModal, HexChoiceModal, HotStreakModal, MirrorModal, SurgeModal, TwistModal,
+  AppraiseKeepModal, CurseChoiceModal, HexChoiceModal, HotStreakModal, MirrorModal, SurgeModal, TwistModal,
 } from './NewClassModals'
 import { CURSE_BY_ID } from '../data/curses'
 import { useIncidentFeed, useIncidentStore } from '../store/incidentStore'
@@ -168,7 +168,7 @@ export function SharedBoard({ canAct = true, localPlayerName }: SharedBoardProps
     auction, tradeWithFleaMarket, breakWindow,
     resourceDeck, resourceDiscard,
     townCrierPeek, completeTownCrier, activeVisitors, visitorDemandRemaining, visitorPrizeQueue,
-    surge, mirrorPending, hotStreak, twistPending, hexPeek, imp,
+    surge, mirrorPending, hotStreak, twistPending, hexPeek, imp, curseChoice,
     professionalSlots,
     actionLog, lastGuildFencedCard,
     steal, heist,
@@ -801,7 +801,7 @@ export function SharedBoard({ canAct = true, localPlayerName }: SharedBoardProps
               title={CURSE_BY_ID[currentPlayer.curse.id].text}
               className="text-[10px] bg-purple-900/50 border border-purple-500/50 text-purple-200 px-2 py-0.5 rounded font-semibold"
             >
-              {CURSE_BY_ID[currentPlayer.curse.id].icon} Cursed: {CURSE_BY_ID[currentPlayer.curse.id].name} — {CURSE_BY_ID[currentPlayer.curse.id].text}
+              {CURSE_BY_ID[currentPlayer.curse.id].icon} Cursed: {CURSE_BY_ID[currentPlayer.curse.id].name} (resolves next turn) — {CURSE_BY_ID[currentPlayer.curse.id].text}
             </span>
           )}
         </div>
@@ -952,7 +952,7 @@ export function SharedBoard({ canAct = true, localPlayerName }: SharedBoardProps
 
                   {/* Warlock's Imp */}
                   {imp?.location === loc.id && (
-                    <div className="absolute bottom-1.5 left-1.5 z-10" title={`${players.find(p => p.id === imp.warlockId)?.name}'s Imp — the next player here rolls: 1–2 it steals a card, 3–4 it breaks a window, 5–6 banished`}>
+                    <div className="absolute bottom-1.5 left-1.5 z-10" title={`${players.find(p => p.id === imp.warlockId)?.name}'s Imp — every other player who uses this location rolls: 1–2 it steals a card, 3–4 it breaks a window, 5–6 it's banished`}>
                       <div className="relative flex items-center gap-1 bg-purple-950/90 border-2 border-purple-400 rounded-full px-2 py-0.5 shadow-lg shadow-purple-900/60 animate-pulse">
                         <span className="text-base leading-none">👹</span>
                         <span className="text-[10px] font-bold text-purple-200 whitespace-nowrap">Imp</span>
@@ -1488,6 +1488,9 @@ export function SharedBoard({ canAct = true, localPlayerName }: SharedBoardProps
       {twistPending && (isMe(twistPending.warlockId)
         ? <TwistModal />
         : <WaitingOverlay name={players.find(p => p.id === twistPending.warlockId)?.name} action="deciding whether to Twist Fate" classId="warlock" />)}
+      {curseChoice && (isMe(curseChoice.playerId)
+        ? <CurseChoiceModal />
+        : <WaitingOverlay name={players.find(p => p.id === curseChoice.playerId)?.name} action="resolving a curse" classId={players.find(p => p.id === curseChoice.playerId)?.classId} />)}
       {hexPeek && (isMe(hexPeek.warlockId)
         ? <HexChoiceModal />
         : <WaitingOverlay name={players.find(p => p.id === hexPeek.warlockId)?.name} action="choosing a curse" classId="warlock" />)}

@@ -254,29 +254,29 @@ After any die is rolled (by anyone, at any time), spend an Omen to change that d
 *In the app:* Clash and Duel rolls are made all at once, so the Warlock Twists automatically when that turns a loss into a win.
 
 ### Active — Hex
-Choose a player (not the Night Watcher holder, and not someone already cursed). Draw 2 Curse cards, lay one on them, put the other on the bottom of your deck. A Hex moves the Night Watcher to the victim, like any attack.
-- A curse triggers once, then returns to the bottom of your deck.
-- If it hasn't triggered by the end of the victim's next turn, it fizzles.
+Choose a player (not the Night Watcher holder, and not someone already cursed). Draw 2 Curse cards, lay one **face-up in front of them**, and put the other on the bottom of your deck. A Hex moves the Night Watcher to the victim, like any attack.
+- **At the start of their next turn**, before anything else, the victim resolves the curse and hands the card back (bottom of your deck).
+- That is the only timing to remember — nothing to track in between.
 
 ### Curse deck (8 cards)
-| Curse | Effect on the victim |
+| Curse | At the start of their next turn, the victim… |
 |---|---|
-| Jinx | Their next die roll is 1 lower (minimum 1) |
-| Butterfingers | Their next Gather or Mascot draws 1 fewer card |
-| Tithe | Their next Visitor sale pays you 1 of the coins |
-| Hexed Goods | Their next Visitor sale earns no Reputation from the cards |
-| Leaky Pockets | At the start of their next turn, their cheapest hoard card is discarded |
-| Toll of Shadows | Their next location action costs 1 coin, paid to you |
-| Unsettled Shelves | At the start of their next turn, a random window card slides back into their hoard |
-| Bad Omen | No effect on them — you bottle a 1 |
+| Tithe | Pays you 1 coin |
+| Leaky Pockets | Discards 1 card from their hoard (their choice) |
+| Sticky Fingers | Gives you 1 card from their hoard (their choice) |
+| Hexed Shutters | Shutters 1 of their open windows (their choice) until the start of their following turn |
+| Unsettled Shelves | Moves 1 card from their windows back to their hoard (their choice) |
+| Weariness | Exhausts 1 Active token (a Monk loses 1 Momentum) |
+| Misfortune | Rolls a d6: on 1–3 they pay you 2 coins (you may Twist this roll) |
+| Bad Omen | Nothing — you bottle a 1 as soon as you lay it |
 
 ### Active — Summon Imp
-Place your Imp on a location (everyone can see it) until your next turn. The first other player to use that location rolls a d6:
+Place your Imp on a location, where everyone can see it. It **stays until someone banishes it**. Every other player who uses that location rolls a d6:
 - **1–2:** the Imp steals a random card from their hoard for you
 - **3–4:** it breaks one of their windows
-- **5–6:** it's banished
+- **5–6:** it's banished (back to you)
 
-You may Twist that roll. The Night Watcher drives the Imp off.
+You may Twist that roll. The Night Watcher holder is ignored by the Imp. Using Summon Imp again while it's out moves it to a new location.
 
 **Custom components:** 3 Omen dice, Curse deck (8 cards), Imp figure
 

@@ -4,7 +4,7 @@ import type {
   ClassId, Location, WindowStatus, LogEntry, RepType, ShamanPatienceEffects, AmbushCard,
   DemandMap, PlayerSetup, BotDifficulty, ResourceType, VisitorPrizeKind, VisitorPrize,
   VisitorContribution, PendingVisitorPrize, VisitorPrizeChoice,
-  MomentumSpendId, MomentumChoice, CurseId, RollKind, SurgeChoice,
+  MomentumSpendId, MomentumChoice, CurseId, ActiveCurse, RollKind, SurgeChoice,
 } from '../types'
 import { CURSES, CURSE_BY_ID } from '../data/curses'
 import { SURGE_BY_TOTAL } from '../data/surges'
@@ -242,6 +242,7 @@ function buildInitialGameState(players: Player[]): GameState {
     twistPending: null,
     hexPeek: null,
     imp: null,
+    curseChoice: null,
     monkSharedWith: [],
     monkFlowGained: 0,
     startPlayerOffset: 0,
@@ -370,8 +371,10 @@ export interface GameStore extends GameState {
   /** Hex: curse a player — draws 2 Curse cards to choose from (1 Active token). Returns false if not allowed. */
   hex: (warlockId: string, targetId: string) => boolean
   chooseHex: (curseId: CurseId) => void
-  /** Summon Imp: it lurks at a location until your next turn (1 Active token) */
+  /** Summon Imp: it lurks at a location until banished; if it's already out, move it (1 Active token) */
   summonImp: (warlockId: string, location: Location) => void
+  /** The cursed player picks the card or window their curse takes */
+  resolveCurseChoice: (pick: { cardId?: string; windowIdx?: number }) => void
   appraise: (playerId: string, count: number) => void
   tradeWithFleaMarket: (playerId: string, playerCardIds: string[], fleaSlotIndices: number[]) => void
   steal: (byPlayerId: string, fromPlayerId: string) => void
@@ -536,6 +539,7 @@ const INITIAL: GameState = {
   twistPending: null,
   hexPeek: null,
   imp: null,
+  curseChoice: null,
   monkSharedWith: [],
   monkFlowGained: 0,
   startPlayerOffset: 0,
@@ -707,8 +711,6 @@ function sellIntoVisitors(
   const player = s0.players.find(p => p.id === playerId)
   if (!player) return 0
 
-  // Hexed Goods: this sale earns no Reputation from the cards
-  const hexed = player.curse?.id === 'hexedGoods'
   const demand = { ...s0.visitorDemandRemaining }
   const contributions = { ...s0.visitorContributions }
   let seq = s0.contributionSeq
@@ -741,7 +743,7 @@ function sellIntoVisitors(
     soldIds.add(card.id)
     if (win) soldWindows.add(sale.windowIdx!)
     coins += sale.coins
-    if (card.repTokens > 0 && !hexed) rep[card.type] = (rep[card.type] ?? 0) + card.repTokens
+    if (card.repTokens > 0) rep[card.type] = (rep[card.type] ?? 0) + card.repTokens
     if (isCounterfeitCard(card)) counterfeits.push(card)
     else discarded.push(card)
     lines.push(`${card.name} → ${v.name}`)
@@ -802,12 +804,6 @@ function sellIntoVisitors(
     ],
   }))
 
-  if (hexed) liftCurse(get, set, playerId, `${player.name}'s Hexed Goods — no Reputation from that sale.`)
-  if (player.curse?.id === 'tithe' && coins > 0) {
-    const warlockId = player.curse.warlockId
-    set(s => ({ players: s.players.map(p => (p.id === playerId ? { ...p, coins: p.coins - 1 } : p.id === warlockId ? { ...p, coins: p.coins + 1 } : p)) }))
-    liftCurse(get, set, playerId, `Tithe — 1 coin of ${player.name}'s sale goes to the Warlock.`)
-  }
   if (counterfeits.length > 0) get().returnCounterfeitsToRogue(counterfeits, playerId, 'sold')
   if (completed.length > 0) {
     get().refillVisitors()
@@ -1002,10 +998,6 @@ function bottleOmen(get: () => GameStore, set: SetFn, roll: number) {
   }))
 }
 
-function hasCurse(get: () => GameStore, playerId: string, id: CurseId) {
-  return get().players.find(p => p.id === playerId)?.curse?.id === id
-}
-
 /** A curse has done its work (or fizzled): it leaves the player and goes to the bottom of the Warlock's deck. */
 function liftCurse(get: () => GameStore, set: SetFn, playerId: string, note?: string) {
   const c = get().players.find(x => x.id === playerId)?.curse
@@ -1017,17 +1009,7 @@ function liftCurse(get: () => GameStore, set: SetFn, playerId: string, note?: st
   }))
 }
 
-/** Toll of Shadows: the cursed player's next location action pays the Warlock 1 coin. */
-function applyToll(get: () => GameStore, set: SetFn, playerId: string) {
-  const p = get().players.find(x => x.id === playerId)
-  if (p?.curse?.id !== 'tollOfShadows') return
-  const warlockId = p.curse.warlockId
-  const pay = Math.min(1, p.coins)
-  if (pay > 0) set(s => ({ players: s.players.map(x => (x.id === playerId ? { ...x, coins: x.coins - pay } : x.id === warlockId ? { ...x, coins: x.coins + pay } : x)) }))
-  liftCurse(get, set, playerId, `${p.name} pays the Toll of Shadows${pay ? ' — 1 coin to the Warlock' : ' (but has no coins)'}.`)
-}
-
-/** The Imp springs on the first other player to use its location. */
+/** The Imp springs on every other player who uses its location, until someone banishes it. */
 function triggerImp(get: () => GameStore, set: SetFn, playerId: string, location: Location) {
   const st = get()
   const imp = st.imp
@@ -1035,13 +1017,12 @@ function triggerImp(get: () => GameStore, set: SetFn, playerId: string, location
   const victim = st.players.find(p => p.id === playerId)
   const w = st.players.find(p => p.id === imp.warlockId)
   if (!victim || !w) return
-  set({ imp: null })
   if (victim.hasNightWatcher) {
-    addLog(set, `The Night Watcher drives off ${w.name}'s Imp before it can touch ${victim.name}.`, w.id)
+    addLog(set, `${w.name}'s Imp keeps its distance — the Night Watcher guards ${victim.name}.`, w.id)
     return
   }
   addLog(set, `${w.name}'s Imp leaps out at ${victim.name}! (1–2 steals a card, 3–4 breaks a window, 5–6 banished)`, w.id)
-  finishRoll(get, set, { playerId, rollType: 'imp', roll: d6(), note: '', impWarlockId: w.id })
+  finishRoll(get, set, { playerId, rollType: 'imp', roll: d6(), note: '', sourceWarlockId: w.id })
 }
 
 // ── Sorcerer: Arcane Charge and Wild Surges ──
@@ -1086,17 +1067,12 @@ interface RollResult {
   auctionFromZone?: 'hoard' | 'window'
   auctionWindowIdx?: number
   auctionVisitorIdx?: number
-  impWarlockId?: string
+  sourceWarlockId?: string
 }
 
-/** A roll's number is settled (after any re-rolls): Jinx, Bottled Fate, then the Warlock's chance to Twist it. */
+/** A roll's number is settled (after any re-rolls): Bottled Fate, then the Warlock's chance to Twist it. */
 function finishRoll(get: () => GameStore, set: SetFn, r: RollResult) {
-  let { roll, note } = r
-  if (hasCurse(get, r.playerId, 'jinx')) {
-    roll = Math.max(1, roll - 1)
-    note += ` (Jinx: ${r.roll}→${roll})`
-    liftCurse(get, set, r.playerId)
-  }
+  const { roll, note } = r
   bottleOmen(get, set, roll)
   const w = get().players.find(p => p.classId === 'warlock' && p.omens.some(o => o !== roll))
   if (w) {
@@ -1108,23 +1084,17 @@ function finishRoll(get: () => GameStore, set: SetFn, r: RollResult) {
 
 function applyRoll(get: () => GameStore, set: SetFn, r: RollResult) {
   set({ diceResult: r.roll })
-  _applyTrickShotRoll(get, set, r.rollType, r.playerId, r.roll, r.note, r.auctionCardId, r.auctionFromZone, r.auctionWindowIdx, r.auctionVisitorIdx, r.impWarlockId)
+  _applyTrickShotRoll(get, set, r.rollType, r.playerId, r.roll, r.note, r.auctionCardId, r.auctionFromZone, r.auctionWindowIdx, r.auctionVisitorIdx, r.sourceWarlockId)
 }
 
 /**
- * Clash and Duel rolls happen all at once: Jinx applies, 1s and 6s are bottled, a Warlock taking
+ * Clash and Duel rolls happen all at once: 1s and 6s are bottled, a Warlock taking
  * part Twists automatically when that turns a loss into a win, and the Sorcerer's dice surge or charge.
  */
 function applyContestFate<T extends { playerId: string; roll: number; die?: number; bonus?: number }>(
   get: () => GameStore, set: SetFn, rolls: T[],
 ): T[] {
   let out = rolls.map(r => { const bonus = r.bonus ?? 0; return { ...r, bonus, die: r.die ?? r.roll - bonus } })
-  out = out.map(r => {
-    if (!hasCurse(get, r.playerId, 'jinx')) return r
-    liftCurse(get, set, r.playerId)
-    const die = Math.max(1, r.die - 1)
-    return { ...r, die, roll: die + r.bonus }
-  })
   for (const r of out) bottleOmen(get, set, r.die)
 
   const w = get().players.find(p => p.classId === 'warlock' && p.omens.length > 0 && out.some(r => r.playerId === p.id))
@@ -1286,32 +1256,39 @@ function applyNewClassTurnStart(get: () => GameStore, set: SetFn, startingId: st
   const starter = st.players.find(p => p.id === startingId)
   if (!starter) return
 
-  // Warlock: an Imp that found no one comes home
-  if (st.imp?.warlockId === startingId) {
-    set({ imp: null })
-    addLog(set, `${starter.name}'s Imp slinks home empty-handed.`, startingId)
-  }
-
-  // A curse's victim starts their turn: some trigger now, the rest fizzle if unused by the end of it
+  // A curse laid on this player resolves now, before they act
   const c = starter.curse
-  if (!c) return
-  if (c.id === 'leakyPockets') {
-    const cheapest = [...starter.hoard].sort((a, b) => a.value - b.value)[0]
-    if (cheapest) get().discardResource(startingId, cheapest.id, 'hoard')
-    liftCurse(get, set, startingId, `${starter.name}'s Leaky Pockets — ${cheapest ? `lost ${cheapest.name}` : 'nothing to lose'}.`)
-  } else if (c.id === 'unsettledShelves') {
-    const filled = starter.windows.map((w, i) => ({ w, i })).filter(({ w }) => w.card)
-    const pick = filled[Math.floor(Math.random() * filled.length)]
-    if (pick) get().moveFromWindowToHoard(startingId, pick.i)
-    liftCurse(get, set, startingId, `${starter.name}'s Unsettled Shelves — ${pick ? `${pick.w.card!.name} slid back into the hoard` : 'nothing moved'}.`)
-  } else {
-    set(s => ({ players: s.players.map(p => (p.id === startingId && p.curse ? { ...p, curse: { ...p.curse, armed: true } } : p)) }))
-  }
+  if (c) resolveCurseAtTurnStart(get, set, starter, c)
 }
 
-function applyNewClassTurnEnd(get: () => GameStore, set: SetFn, endingId: string) {
-  const p = get().players.find(x => x.id === endingId)
-  if (p?.curse?.armed) liftCurse(get, set, endingId, `${p.name}'s ${CURSE_BY_ID[p.curse.id].name} fizzles.`)
+/** Resolve a curse at the start of its victim's turn; curses that need a pick wait for it. */
+function resolveCurseAtTurnStart(get: () => GameStore, set: SetFn, victim: Player, c: ActiveCurse) {
+  const w = get().players.find(p => p.id === c.warlockId)
+  const card = CURSE_BY_ID[c.id]
+  const hasOption = card.choice === 'hoardCard' ? victim.hoard.length > 0
+    : card.choice === 'windowCard' ? victim.windows.some(x => x.card)
+    : card.choice === 'window' ? victim.windows.some(x => x.status === 'normal')
+    : false
+  if (card.choice) {
+    if (hasOption) { set({ curseChoice: { playerId: victim.id, curseId: c.id } }); return }
+    liftCurse(get, set, victim.id, `${victim.name}'s ${card.name} — nothing to take.`)
+    return
+  }
+  if (c.id === 'tithe') {
+    const pay = Math.min(1, victim.coins)
+    set(s => ({ players: s.players.map(p => (p.id === victim.id ? { ...p, coins: p.coins - pay } : p.id === c.warlockId ? { ...p, coins: p.coins + pay } : p)) }))
+    liftCurse(get, set, victim.id, `${victim.name}'s Tithe — ${pay ? `pays ${w?.name} 1 coin` : 'has nothing to pay'}.`)
+  } else if (c.id === 'weariness') {
+    set(s => ({ players: s.players.map(p => (p.id !== victim.id ? p
+      : p.classId === 'monk' ? { ...p, momentumTokens: Math.max(0, p.momentumTokens - 1) }
+      : { ...p, activeTokens: Math.max(0, p.activeTokens - 1) })) }))
+    liftCurse(get, set, victim.id, `${victim.name}'s Weariness — ${victim.classId === 'monk' ? '1 Momentum' : '1 Active token'} lost.`)
+  } else if (c.id === 'misfortune') {
+    liftCurse(get, set, victim.id, `${victim.name} rolls against Misfortune (1–3 pays ${w?.name} 2 coins)…`)
+    finishRoll(get, set, { playerId: victim.id, rollType: 'misfortune', roll: d6(), note: '', sourceWarlockId: c.warlockId })
+  } else {
+    liftCurse(get, set, victim.id)
+  }
 }
 
 // Shared helper: execute the underlying action (gather/auction/mascot) with a given final roll.
@@ -1327,7 +1304,7 @@ function _applyTrickShotRoll(
   auctionFromZone?: 'hoard' | 'window',
   auctionWindowIdx?: number,
   auctionVisitorIdx?: number,
-  impWarlockId?: string,
+  sourceWarlockId?: string,
 ) {
   const { players, resourceDeck, resourceDiscard } = get()
   const player = players.find(p => p.id === playerId)
@@ -1335,7 +1312,7 @@ function _applyTrickShotRoll(
   sorcererDie(get, set, playerId, finalRoll)
 
   if (rollType === 'imp') {
-    const w = players.find(p => p.id === impWarlockId)
+    const w = players.find(p => p.id === sourceWarlockId)
     if (!w) return
     if (finalRoll <= 2) {
       addLog(set, `The Imp rolls ${finalRoll} — it snatches a card from ${player.name}!`, w.id)
@@ -1347,17 +1324,27 @@ function _applyTrickShotRoll(
       addLog(set, `The Imp rolls ${finalRoll} — ${idx !== undefined ? `it smashes one of ${player.name}'s windows!` : 'but finds nothing to smash.'}`, w.id)
       if (idx !== undefined) get().breakWindow(w.id, playerId, idx)
     } else {
+      set({ imp: null })
       addLog(set, `${player.name} rolls ${finalRoll} and banishes the Imp!`, playerId)
     }
     return
   }
 
-  // Butterfingers: the next Gather or Mascot draws 1 fewer
-  const fumble = (rollType === 'gather' || rollType === 'mascot') && player.curse?.id === 'butterfingers' ? 1 : 0
-  if (fumble) liftCurse(get, set, playerId, `${player.name}'s Butterfingers — 1 card slips away.`)
+  if (rollType === 'misfortune') {
+    const w = players.find(p => p.id === sourceWarlockId)
+    if (!w) return
+    if (finalRoll <= 3) {
+      const pay = Math.min(2, player.coins)
+      set(s => ({ players: s.players.map(p => (p.id === playerId ? { ...p, coins: p.coins - pay } : p.id === w.id ? { ...p, coins: p.coins + pay } : p)) }))
+      addLog(set, `${player.name}'s Misfortune — rolled ${finalRoll}: pays ${w.name} ${pay} coin${pay !== 1 ? 's' : ''}.`, w.id)
+    } else {
+      addLog(set, `${player.name}'s Misfortune — rolled ${finalRoll} and shrugs it off.`, playerId)
+    }
+    return
+  }
 
   if (rollType === 'gather') {
-    const { drawn, deck, discard } = drawCards(resourceDeck, resourceDiscard, Math.max(1, finalRoll - fumble), 0, Infinity)
+    const { drawn, deck, discard } = drawCards(resourceDeck, resourceDiscard, finalRoll, 0, Infinity)
     set({
       resourceDeck: deck,
       resourceDiscard: discard,
@@ -1379,7 +1366,7 @@ function _applyTrickShotRoll(
   }
 
   if (rollType === 'mascot') {
-    const drawCount = Math.max(1, Math.floor(finalRoll / 2) - fumble)
+    const drawCount = Math.max(1, Math.floor(finalRoll / 2))
     const reshuffled = resourceDeck.length === 0 // discard becomes the new deck
     let deck = reshuffled ? shuffle([...resourceDiscard]) : [...resourceDeck]
     const drawn: ResourceCard[] = []
@@ -3343,7 +3330,6 @@ export const useGameStore = create<GameStore>((set, get) => ({
     const actingPlayerId = activePlayerId || currentTurnPlayerId
     get().movePawn(actingPlayerId, location)
     applyFlowState(get, set, actingPlayerId, location)
-    applyToll(get, set, actingPlayerId)
     triggerImp(get, set, actingPlayerId, location)
 
     // Compute ambush in advance (using snapshot from before this set, which is fine —
@@ -4478,7 +4464,6 @@ export const useGameStore = create<GameStore>((set, get) => ({
   },
 
   _advanceTurn() {
-    applyNewClassTurnEnd(get, set, get().currentTurnPlayerId)
     const { currentTurnPlayerId, round } = get()
     const order = turnOrder(get())
     const idx = order.findIndex(p => p.id === currentTurnPlayerId)
@@ -5010,7 +4995,7 @@ export const useGameStore = create<GameStore>((set, get) => ({
     // Like any attack, it moves the Night Watcher to the victim (not in 2-player)
     const watch = get().players.length > 2
     set(s => ({
-      players: s.players.map(p => (p.id === t.id ? { ...p, curse: { id: curseId, warlockId: w.id, armed: false }, hasNightWatcher: watch } : { ...p, hasNightWatcher: false })),
+      players: s.players.map(p => (p.id === t.id ? { ...p, curse: { id: curseId, warlockId: w.id }, hasNightWatcher: watch } : { ...p, hasNightWatcher: false })),
       actionLog: [logEntry(`${w.name} hexes ${t.name}: ${card.name} — ${card.text}`, w.id), ...s.actionLog.slice(0, 49)],
     }))
   },
@@ -5019,13 +5004,53 @@ export const useGameStore = create<GameStore>((set, get) => ({
     const st = get()
     const w = st.players.find(p => p.id === warlockId)
     if (w?.classId !== 'warlock' || st.currentTurnPlayerId !== warlockId || w.activeTokens < 1) return
-    if (st.imp || st.classAbilitiesUsedThisTurn.includes('imp')) return
+    if ((st.imp && st.imp.warlockId !== warlockId) || st.classAbilitiesUsedThisTurn.includes('imp')) return
+    const moving = !!st.imp
     set(s => ({
       imp: { warlockId, location },
       classAbilitiesUsedThisTurn: [...s.classAbilitiesUsedThisTurn, 'imp'],
       players: s.players.map(p => (p.id === warlockId ? { ...p, activeTokens: p.activeTokens - 1 } : p)),
-      actionLog: [logEntry(`${w.name} summons an Imp — it lurks at the ${location} until their next turn.`, warlockId), ...s.actionLog.slice(0, 49)],
+      actionLog: [logEntry(`${w.name} ${moving ? 'sends the Imp' : 'summons an Imp'} to the ${location} — it lurks there until someone banishes it.`, warlockId), ...s.actionLog.slice(0, 49)],
     }))
+  },
+
+  resolveCurseChoice(pick) {
+    const cc = get().curseChoice
+    if (!cc) return
+    const victim = get().players.find(p => p.id === cc.playerId)
+    const c = victim?.curse
+    if (!victim || !c) { set({ curseChoice: null }); return }
+    const w = get().players.find(p => p.id === c.warlockId)
+    set({ curseChoice: null })
+    if (cc.curseId === 'leakyPockets') {
+      const card = victim.hoard.find(x => x.id === pick.cardId) ?? [...victim.hoard].sort((a, b) => a.value - b.value)[0]
+      if (card) get().discardResource(victim.id, card.id, 'hoard')
+      liftCurse(get, set, victim.id, `${victim.name}'s Leaky Pockets — ${card ? `lost ${card.name}` : 'nothing to lose'}.`)
+    } else if (cc.curseId === 'stickyFingers') {
+      const card = victim.hoard.find(x => x.id === pick.cardId) ?? [...victim.hoard].sort((a, b) => a.value - b.value)[0]
+      if (card && w) {
+        set(s => ({ players: s.players.map(p => (p.id === victim.id
+          ? { ...p, hoard: p.hoard.filter(x => x.id !== card.id), stolenHoardCardIds: p.stolenHoardCardIds.filter(id => id !== card.id) }
+          : p.id === w.id ? { ...p, hoard: [...p.hoard, card] } : p)) }))
+      }
+      liftCurse(get, set, victim.id, `${victim.name}'s Sticky Fingers — ${card ? `${card.name} goes to ${w?.name}` : 'nothing to give'}.`)
+    } else if (cc.curseId === 'hexedShutters') {
+      const idx = pick.windowIdx !== undefined && victim.windows[pick.windowIdx]?.status === 'normal'
+        ? pick.windowIdx : victim.windows.findIndex(x => x.status === 'normal')
+      if (idx >= 0) {
+        set(s => ({ players: s.players.map(p => (p.id === victim.id
+          ? { ...p, windows: p.windows.map((x, i) => (i === idx ? { ...x, status: 'shuttered' as WindowStatus, roundShuttered: true } : x)) } : p)) }))
+      }
+      liftCurse(get, set, victim.id, `${victim.name}'s Hexed Shutters — Window ${idx + 1} is shuttered until their next turn.`)
+    } else if (cc.curseId === 'unsettledShelves') {
+      const idx = pick.windowIdx !== undefined && victim.windows[pick.windowIdx]?.card
+        ? pick.windowIdx : victim.windows.findIndex(x => x.card)
+      const name = victim.windows[idx]?.card?.name
+      if (idx >= 0) get().moveFromWindowToHoard(victim.id, idx)
+      liftCurse(get, set, victim.id, `${victim.name}'s Unsettled Shelves — ${name ? `${name} slid back into the hoard` : 'nothing moved'}.`)
+    } else {
+      liftCurse(get, set, victim.id)
+    }
   },
 
   // ---- Ranger class abilities ----

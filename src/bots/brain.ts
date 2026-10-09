@@ -97,7 +97,7 @@ export function anythingPending(s: GameStore): boolean {
     s.negotiateReview || s.shamanCallLightning || s.ambushPending || s.ambushResult ||
     s.trickShotPending || s.trickShotBonusPending || s.rangerVisitorTradePending ||
     s.rn04RerollPending || s.nightWatcherChoicePending || s.townCrierPeek || s.appraisePeek ||
-    s.foragePeek || s.visitorPrizeQueue.length > 0 || s.twistPending || s.hexPeek || s.surge || s.mirrorPending || s.hotStreak || s.players.some(p => p.hoard.length > 8)
+    s.foragePeek || s.visitorPrizeQueue.length > 0 || s.twistPending || s.hexPeek || s.curseChoice || s.surge || s.mirrorPending || s.hotStreak || s.players.some(p => p.hoard.length > 8)
   )
 }
 
@@ -301,6 +301,21 @@ function promptStep(s: GameStore): BotStep | null {
   if (tw && twBot) {
     const idx = chooseTwist(s, twBot, tw)
     return step(`twist:${tw.playerId}:${tw.rollType}:${tw.roll}:${twBot.omens.join('')}`, twBot, 'quick', () => st().resolveTwist(idx))
+  }
+
+  // A bot resolving a curse that lets it choose: give up the least it can
+  const cc = s.curseChoice
+  const ccBot = botOf(s, cc?.playerId)
+  if (cc && ccBot) {
+    const ctx = buildContext(s, ccBot, ccBot.bot!)
+    const cheapest = sortByWorth(ccBot.hoard, ctx).slice(-1)[0]
+    const windows = ccBot.windows.map((w, i) => ({ w, i }))
+    const pick = cc.curseId === 'hexedShutters'
+      ? { windowIdx: (windows.find(({ w }) => w.status === 'normal' && !w.card) ?? windows.filter(({ w }) => w.status === 'normal').sort((a, b) => (a.w.card?.value ?? 0) - (b.w.card?.value ?? 0))[0])?.i }
+      : cc.curseId === 'unsettledShelves'
+        ? { windowIdx: windows.filter(({ w }) => w.card).sort((a, b) => a.w.card!.value - b.w.card!.value)[0]?.i }
+        : { cardId: cheapest?.id }
+    return step(`curse:${cc.curseId}`, ccBot, 'think', () => st().resolveCurseChoice(pick))
   }
 
   // Warlock: pick which curse to lay
@@ -1060,6 +1075,10 @@ function chooseTwist(s: GameStore, w: Player, tw: NonNullable<GameStore['twistPe
     // The Imp steals on 1–2, breaks on 3–4: push a banishing roll down
     return one >= 0 && tw.roll >= 3 ? one : null
   }
+  if (tw.rollType === 'misfortune') {
+    // Misfortune pays out on 1–3
+    return one >= 0 && tw.roll >= 4 ? one : null
+  }
   if (tw.playerId === w.id) return six >= 0 && tw.roll <= (d === 'hard' ? 4 : 3) ? six : null
   if (one < 0) return null
   if (d === 'easy') return tw.roll >= 5 && chance(0.4) ? one : null
@@ -1071,11 +1090,16 @@ function chooseTwist(s: GameStore, w: Player, tw: NonNullable<GameStore['twistPe
 /** A bot Warlock's pick between the two Curse cards it drew. */
 function chooseCurse(s: GameStore, w: Player, targetId: string, cards: CurseId[]): CurseId {
   const t = s.players.find(p => p.id === targetId)
-  const repInShop = t ? [...t.hoard, ...t.windows.flatMap(x => (x.card ? [x.card] : []))].reduce((n, c) => n + c.repTokens, 0) : 0
+  const hoard = t?.hoard.length ?? 0
+  const sellable = t?.windows.filter(x => x.card && x.status === 'normal').length ?? 0
   const score: Record<CurseId, number> = {
-    tithe: 2.2, tollOfShadows: 2, leakyPockets: 1.8, jinx: 1.6, butterfingers: 1.5,
-    hexedGoods: repInShop > 0 ? 2.4 : 0.5,
-    unsettledShelves: 1,
+    stickyFingers: hoard > 0 ? 2.6 : 0,
+    misfortune: (t?.coins ?? 0) >= 2 ? 1.6 + (w.omens.includes(1) ? 1 : 0) : 0.4,
+    hexedShutters: sellable > 0 ? 1.9 : 0.3,
+    tithe: (t?.coins ?? 0) > 0 ? 1.7 : 0,
+    leakyPockets: hoard > 0 ? 1.5 : 0,
+    weariness: t && (t.classId === 'monk' ? t.momentumTokens : t.activeTokens) > 0 ? 1.4 : 0,
+    unsettledShelves: sellable > 0 ? 1 : 0,
     badOmen: w.omens.length < MAX_OMENS ? 1.2 : 0.2,
   }
   if (w.bot === 'easy') return pickRandom(cards)!
@@ -1589,12 +1613,13 @@ function abilityCandidates(s: GameStore, me: Player, ctx: ValueContext): Candida
         push(`hex:${victim.id}`, value - tokenCost, () => st().hex(me.id, victim.id))
       }
     }
+    // The Imp stays until banished, so only summon it when it isn't already out
     if (!used('imp') && !s.imp && s.round < 6) {
       // Lurk where rivals most often go
       const busy: Location[] = ['wilderness', 'guildhall', 'workshop', 'barracks', 'tavern', 'thieves-guild']
       const loc = difficulty === 'easy' ? pickRandom(busy)! : busy[0]
       const omenBoost = me.omens.includes(1) ? 0.8 : 0
-      push(`imp:${loc}`, 2.2 * Math.min(1, (s.players.length - 1) / 2) + omenBoost - tokenCost, () => st().summonImp(me.id, loc))
+      push(`imp:${loc}`, 2.6 * Math.min(1.5, (s.players.length - 1) / 2) + omenBoost - tokenCost, () => st().summonImp(me.id, loc))
     }
   }
 
