@@ -6,14 +6,14 @@ The board has 6 locations. On each of their 3 actions per turn, a player visits 
 
 ## Selling to Visitors
 
-Three Visitors are face-up at all times. Each wants a set of resources (e.g. "2 ARM, 1 ANY") and offers two **contribution prizes**, dealt at random when the Visitor appears:
+Three Visitors are face-up at all times. Each wants a set of resources (e.g. "2 ARM, 1 ANY") and offers two **contribution prizes**, printed on its card:
 
 - **1st prize** goes to the player who sold the most resources into that Visitor.
 - **2nd prize** goes to the runner-up.
 - Ties go to whoever reached that number of sales first.
 - Prizes are paid the moment the Visitor's demand is fully met. The Visitor is then discarded and replaced.
 
-Prizes are drawn from Coins, Rep (your choice of type), Refresh, Take (from the Flea Market), Draw, Steal and Break. Large Visitors pay bigger prizes than Small ones, and a 2nd prize is never worth more than the 1st. Steal 2 and Break 2 are resolved one at a time, so you can hit two different players.
+Prizes are Coins, Rep (your choice of type), Refresh, Take (from the Flea Market), Draw, Steal or Break. Large Visitors pay bigger prizes than Small ones, and a 2nd prize is never worth more than the 1st. Steal 2 and Break 2 are resolved one at a time, so you can hit two different players.
 
 There are three ways to sell into a Visitor. Each card must match something the Visitor still needs:
 

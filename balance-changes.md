@@ -84,6 +84,8 @@ Average card value: **4.74 → 2.63**. Counterfeit cards are unchanged ($1–2).
 
 Only the **Coins** prize changed. Prizes are listed as 1st place / 2nd place.
 
+Prizes are no longer dealt at random: each Visitor now has a fixed 1st and 2nd prize printed on it (full list in asset-changes.md).
+
 | Prize | Small Visitor | Large Visitor |
 |---|---|---|
 | **Coins** | **4 / 2 → 2 / 1** | **6 / 3 → 3 / 2** |

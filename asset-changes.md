@@ -170,9 +170,7 @@ Each card's value is half its old printed value, rounded (minimum 1). Rep icons 
 
 ## 3. Visitor cards — contribution prizes
 
-**How prizes work now (in the app):** when a Visitor comes out, it is dealt a random 1st prize and a random 2nd prize. The 2nd prize is never worth more than the 1st. The player who sold the most cards into the Visitor gets the 1st prize; the runner-up gets the 2nd.
-
-**For printed cards** I'd print a fixed prize on each Visitor instead. The table below is a proposal: each prize type leads about as often as it does in the app, roughly themed to the Visitor, and the 2nd prize is never better than the 1st. (The app still deals randomly; say the word and I'll switch it to these fixed prizes so playtests match the cards.)
+**Each Visitor now has a fixed, printed 1st and 2nd prize** (the app uses exactly these). The player who sold the most cards into the Visitor gets the 1st prize; the runner-up gets the 2nd. Each prize type leads about as often as the old random deal gave it, roughly themed to the Visitor, and the 2nd prize is never better than the 1st. The prize amount depends on the Visitor's size (table below).
 
 **Prize sizes**
 

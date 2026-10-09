@@ -614,8 +614,6 @@ export const BODYGUARD_COST = 1
 /** Fencing a stolen card pays this many times its value (no Rep). */
 export const FENCE_MULTIPLIER = 2
 
-export const VISITOR_PRIZE_KINDS: VisitorPrizeKind[] = ['coins', 'rep', 'refresh', 'take', 'draw', 'steal', 'break']
-
 /** Prize sizes as [1st place, 2nd place] for each Visitor size. */
 export const VISITOR_PRIZE_AMOUNTS: Record<VisitorPrizeKind, Record<VisitorCard['size'], [number, number]>> = {
   coins:   { Small: [2, 1], Large: [3, 2] },
@@ -627,7 +625,7 @@ export const VISITOR_PRIZE_AMOUNTS: Record<VisitorPrizeKind, Record<VisitorCard[
   break:   { Small: [1, 1], Large: [2, 1] },
 }
 
-/** Rough coin value of one unit of each prize — only used so 2nd place never beats 1st. */
+/** Rough coin value of one unit of each prize (bots and the prize-ranking checks use it). */
 const PRIZE_UNIT_WORTH: Record<VisitorPrizeKind, number> = {
   coins: 1, rep: 3.5, refresh: 1.5, take: 2.5, draw: 2, steal: 2.5, break: 1.5,
 }
@@ -636,15 +634,12 @@ export function prizeWorth(prize: VisitorPrize): number {
   return PRIZE_UNIT_WORTH[prize.kind] * prize.amount
 }
 
+/** A Visitor's printed prizes, with amounts set by its size. */
 function dealVisitorPrizes(v: VisitorCard): { first: VisitorPrize; second: VisitorPrize } {
-  const pick = () => VISITOR_PRIZE_KINDS[Math.floor(Math.random() * VISITOR_PRIZE_KINDS.length)]
-  const firstKind = pick()
-  const first = { kind: firstKind, amount: VISITOR_PRIZE_AMOUNTS[firstKind][v.size][0] }
-  // Re-deal 2nd place until it's worth no more than 1st (the same kind always qualifies)
-  for (;;) {
-    const kind = pick()
-    const second = { kind, amount: VISITOR_PRIZE_AMOUNTS[kind][v.size][1] }
-    if (prizeWorth(second) <= prizeWorth(first)) return { first, second }
+  const [firstKind, secondKind] = v.prizes
+  return {
+    first: { kind: firstKind, amount: VISITOR_PRIZE_AMOUNTS[firstKind][v.size][0] },
+    second: { kind: secondKind, amount: VISITOR_PRIZE_AMOUNTS[secondKind][v.size][1] },
   }
 }
 

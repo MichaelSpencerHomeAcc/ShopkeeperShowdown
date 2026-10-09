@@ -1,5 +1,6 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
-import { MAX_SALES_PER_VISITOR, prizeWorth, rankContributors, useGameStore } from './gameStore'
+import { MAX_SALES_PER_VISITOR, VISITOR_PRIZE_AMOUNTS, prizeWorth, rankContributors, useGameStore } from './gameStore'
+import { VISITOR_CARDS } from '../data/visitors'
 import { cardsOf, patchPlayer, seedRandom, st, startGame } from '../test/helpers'
 import type { DemandMap, Player, ResourceCard, VisitorPrize } from '../types'
 
@@ -28,7 +29,7 @@ function giveWindows(p: Player, cards: ResourceCard[]) {
 }
 
 describe('Visitor setup', () => {
-  it('deals 1st and 2nd prizes to every face-up Visitor', () => {
+  it('gives every face-up Visitor its printed 1st and 2nd prizes', () => {
     startGame(['monk', 'shaman'])
     for (const v of st().activeVisitors) {
       if (!v) continue
@@ -38,10 +39,17 @@ describe('Visitor setup', () => {
     }
   })
 
-  it('never makes 2nd place worth more than 1st', () => {
-    for (let i = 0; i < 30; i++) {
-      startGame(['monk', 'shaman'])
-      for (const pz of Object.values(st().visitorPrizes)) expect(prizeWorth(pz.first)).toBeGreaterThanOrEqual(prizeWorth(pz.second))
+  it('prints a 2nd prize no better than the 1st on every Visitor, sized by the Visitor', () => {
+    for (const v of VISITOR_CARDS) {
+      const [first, second] = v.prizes
+      const pz = { first: { kind: first, amount: VISITOR_PRIZE_AMOUNTS[first][v.size][0] }, second: { kind: second, amount: VISITOR_PRIZE_AMOUNTS[second][v.size][1] } }
+      expect(prizeWorth(pz.first)).toBeGreaterThanOrEqual(prizeWorth(pz.second))
+    }
+    startGame(['monk', 'shaman'])
+    for (const v of st().activeVisitors) {
+      if (!v) continue
+      expect(st().visitorPrizes[v.id].first.kind).toBe(v.prizes[0])
+      expect(st().visitorPrizes[v.id].second.kind).toBe(v.prizes[1])
     }
   })
 })

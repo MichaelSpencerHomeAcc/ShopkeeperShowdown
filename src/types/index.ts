@@ -84,6 +84,8 @@ export interface VisitorCard {
   title: string
   demand: string
   size: 'Small' | 'Large'
+  /** Printed contribution prizes: [1st place, 2nd place] */
+  prizes: [VisitorPrizeKind, VisitorPrizeKind]
   imageFile: string
 }
 
