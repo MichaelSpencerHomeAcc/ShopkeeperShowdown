@@ -980,7 +980,7 @@ function locationCandidates(s: GameStore, me: Player, ctx: ValueContext): Candid
       if (!wo) return
       const plan = craftPlan(me, ctx, wo)
       if (!plan || plan.missing > 0) return
-      const bonus = me.classId === 'paladin' && me.renownCards.some(c => c.id === 'rn02') ? 3 : 0
+      const bonus = me.classId === 'paladin' && me.renownCards.some(c => c.id === 'rn02') ? 2 : 0
       // Hard bots also value snatching an order a rival could finish on their next turn
       const rivalReady = difficulty === 'hard' && s.players.some(p => p.id !== me.id && missingForOrder(p, wo) === 0)
       const denial = rivalReady ? wo.price * 0.3 : 0

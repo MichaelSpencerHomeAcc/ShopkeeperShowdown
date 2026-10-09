@@ -82,8 +82,8 @@ function makePlayer(id: string, name: string, classId: ClassId, bot?: BotDifficu
     : []
 
   const shuffledCounterfeits = classId === 'rogue' ? shuffle(COUNTERFEIT_CARDS) : []
-  const counterfeitHand = shuffledCounterfeits.slice(0, 4)
-  const counterfeitCards = shuffledCounterfeits.slice(4)
+  const counterfeitHand = shuffledCounterfeits.slice(0, 5)
+  const counterfeitCards = shuffledCounterfeits.slice(5)
 
   const elementalDice = classId === 'shaman'
     ? Array.from({ length: 4 }, () => ({ face: Math.ceil(Math.random() * 6), used: false }))
@@ -1009,7 +1009,7 @@ function liftCurse(get: () => GameStore, set: SetFn, playerId: string, note?: st
   }))
 }
 
-/** The Imp springs on the first other player to use its location each round, until someone banishes it. */
+/** The Imp springs on every other player who uses its location, until someone banishes it. */
 function triggerImp(get: () => GameStore, set: SetFn, playerId: string, location: Location) {
   const st = get()
   const imp = st.imp
@@ -1021,10 +1021,7 @@ function triggerImp(get: () => GameStore, set: SetFn, playerId: string, location
     addLog(set, `${w.name}'s Imp keeps its distance — the Night Watcher guards ${victim.name}.`, w.id)
     return
   }
-  if (imp.struckRound === st.round) return
-  // Lay the Imp on its side: it has struck this round
-  set({ imp: { ...imp, struckRound: st.round } })
-  addLog(set, `${w.name}'s Imp leaps out at ${victim.name}! (1–2 steals a card, 3–4 breaks a window, 5–6 banished)`, w.id)
+  addLog(set, `${w.name}'s Imp leaps out at ${victim.name}! (1–2 eats a card, 3–4 breaks a window, 5–6 banished)`, w.id)
   finishRoll(get, set, { playerId, rollType: 'imp', roll: d6(), note: '', sourceWarlockId: w.id })
 }
 
@@ -1318,8 +1315,15 @@ function _applyTrickShotRoll(
     const w = players.find(p => p.id === sourceWarlockId)
     if (!w) return
     if (finalRoll <= 2) {
-      addLog(set, `The Imp rolls ${finalRoll} — it snatches a card from ${player.name}!`, w.id)
-      get().steal(w.id, playerId)
+      // The Imp eats a random card from their hoard: it's discarded, not stolen
+      const eaten = player.hoard[Math.floor(Math.random() * player.hoard.length)]
+      addLog(set, eaten ? `The Imp rolls ${finalRoll} — it gobbles ${eaten.name} from ${player.name}'s hoard!` : `The Imp rolls ${finalRoll} — but ${player.name}'s hoard is empty.`, w.id)
+      if (eaten) {
+        set(s => ({
+          resourceDiscard: [...s.resourceDiscard, eaten],
+          players: s.players.map(p => (p.id === playerId ? { ...p, hoard: p.hoard.filter(c => c.id !== eaten.id), stolenHoardCardIds: p.stolenHoardCardIds.filter(id => id !== eaten.id) } : p)),
+        }))
+      }
     } else if (finalRoll <= 4) {
       const idx = player.windows.map((x, i) => ({ x, i }))
         .filter(({ x, i }) => isBreakableWindowIndex(i) && x.status === 'normal')
@@ -1421,7 +1425,7 @@ function applyFirstTurnStartBonuses(get: () => GameStore, set: (partial: Partial
       players: s.players.map(p => p.id === firstPlayer.id ? { ...p, trickShotAvailable: true } : p),
     }))
     const roll = Math.ceil(Math.random() * 6)
-    const count = Math.max(1, Math.floor(roll / 2))
+    const count = Math.ceil(roll / 2)
     const st = get()
     const { drawn, deck, discard } = drawCards(st.resourceDeck, st.resourceDiscard, count, 0, Infinity)
     set(s => ({
@@ -1489,7 +1493,7 @@ export const useGameStore = create<GameStore>((set, get) => ({
         players: s.players.map(p => p.id === firstPlayer.id ? { ...p, trickShotAvailable: true } : p),
       }))
       const roll = Math.ceil(Math.random() * 6)
-      const count = Math.max(1, Math.floor(roll / 2))
+      const count = Math.ceil(roll / 2)
       const st = get()
       const { drawn, deck, discard } = drawCards(st.resourceDeck, st.resourceDiscard, count, 0, Infinity)
       set(s => ({
@@ -2914,10 +2918,10 @@ export const useGameStore = create<GameStore>((set, get) => ({
     const discardedCards = spentCards.filter(c => !isCounterfeitCard(c))
     const spentIds = new Set(spentCards.map(c => c.id))
 
-    // Forge of Ironpeak (rn02) passive: +3 bonus coins on craft completion
+    // Forge of Ironpeak (rn02) passive: +2 bonus coins on craft completion
     const rn02Bonus =
       player.classId === 'paladin' && player.renownCards.some(c => c.id === 'rn02')
-        ? 3
+        ? 2
         : 0
     const gained = order.price + rn02Bonus
     // Paladin Honourable Trade: +1 Rep of the recipe's main type
@@ -3306,7 +3310,7 @@ export const useGameStore = create<GameStore>((set, get) => ({
     const ranger = players.find(p => p.id === currentTurnPlayerId)
     if (ranger?.classId === 'ranger') {
       const roll = Math.ceil(Math.random() * 6)
-      const count = Math.max(1, Math.floor(roll / 2))
+      const count = Math.ceil(roll / 2)
       const st = get()
       const { drawn, deck, discard } = drawCards(st.resourceDeck, st.resourceDiscard, count, 0, Infinity)
       set(s => ({
@@ -4531,7 +4535,7 @@ export const useGameStore = create<GameStore>((set, get) => ({
       // From Round 2 onward it fires in completeSellPhase (after the sell phase UI).
       if (round !== 1) return
       const roll = Math.ceil(Math.random() * 6)
-      const count = Math.max(1, Math.floor(roll / 2))
+      const count = Math.ceil(roll / 2)
       const st = get()
       const { drawn, deck, discard } = drawCards(st.resourceDeck, st.resourceDiscard, count, 0, Infinity)
       set(s => ({
@@ -5010,11 +5014,10 @@ export const useGameStore = create<GameStore>((set, get) => ({
     if ((st.imp && st.imp.warlockId !== warlockId) || st.classAbilitiesUsedThisTurn.includes('imp')) return
     const moving = !!st.imp
     set(s => ({
-      // Moving the Imp doesn't let it strike twice in a round
-      imp: { warlockId, location, struckRound: s.imp?.struckRound },
+      imp: { warlockId, location },
       classAbilitiesUsedThisTurn: [...s.classAbilitiesUsedThisTurn, 'imp'],
       players: s.players.map(p => (p.id === warlockId ? { ...p, activeTokens: p.activeTokens - 1 } : p)),
-      actionLog: [logEntry(`${w.name} ${moving ? 'sends the Imp' : 'summons an Imp'} to the ${location} — it lurks there until someone banishes it, striking the first rival to visit each round.`, warlockId), ...s.actionLog.slice(0, 49)],
+      actionLog: [logEntry(`${w.name} ${moving ? 'sends the Imp' : 'summons an Imp'} to the ${location} — it lurks there until someone banishes it.`, warlockId), ...s.actionLog.slice(0, 49)],
     }))
   },
 

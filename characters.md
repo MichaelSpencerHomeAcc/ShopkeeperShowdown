@@ -42,7 +42,7 @@ Place your Clan marker on any location. Appraise 1 (look at the top 4 resources,
 **Difficulty:** 1/5
 
 ### Passive — Master of the Wilderness
-- At the start of your turn: Gather half your d6 roll (round down).
+- At the start of your turn: Gather half your d6 roll (round up).
 - Always on: Whenever any Visitor is completed (by any player), Trade 1 (swap 1 of your resources with 1 from the Flea Market).
 
 ### Active — Ambush
@@ -173,7 +173,7 @@ Auction 1 Stolen resource (Counterfeits excluded). If your d6 roll is 5 or highe
 Place 1 Counterfeit from your hand into any window (yours or another player's). If placed in your own window, Draw 1 resource.
 
 ### Class Feature — Counterfeit Cards
-- At game start, draw 4 Counterfeits from your shuffled Counterfeit deck (8 cards total).
+- At game start, draw 5 Counterfeits from your shuffled Counterfeit deck (8 cards total).
 - Counterfeits sell normally to Visitors at their printed coin value (no Rep gained).
 - When a Counterfeit is sold OR used as part of a Visitor's order being completed, the buyer suffers the Counterfeit's "On return" effect immediately.
 - After a Counterfeit's return effect triggers, the card is placed at the bottom of your Counterfeit deck.
@@ -230,7 +230,7 @@ Discard 1 Renown Card from your hand. Immediately resolve its Spend effect.
 | The Reckoning at Duskreach | Gain 1 coin whenever any player uses the Thieves' Guild | Name a player; they give you 2 Hoard resources |
 | The Gates of Mirhollow | Gain 1 Rep whenever you Repair a window | Close 2 windows; gain 1 Rep per window closed |
 | The King's Errand | +1 coin per public Visitor completion | Use Town Crier without visiting Barracks (free action) |
-| The Forge of Ironpeak | Work Orders gain +3 bonus coins on completion | Your next Craft needs 1 fewer resource |
+| The Forge of Ironpeak | Work Orders gain +2 bonus coins on completion | Your next Craft needs 1 fewer resource |
 | The Council of Seven | Negotiate twice per Guildhall visit | Resolve a Negotiate with any willing player regardless of location |
 | The Shadow of Vel'sha | Gain 2 coins whenever you are Stolen from | Take 1 resource at random from each player's Hoard |
 | The Mercy of Thornwall | Report the Crime repairs 2 windows instead of all | Repair all windows free, gain 1 Rep |
@@ -271,12 +271,12 @@ Choose a player (not the Night Watcher holder, and not someone already cursed). 
 | Bad Omen | Nothing — you bottle a 1 as soon as you lay it |
 
 ### Active — Summon Imp
-Place your Imp on a location, where everyone can see it. It **stays until someone banishes it**. Once per round, the **first** other player to use that location rolls a d6:
-- **1–2:** the Imp steals a random card from their hoard for you
+Place your Imp on a location, where everyone can see it. It **stays until someone banishes it**. Every other player who uses that location rolls a d6:
+- **1–2:** the Imp eats a random card from their hoard (it's discarded)
 - **3–4:** it breaks one of their windows
 - **5–6:** it's banished (back to you)
 
-After it strikes, lay the Imp on its side; stand it back up at the start of the next round. You may Twist that roll. The Night Watcher holder is ignored by the Imp. Using Summon Imp again while it's out moves it to a new location.
+You may Twist that roll. The Night Watcher holder is ignored by the Imp. Using Summon Imp again while it's out moves it to a new location.
 
 **Custom components:** 3 Omen dice, Curse deck (8 cards), Imp figure
 

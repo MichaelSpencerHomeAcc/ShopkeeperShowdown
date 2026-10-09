@@ -254,24 +254,22 @@ describe('Warlock', () => {
     expect(me('warlock').coins).toBe(wCoins + 3)
   })
 
-  it('the Imp stays after it strikes, strikes once per round, and only a 5–6 banishes it', () => {
+  it('the Imp eats a card, stays after it strikes, and only a 5–6 banishes it', () => {
     const w = myTurn(['warlock', 'shaman'], 'warlock')
     st().summonImp(w.id, 'wilderness')
     expect(st().imp).toEqual({ warlockId: w.id, location: 'wilderness' })
     const t = me('shaman')
     patchPlayer(t.id, { hoard: cardsOf('TRI', 'TRI') })
     useGameStore.setState({ currentTurnPlayerId: t.id, activePlayerId: t.id, turnActionsUsed: 0, locationsUsedThisTurn: [] })
+    const wHoard = me('warlock').hoard.length
     rolls(2)
     st().useTurnAction('wilderness')
     expect(me('shaman').hoard).toHaveLength(1)
+    // Eaten, not stolen
+    expect(me('warlock').hoard).toHaveLength(wHoard)
     expect(st().imp).not.toBeNull()
     useGameStore.setState({ locationsUsedThisTurn: [] })
     patchPlayer(t.id, { hasNightWatcher: false })
-    // Already struck this round: no roll
-    rolls(6)
-    st().useTurnAction('wilderness')
-    expect(st().imp).not.toBeNull()
-    useGameStore.setState({ locationsUsedThisTurn: [], round: st().round + 1 })
     rolls(6)
     st().useTurnAction('wilderness')
     expect(st().imp).toBeNull()

@@ -49,7 +49,7 @@ export const CLASSES: ClassCard[] = [
     tagline: 'Always knows where to find it',
     imageFile: '/cards/player-boards/Ranger.png',
     status: 'BETA',
-    passive: 'Master of the Wilderness — At the start of your turn, Gather resources equal to half your d6 roll (round down). Whenever any Visitor is completed (by any player), Trade 1 (swap 1 of your resources with 1 from the Flea Market).',
+    passive: 'Master of the Wilderness — At the start of your turn, Gather resources equal to half your d6 roll (round up). Whenever any Visitor is completed (by any player), Trade 1 (swap 1 of your resources with 1 from the Flea Market).',
     actives: [
       'Ambush — Place 2 Ambush cards face-down on locations of your choice. When a player uses a matching location, flip and activate it. You may hold up to 3 active Ambush cards. Cannot target the Night Watcher holder.',
       'Trick Shot — Force a player to re-roll a die they just rolled. If they roll higher: Refresh 1 Active token. If equal or lower: choose one — Break 1 window for a player you didn\'t target OR Launder 1 resource.',
@@ -68,7 +68,7 @@ export const CLASSES: ClassCard[] = [
       'Guild Contacts — Auction 1 Stolen resource (Counterfeits excluded). If your d6 roll is 5 or higher, gain a matching Reputation token in addition to the coins.',
       'From the Shadows — Place 1 Counterfeit from your hand into any window (yours or another player\'s). If placed in your own window, Draw 1 resource.',
     ],
-    playstyle: 'The Swindler. Difficulty 4/5. Carries a personal 8-card Counterfeit deck (draw 4 at start). Counterfeits sell for coins but grant no Rep — and trigger a "On Return" effect against whoever receives them at sale. Heist lets you steal directly from windows (not just hoards) and plant Counterfeits in your own shop or others\'. High disruption, high skill ceiling; devastating when you can time the return effects.',
+    playstyle: 'The Swindler. Difficulty 4/5. Carries a personal 8-card Counterfeit deck (draw 5 at start). Counterfeits sell for coins but grant no Rep — and trigger a "On Return" effect against whoever receives them at sale. Heist lets you steal directly from windows (not just hoards) and plant Counterfeits in your own shop or others\'. High disruption, high skill ceiling; devastating when you can time the return effects.',
   },
   {
     id: 'shaman',
@@ -108,7 +108,7 @@ export const CLASSES: ClassCard[] = [
     passive: "Twist of Fate — After any die is rolled, by anyone, spend an Omen to change it to the Omen's number. Twisting someone else's roll earns you 1 coin. Bottled Fate: whenever any player rolls a 1 or a 6, bottle it as an Omen (max 3). In Clashes and Duels you Twist automatically when it turns a loss into a win.",
     actives: [
       "Hex — Draw 2 Curse cards and lay one face-up in front of a player. At the start of their next turn they resolve it (pay you a coin, give up a card of their choice, shutter a window…) and hand it back. The Night Watcher protects against Hexes.",
-      "Summon Imp — Your Imp lurks at a location until someone banishes it. Once per round, the first other player to use that location rolls: 1–2 the Imp steals a card for you, 3–4 it breaks one of their windows, 5–6 it's banished. You can Twist that roll, and spend a token to move the Imp.",
+      "Summon Imp — Your Imp lurks at a location until someone banishes it. Every other player who uses that location rolls: 1–2 the Imp eats a random card from their hoard, 3–4 it breaks one of their windows, 5–6 it's banished. You can Twist that roll, and spend a token to move the Imp.",
     ],
     playstyle: "The Manipulator. Difficulty 4/5. A shady dealer in curses, demons and stolen luck. Every 1 and 6 rolled at the table feeds your jar of Omens — spend them to bless your own rolls or ruin a rival's. Hexes nudge opponents off balance and the Imp punishes anyone who wanders into its lair. Summon an Imp, then Twist its roll: that's the signature move.",
   },

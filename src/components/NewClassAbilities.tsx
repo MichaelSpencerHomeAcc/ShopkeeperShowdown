@@ -314,7 +314,7 @@ export function MonkAbilities({ player, isActiveTurn }: { player: Player; isActi
 // ─────────────────────────────────────────────────────────────────────────────
 
 export function WarlockAbilities({ player, isActiveTurn }: { player: Player; isActiveTurn: boolean }) {
-  const { players, imp, round, hexPeek, classAbilitiesUsedThisTurn, hex, summonImp } = useGameStore()
+  const { players, imp, hexPeek, classAbilitiesUsedThisTurn, hex, summonImp } = useGameStore()
   const [open, setOpen] = useState<'hex' | 'imp' | null>(null)
   const [target, setTarget] = useState<TargetChoice | null>(null)
   const [loc, setLoc] = useState<Location | null>(null)
@@ -346,7 +346,7 @@ export function WarlockAbilities({ player, isActiveTurn }: { player: Player; isA
 
       {(myImp || cursed.length > 0) && (
         <div className="rounded-xl border border-purple-600/50 bg-purple-950/30 px-3 py-2 text-xs text-purple-200 space-y-0.5">
-          {myImp && <div>👹 Your Imp lurks at the <b>{LOCATIONS.find(l => l.id === myImp.location)?.label ?? myImp.location}</b> until someone banishes it{myImp.struckRound === round ? ' (already struck this round)' : ''}.</div>}
+          {myImp && <div>👹 Your Imp lurks at the <b>{LOCATIONS.find(l => l.id === myImp.location)?.label ?? myImp.location}</b> until someone banishes it.</div>}
           {cursed.map(p => <div key={p.id}>{CURSE_BY_ID[p.curse!.id].icon} {p.name} carries <b>{CURSE_BY_ID[p.curse!.id].name}</b>.</div>)}
         </div>
       )}
@@ -372,7 +372,7 @@ export function WarlockAbilities({ player, isActiveTurn }: { player: Player; isA
         title={myImp ? 'Move the Imp' : 'Summon Imp'}
         detail={impUsed ? '✓ Used this turn'
           : myImp ? 'Your Imp is out — spend a token to send it somewhere else.'
-          : 'Your Imp lurks at a location until someone banishes it. Once per round, the first other player to use that location rolls: 1–2 it steals a card, 3–4 it breaks a window, 5–6 it’s banished.'}
+          : 'Your Imp lurks at a location until someone banishes it. Every other player who uses that location rolls: 1–2 it eats a card from their hoard, 3–4 it breaks a window, 5–6 it’s banished.'}
         cost={<TokenCost player={player} />}
         tone="red"
         open={open === 'imp'}

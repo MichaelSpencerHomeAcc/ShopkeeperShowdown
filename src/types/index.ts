@@ -321,8 +321,8 @@ export interface GameState {
   } | null
   /** Hex: the two Curse cards drawn, waiting for the Warlock to pick one */
   hexPeek: { warlockId: string; targetId: string; cards: CurseId[] } | null
-  /** The Warlock's Imp: it lurks at a location until someone banishes it, striking once per round */
-  imp: { warlockId: string; location: Location; struckRound?: number } | null
+  /** The Warlock's Imp: it lurks at a location until someone banishes it */
+  imp: { warlockId: string; location: Location } | null
   /** A curse resolving at the start of its victim's turn that needs them to pick a card or window */
   curseChoice: { playerId: string; curseId: CurseId } | null
 

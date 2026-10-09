@@ -64,7 +64,7 @@ Used by: Wilderness (Forage 2), Shaman (Patience of Stone alternative).
 
 Roll your d6. Draw that many resources from the top of the resource deck.
 
-Used by: Wilderness (main action), Ranger passive (half roll, round down), Marvellous Mascot Professional.
+Used by: Wilderness (main action), Ranger passive (half roll, round up), Marvellous Mascot Professional.
 
 ---
 

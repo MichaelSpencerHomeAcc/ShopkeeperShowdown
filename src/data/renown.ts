@@ -13,7 +13,7 @@ export const RENOWN_CARDS: RenownCard[] = [
     id: 'rn02',
     name: 'Forge of Ironpeak',
     imageFile: '/cards/renown/Forge of Ironpeak.png',
-    passive: 'Gain 3 bonus coins whenever you complete a Work Order.',
+    passive: 'Gain 2 bonus coins whenever you complete a Work Order.',
     spend: 'Your next Craft needs 1 fewer resource.',
     clashBonus: 0,
   },
