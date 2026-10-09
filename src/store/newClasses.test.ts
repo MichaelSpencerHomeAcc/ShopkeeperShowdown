@@ -254,7 +254,7 @@ describe('Warlock', () => {
     expect(me('warlock').coins).toBe(wCoins + 3)
   })
 
-  it('the Imp stays after it strikes, and only a 5–6 banishes it', () => {
+  it('the Imp stays after it strikes, strikes once per round, and only a 5–6 banishes it', () => {
     const w = myTurn(['warlock', 'shaman'], 'warlock')
     st().summonImp(w.id, 'wilderness')
     expect(st().imp).toEqual({ warlockId: w.id, location: 'wilderness' })
@@ -267,6 +267,11 @@ describe('Warlock', () => {
     expect(st().imp).not.toBeNull()
     useGameStore.setState({ locationsUsedThisTurn: [] })
     patchPlayer(t.id, { hasNightWatcher: false })
+    // Already struck this round: no roll
+    rolls(6)
+    st().useTurnAction('wilderness')
+    expect(st().imp).not.toBeNull()
+    useGameStore.setState({ locationsUsedThisTurn: [], round: st().round + 1 })
     rolls(6)
     st().useTurnAction('wilderness')
     expect(st().imp).toBeNull()

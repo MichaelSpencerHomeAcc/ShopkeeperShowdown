@@ -952,7 +952,7 @@ export function SharedBoard({ canAct = true, localPlayerName }: SharedBoardProps
 
                   {/* Warlock's Imp */}
                   {imp?.location === loc.id && (
-                    <div className="absolute bottom-1.5 left-1.5 z-10" title={`${players.find(p => p.id === imp.warlockId)?.name}'s Imp — every other player who uses this location rolls: 1–2 it steals a card, 3–4 it breaks a window, 5–6 it's banished`}>
+                    <div className="absolute bottom-1.5 left-1.5 z-10" title={`${players.find(p => p.id === imp.warlockId)?.name}'s Imp — once per round, the first other player to use this location rolls: 1–2 it steals a card, 3–4 it breaks a window, 5–6 it's banished`}>
                       <div className="relative flex items-center gap-1 bg-purple-950/90 border-2 border-purple-400 rounded-full px-2 py-0.5 shadow-lg shadow-purple-900/60 animate-pulse">
                         <span className="text-base leading-none">👹</span>
                         <span className="text-[10px] font-bold text-purple-200 whitespace-nowrap">Imp</span>

@@ -271,12 +271,12 @@ Choose a player (not the Night Watcher holder, and not someone already cursed). 
 | Bad Omen | Nothing — you bottle a 1 as soon as you lay it |
 
 ### Active — Summon Imp
-Place your Imp on a location, where everyone can see it. It **stays until someone banishes it**. Every other player who uses that location rolls a d6:
+Place your Imp on a location, where everyone can see it. It **stays until someone banishes it**. Once per round, the **first** other player to use that location rolls a d6:
 - **1–2:** the Imp steals a random card from their hoard for you
 - **3–4:** it breaks one of their windows
 - **5–6:** it's banished (back to you)
 
-You may Twist that roll. The Night Watcher holder is ignored by the Imp. Using Summon Imp again while it's out moves it to a new location.
+After it strikes, lay the Imp on its side; stand it back up at the start of the next round. You may Twist that roll. The Night Watcher holder is ignored by the Imp. Using Summon Imp again while it's out moves it to a new location.
 
 **Custom components:** 3 Omen dice, Curse deck (8 cards), Imp figure
 

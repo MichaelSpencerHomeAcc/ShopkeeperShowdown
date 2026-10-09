@@ -1009,7 +1009,7 @@ function liftCurse(get: () => GameStore, set: SetFn, playerId: string, note?: st
   }))
 }
 
-/** The Imp springs on every other player who uses its location, until someone banishes it. */
+/** The Imp springs on the first other player to use its location each round, until someone banishes it. */
 function triggerImp(get: () => GameStore, set: SetFn, playerId: string, location: Location) {
   const st = get()
   const imp = st.imp
@@ -1021,6 +1021,9 @@ function triggerImp(get: () => GameStore, set: SetFn, playerId: string, location
     addLog(set, `${w.name}'s Imp keeps its distance — the Night Watcher guards ${victim.name}.`, w.id)
     return
   }
+  if (imp.struckRound === st.round) return
+  // Lay the Imp on its side: it has struck this round
+  set({ imp: { ...imp, struckRound: st.round } })
   addLog(set, `${w.name}'s Imp leaps out at ${victim.name}! (1–2 steals a card, 3–4 breaks a window, 5–6 banished)`, w.id)
   finishRoll(get, set, { playerId, rollType: 'imp', roll: d6(), note: '', sourceWarlockId: w.id })
 }
@@ -5007,10 +5010,11 @@ export const useGameStore = create<GameStore>((set, get) => ({
     if ((st.imp && st.imp.warlockId !== warlockId) || st.classAbilitiesUsedThisTurn.includes('imp')) return
     const moving = !!st.imp
     set(s => ({
-      imp: { warlockId, location },
+      // Moving the Imp doesn't let it strike twice in a round
+      imp: { warlockId, location, struckRound: s.imp?.struckRound },
       classAbilitiesUsedThisTurn: [...s.classAbilitiesUsedThisTurn, 'imp'],
       players: s.players.map(p => (p.id === warlockId ? { ...p, activeTokens: p.activeTokens - 1 } : p)),
-      actionLog: [logEntry(`${w.name} ${moving ? 'sends the Imp' : 'summons an Imp'} to the ${location} — it lurks there until someone banishes it.`, warlockId), ...s.actionLog.slice(0, 49)],
+      actionLog: [logEntry(`${w.name} ${moving ? 'sends the Imp' : 'summons an Imp'} to the ${location} — it lurks there until someone banishes it, striking the first rival to visit each round.`, warlockId), ...s.actionLog.slice(0, 49)],
     }))
   },
 
