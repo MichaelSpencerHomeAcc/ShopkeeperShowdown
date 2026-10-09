@@ -124,7 +124,7 @@ Part 1 raised the set bonus from 6 to 10 (it narrowed the gap between classes fr
 | **Barbarian** | Fearsome Champion turn-start income | 1 coin per Broken window on the board (max 2) | 1 coin if at least one window on the board is Broken |
 | **Paladin** | Forge of Ironpeak (Renown) passive | +3 coins when you complete a Work Order | +2 coins |
 | **Ranger** | Master of the Wilderness free gather | half your d6, rounded **down** (min 1) | half your d6, rounded **up**, **minimum 2** |
-| **Rogue** | Starting Counterfeit hand | 4 cards | 5 cards |
+| **Rogue** | — | no change (a 5th starting Counterfeit was tried, then undone once Fence paid double) | 4 cards, as before |
 | **Shaman** | Call Lightning | you Draw 1 | you Draw 2 |
 | **Sorcerer** | Arcane Charge to shift a Surge ±1 | 2 Charge | 1 Charge (re-roll still 1) |
 | **Warlock** | Omen jar size | 3 Omens | 2 Omens |
@@ -186,6 +186,7 @@ Win index by class (1.00 = fair share). 8,000 mixed games of 2–6 players each.
 | Halved economy, no class tuning | 1.23 | 1.07 | 0.82 | 1.03 | 0.80 | 1.03 | 0.86 | 1.16 | 0.43 |
 | **Final (hard bots)** | **0.97** | **1.05** | **0.92** | **0.99** | **1.07** | **1.03** | **1.00** | **0.97** | **0.16** |
 | Final (medium bots) | 0.95 | 1.12 | 0.93 | 1.07 | 1.01 | 1.12 | 0.94 | 0.86 | 0.27 |
+| **+ Fence pays double, Rogue back to 4 Counterfeits (hard)** | **0.90** | **1.06** | **0.98** | **1.02** | **1.07** | **1.02** | **1.01** | **0.93** | **0.17** |
 
 Medium bots play the Warlock less well (0.86); that's expected for a class with this much decision-making.
 
@@ -207,7 +208,7 @@ Options tried and rejected along the way:
   - Rep scoring table and set bonus 5.
   - Auction = half the roll, rounded up.
   - Consultation 2 coins, Bodyguard 1 coin, starting coins 2.
-- Class boards: the Barbarian, Ranger, Rogue, Shaman, Sorcerer and Warlock text above, plus the Forge of Ironpeak Renown card.
+- Class boards: the Barbarian, Ranger, Shaman, Sorcerer and Warlock text above, plus the Forge of Ironpeak Renown card.
 
 ---
 

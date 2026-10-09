@@ -173,7 +173,7 @@ Auction 1 Stolen resource (Counterfeits excluded). If your d6 roll is 5 or highe
 Place 1 Counterfeit from your hand into any window (yours or another player's). If placed in your own window, Draw 1 resource.
 
 ### Class Feature — Counterfeit Cards
-- At game start, draw 5 Counterfeits from your shuffled Counterfeit deck (8 cards total).
+- At game start, draw 4 Counterfeits from your shuffled Counterfeit deck (8 cards total).
 - Counterfeits sell normally to Visitors at their printed coin value (no Rep gained).
 - When a Counterfeit is sold OR used as part of a Visitor's order being completed, the buyer suffers the Counterfeit's "On return" effect immediately.
 - After a Counterfeit's return effect triggers, the card is placed at the bottom of your Counterfeit deck.

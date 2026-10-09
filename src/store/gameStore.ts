@@ -82,8 +82,8 @@ function makePlayer(id: string, name: string, classId: ClassId, bot?: BotDifficu
     : []
 
   const shuffledCounterfeits = classId === 'rogue' ? shuffle(COUNTERFEIT_CARDS) : []
-  const counterfeitHand = shuffledCounterfeits.slice(0, 5)
-  const counterfeitCards = shuffledCounterfeits.slice(5)
+  const counterfeitHand = shuffledCounterfeits.slice(0, 4)
+  const counterfeitCards = shuffledCounterfeits.slice(4)
 
   const elementalDice = classId === 'shaman'
     ? Array.from({ length: 4 }, () => ({ face: Math.ceil(Math.random() * 6), used: false }))

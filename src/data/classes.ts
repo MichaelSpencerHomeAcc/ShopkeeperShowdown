@@ -68,7 +68,7 @@ export const CLASSES: ClassCard[] = [
       'Guild Contacts — Auction 1 Stolen resource (Counterfeits excluded). If your d6 roll is 5 or higher, gain a matching Reputation token in addition to the coins.',
       'From the Shadows — Place 1 Counterfeit from your hand into any window (yours or another player\'s). If placed in your own window, Draw 1 resource.',
     ],
-    playstyle: 'The Swindler. Difficulty 4/5. Carries a personal 8-card Counterfeit deck (draw 5 at start). Counterfeits sell for coins but grant no Rep — and trigger a "On Return" effect against whoever receives them at sale. Heist lets you steal directly from windows (not just hoards) and plant Counterfeits in your own shop or others\'. High disruption, high skill ceiling; devastating when you can time the return effects.',
+    playstyle: 'The Swindler. Difficulty 4/5. Carries a personal 8-card Counterfeit deck (draw 4 at start). Counterfeits sell for coins but grant no Rep — and trigger a "On Return" effect against whoever receives them at sale. Heist lets you steal directly from windows (not just hoards) and plant Counterfeits in your own shop or others\'. High disruption, high skill ceiling; devastating when you can time the return effects.',
   },
   {
     id: 'shaman',

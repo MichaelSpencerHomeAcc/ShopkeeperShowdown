@@ -11,11 +11,11 @@ Every physical component that needs redesigning, compared with `main` (PR #15). 
 | Visitor cards | 34 of 34 | **New:** printed 1st / 2nd contribution prizes (proposed below) |
 | Location boards | 4 spaces | Tavern Auction, Guildhall Consultation, Barracks Hire Bodyguard, Thieves' Guild Fence |
 | Renown card | 1 | Forge of Ironpeak |
-| Class boards | 6 | Barbarian, Ranger, Rogue (setup), Shaman, Sorcerer, Warlock |
+| Class boards | 5 | Barbarian, Ranger, Shaman, Sorcerer, Warlock |
 | Warlock components | 8 cards + dice + figure | New Curse deck, 2 Omen dice (was 3), Imp figure |
 | Player aid / scoring card | 1 | Rep table, set bonus 5, starting coins 2 |
 | Coins | — | Fewer needed; denominations suggested below |
-| **No change** | — | Professionals, Counterfeits, Ambush cards, Surge table, Renown cards other than Forge, Monk and Paladin boards |
+| **No change** | — | Professionals, Counterfeits, Ambush cards, Surge table, Renown cards other than Forge, Monk, Paladin and Rogue boards |
 
 ---
 
@@ -271,13 +271,6 @@ All other location spaces are unchanged.
 - **Active:** Ambush — Place 2 Ambush cards face-down on locations of your choice. When a player uses a matching location, flip and activate it. You may hold up to 3 active Ambush cards. Cannot target the Night Watcher holder.
 - **Active:** Trick Shot — Force a player to re-roll a die they just rolled. If they roll higher: Refresh 1 Active token. If equal or lower: choose one — Break 1 window for a player you didn't target OR Launder 1 resource.
 
-### Rogue — Robyn Spichard
-**What changed:** Setup only: draw **5** Counterfeits at the start of the game (was 4). Board text is otherwise unchanged.
-
-- **Passive:** No Honour Among Thieves — When you Steal, you may instead Heist: take a resource directly from a player's window and replace it with a Counterfeit card. Counterfeits in your hand may be placed in your own windows and sell normally to Visitors (no Rep gained). Replenish 1 Counterfeit by visiting the Thieves' Guild or Tavern.
-- **Active:** Guild Contacts — Auction 1 Stolen resource (Counterfeits excluded). If your d6 roll is 5 or higher, gain a matching Reputation token in addition to the coins.
-- **Active:** From the Shadows — Place 1 Counterfeit from your hand into any window (yours or another player's). If placed in your own window, Draw 1 resource.
-
 ### Shaman — Mikael Spenrian
 **What changed:** Call Lightning: you Draw 2 (was 1).
 
@@ -299,7 +292,7 @@ All other location spaces are unchanged.
 - **Active:** Hex — Draw 2 Curse cards and lay one face-up in front of a player. At the start of their next turn they resolve it (pay you coins, give up a card of their choice, shutter a window…) and hand it back. The Night Watcher protects against Hexes.
 - **Active:** Summon Imp — Your Imp lurks at a location until someone banishes it. Every other player who uses that location rolls: 1–2 the Imp eats a random card from their hoard, 3–4 it breaks one of their windows, 5–6 it's banished. You can Twist that roll, and spend a token to move the Imp.
 
-**Unchanged boards:** Paladin (only its Forge of Ironpeak Renown card changed) and Monk.
+**Unchanged boards:** Paladin (only its Forge of Ironpeak Renown card changed), Monk, and Rogue (still draws 4 Counterfeits; Guild Contacts follows the new Auction payout automatically).
 
 ---
 
