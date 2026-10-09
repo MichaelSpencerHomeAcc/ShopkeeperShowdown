@@ -100,7 +100,7 @@ Choose ONE:
 Note: The Night Watcher badge holder cannot be targeted by this action.
 
 **Fence**
-Sell 1 Stolen resource from your Hoard to the discard pile. The resource type must be DIFFERENT from the resource currently on top of the Flea Market. Gain the coin value of the sold resource. Ignore any Reputation icon. The Stolen marker is removed on sale.
+Sell 1 Stolen resource from your Hoard to the discard pile. The resource type must be DIFFERENT from the last resource fenced at the Thieves' Guild (it stays face-up there). Gain **double** the coin value of the sold resource. Ignore any Reputation icon. The Stolen marker is removed on sale.
 
 **Launder 3**
 Draw 3 resources from the top of the resource deck. Mark them all as Stolen.

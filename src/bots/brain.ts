@@ -1,7 +1,7 @@
 import {
   useGameStore, CLAN_TOLL, FEARSOME_CHAMPION_MAX, MAX_SALES_PER_VISITOR, rankContributors, type GameStore,
   MOMENTUM_COSTS, SHARED_REP_MAX, FLOW_STATE_MAX, MAX_OMENS, SURGE_REROLL_COST, SURGE_SHIFT_COST, WILD_SURGE_COUNT,
-  CONSULT_COST, BODYGUARD_COST,
+  CONSULT_COST, BODYGUARD_COST, FENCE_MULTIPLIER,
 } from '../store/gameStore'
 import type {
   BotDifficulty, CurseId, DemandMap, DuelStake, Location, MomentumSpendId, Player, RepType, ResourceCard, ResourceType,
@@ -1272,7 +1272,7 @@ function bestFence(s: GameStore, me: Player, ctx: ValueContext) {
   ].filter(c => !isCounterfeit(c) && c.type !== s.lastGuildFenceType)
   let best: { card: ResourceCard; value: number } | null = null
   for (const card of stolen) {
-    const value = card.value + pts(0.5) - cardWorth(card, ctx)
+    const value = card.value * FENCE_MULTIPLIER + pts(0.5) - cardWorth(card, ctx)
     if (!best || value > best.value) best = { card, value }
   }
   return best

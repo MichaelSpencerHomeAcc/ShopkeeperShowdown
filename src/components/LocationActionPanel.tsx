@@ -90,7 +90,7 @@ const LOCATION_ACTIONS: Record<Location, ActionOption[]> = {
   ],
   'thieves-guild': [
     { id: 'steal-or-break', label: 'Steal 1 or Break 1', icon: '🗡️', description: "Target another player's window or resources." },
-    { id: 'fence',          label: 'Fence',               icon: '💎', description: 'Secretly sell a stolen resource.' },
+    { id: 'fence',          label: 'Fence',               icon: '💎', description: 'Sell a stolen resource for double its value (no Rep).' },
     { id: 'launder',        label: 'Launder 3',           icon: '🌀', description: 'Draw 3 cards and mark them as stolen.' },
   ],
 }

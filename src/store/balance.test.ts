@@ -1,5 +1,5 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
-import { CLAN_TOLL, FEARSOME_CHAMPION_MAX, SHAMAN_DICE_RECHARGE_ROUND, useGameStore } from './gameStore'
+import { CLAN_TOLL, FEARSOME_CHAMPION_MAX, FENCE_MULTIPLIER, SHAMAN_DICE_RECHARGE_ROUND, useGameStore } from './gameStore'
 import { cardsForRecipe, cardsOf, patchPlayer, playerOf, seedRandom, st, startGame } from '../test/helpers'
 import { recipeMainType } from '../utils/requirements'
 import type { Player } from '../types'
@@ -143,5 +143,19 @@ describe('Shaman — Elemental dice', () => {
     expect(st().round).toBe(SHAMAN_DICE_RECHARGE_ROUND)
     expect(playerOf('shaman').elementalDice.every(d => !d.used)).toBe(true)
     expect(st().actionLog.some(e => e.message.includes('Elemental dice recharge'))).toBe(true)
+  })
+})
+
+describe("Thieves' Guild — Fence", () => {
+  it('sells a stolen card for double its value, with no Rep', () => {
+    startGame(['rogue', 'shaman'])
+    const r = playerOf('rogue')
+    const [card] = cardsOf('ARM')
+    patchPlayer(r.id, { hoard: [{ ...card, repTokens: 1 }], stolenHoardCardIds: [card.id] })
+    st().fence(r.id, card.id)
+    expect(FENCE_MULTIPLIER).toBe(2)
+    expect(playerOf('rogue').coins - r.coins).toBe(card.value * 2)
+    expect(playerOf('rogue').rep).toEqual(r.rep)
+    expect(playerOf('rogue').hoard).toHaveLength(0)
   })
 })

@@ -611,6 +611,8 @@ export const MAX_SALES_PER_VISITOR = 2
 export const auctionCoins = (roll: number) => Math.ceil(roll / 2)
 export const CONSULT_COST = 2
 export const BODYGUARD_COST = 1
+/** Fencing a stolen card pays this many times its value (no Rep). */
+export const FENCE_MULTIPLIER = 2
 
 export const VISITOR_PRIZE_KINDS: VisitorPrizeKind[] = ['coins', 'rep', 'refresh', 'take', 'draw', 'steal', 'break']
 
@@ -2723,18 +2725,18 @@ export const useGameStore = create<GameStore>((set, get) => ({
             ...p,
             hoard: p.hoard.filter(c => c.id !== cardId),
             stolenHoardCardIds: p.stolenHoardCardIds.filter(id => id !== cardId),
-            coins: p.coins + card.value,
+            coins: p.coins + card.value * FENCE_MULTIPLIER,
           }
         }
         return {
           ...p,
           windows: p.windows.map((w, i) => i === stolenWindowIdx ? { ...w, card: null, stolen: false } : w),
-          coins: p.coins + card.value,
+          coins: p.coins + card.value * FENCE_MULTIPLIER,
         }
       }),
       lastGuildFencedCard: card,
       lastGuildFenceType: card.type,
-      actionLog: [logEntry(`${player.name} fenced ${card.name} for ${card.value} coins.`, playerId), ...s.actionLog.slice(0, 49)],
+      actionLog: [logEntry(`${player.name} fenced ${card.name} for ${card.value * FENCE_MULTIPLIER} coins.`, playerId), ...s.actionLog.slice(0, 49)],
     }))
   },
 

@@ -46,7 +46,7 @@ Used by: Many abilities and return effects.
 
 ## Fence
 
-Sell 1 Stolen resource from your Hoard to the discard pile. The resource type must be DIFFERENT from the resource currently on top of the Flea Market. Gain the coin value of the resource. Ignore any Reputation icon. The Stolen marker is removed on sale.
+Sell 1 Stolen resource from your Hoard to the discard pile. The resource type must be DIFFERENT from the last resource fenced at the Thieves' Guild (it stays face-up there). Gain **double** the coin value of the resource. Ignore any Reputation icon. The Stolen marker is removed on sale.
 
 Used by: Thieves' Guild action only.
 

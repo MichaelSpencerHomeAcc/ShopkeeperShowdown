@@ -9,7 +9,7 @@ Every physical component that needs redesigning, compared with `main` (PR #15). 
 | Resource cards | 84 of 92 | New sell value (8 cards are already 1 and stay 1). Rep icons unchanged |
 | Work Order cards | 20 of 20 | New price |
 | Visitor cards | 34 of 34 | **New:** printed 1st / 2nd contribution prizes (proposed below) |
-| Location boards | 3 spaces | Tavern Auction, Guildhall Consultation, Barracks Hire Bodyguard |
+| Location boards | 4 spaces | Tavern Auction, Guildhall Consultation, Barracks Hire Bodyguard, Thieves' Guild Fence |
 | Renown card | 1 | Forge of Ironpeak |
 | Class boards | 6 | Barbarian, Ranger, Rogue (setup), Shaman, Sorcerer, Warlock |
 | Warlock components | 8 cards + dice + figure | New Curse deck, 2 Omen dice (was 3), Imp figure |
@@ -241,8 +241,9 @@ Each card's value is half its old printed value, rounded (minimum 1). Rep icons 
 | Tavern | Auction 1 | Roll d6 and gain that many coins | **Roll d6 and gain half that many coins, rounded up (1–3)** |
 | Guildhall | Consultation | Pay 3 coins: gain 1 Reputation token of your choice | **Pay 2 coins**: gain 1 Reputation token of your choice |
 | Barracks | Hire Bodyguard | Pay 2 coins: take the Night Watcher | **Pay 1 coin**: take the Night Watcher |
+| Thieves' Guild | Fence | Sell 1 Stolen resource for its coin value (no Rep) | Sell 1 Stolen resource for **double** its coin value (no Rep). Its type must differ from the last card fenced here |
 
-All other location spaces are unchanged. Fence (Thieves' Guild) is under review; see the chat.
+All other location spaces are unchanged.
 
 ---
 

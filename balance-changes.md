@@ -78,6 +78,7 @@ Average card value: **4.74 → 2.63**. Counterfeit cards are unchanged ($1–2).
 | Rogue's Guild Contacts auction | coins = d6 roll | half the d6 roll, rounded up |
 | Consultation (Guildhall): +1 Rep | pay 3 coins | pay 2 coins |
 | Hire Bodyguard (Barracks): take the Night Watcher | pay 2 coins | pay 1 coin |
+| Fence (Thieves' Guild): sell 1 Stolen resource, no Rep | its coin value | **double** its coin value (bots used it 0.05 → ~3 times a game) |
 
 ### Visitor contribution prizes
 
