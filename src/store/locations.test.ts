@@ -179,14 +179,14 @@ describe('Guildhall — new Professionals', () => {
     expect(st().questResult).toMatchObject({ dice: [6, 5], total: 11, outcome: 'Legend' })
   })
 
-  it('Pretentious Pawnbroker sells up to 2 hoard cards at printed value, without Rep', () => {
+  it('Pretentious Pawnbroker sells up to 2 hoard cards at printed value +1, without Rep', () => {
     startGame(['monk', 'shaman'])
     const p = playerOf('monk')
     const cards = cardsOf('ARM', 'CON', 'TRI').map(c => ({ ...c, repTokens: 1 }))
     patchPlayer(p.id, { hoard: cards, coins: 0 })
     st().pawn(p.id, cards.map(c => c.id))
     expect(playerOf('monk').hoard).toHaveLength(1)
-    expect(playerOf('monk').coins).toBe(cards[0].value + cards[1].value)
+    expect(playerOf('monk').coins).toBe(cards[0].value + cards[1].value + 2)
     expect(playerOf('monk').rep).toEqual(p.rep)
   })
 

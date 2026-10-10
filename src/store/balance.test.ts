@@ -68,12 +68,9 @@ describe('Paladin — Honourable Trade', () => {
     expect(playerOf('paladin').rep.ARM).toBe(0)
   })
 
-  it('gets 1 Reputation only when 2+ windows are repaired', () => {
+  it('gets 1 Reputation when a window is actually repaired', () => {
     const pal = paladinGame()
     breakWindows(pal, 1)
-    st().repairAllWindows(pal.id, 'CON')
-    expect(playerOf('paladin').rep.CON).toBe(0)
-    breakWindows(playerOf('paladin'), 2)
     st().repairAllWindows(pal.id, 'CON')
     expect(playerOf('paladin').rep.CON).toBe(1)
     expect(playerOf('paladin').windows.every(w => w.status !== 'broken')).toBe(true)

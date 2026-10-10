@@ -77,7 +77,7 @@ export const PROFESSIONAL_CARDS: ProfessionalCard[] = [
   {
     id: 'p11',
     name: 'Pretentious Pawnbroker',
-    effect: 'Sell up to 2 resources from your hoard to the bank at their printed value (no Rep).',
+    effect: 'Sell up to 2 resources from your hoard to the bank for their printed value +1 coin each (no Rep).',
     flavour: "I suppose I could take it off your hands. For a pittance.",
     imageFile: '/cards/professionals/Pretentious Pawnbroker.svg', // placeholder art
   },

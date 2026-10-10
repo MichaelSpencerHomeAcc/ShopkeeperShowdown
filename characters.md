@@ -100,7 +100,7 @@ Whenever you keep a **5 or 6** on any die — Gather, Auction, Clash, Duel, Masc
 
 ### Class Feature — Arcane Charge (0–3)
 - Gain 1 Charge each time you cast a spell (use an Active) or roll a 1.
-- Spend 1 Charge to re-roll a Surge, or to shift it up or down by 1.
+- Spend 1 Charge to re-roll a Surge, or 2 Charge to shift it up or down by 1.
 
 ### Active — Hot Streak!
 Name a resource type and draw 1.
@@ -206,7 +206,7 @@ Place 1 Counterfeit from your hand into any window (yours or another player's). 
 ### Passive — Honourable Trade
 Gain 1 additional Reputation token whenever you:
 - Complete a Work Order (gain a token of the type the recipe needs most; ties go ARM, CON, TRI, TRG)
-- Fortify at the Barracks and repair at least two Broken windows
+- Fortify at the Barracks and repair at least one Broken window
 
 ### Active — Righteous Duel
 Name a player and declare a stake (a resource or coin amount). They name their stake. Both players roll d6. The Paladin adds the number of Renown Cards currently in their hand to their roll. Highest total wins both stakes. Tie: both stakes returned, no effect.

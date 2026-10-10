@@ -11,12 +11,12 @@ Every physical component that needs redesigning, compared with `main` (PR #15). 
 | Visitor cards | 34 of 34 | **New:** printed 1st / 2nd contribution prizes (listed below) |
 | Location boards | 10 of 18 spaces | New layout: see section 4 (Negotiate, Pitch Camp, Hire Bodyguard and Sell to a Visitor are gone) |
 | Renown card | 1 | Forge of Ironpeak |
-| Class boards | 6 | Monk, Paladin, Ranger, Shaman, Sorcerer, Warlock |
+| Class boards | 5 | Monk, Paladin, Ranger, Shaman, Warlock |
 | Warlock components | 8 cards + dice + figure | New Curse deck, 2 Omen dice (was 3), Imp figure |
 | Player aid / scoring card | 1 | Rep table, set bonus 5, starting coins 2 |
 | Coins | — | Fewer needed; denominations suggested below |
 | Professional cards | 4 changed + 3 new | Alchemist, Clerk, Promoter, Saboteur; new: Quivering Questgiver, Pretentious Pawnbroker, Audacious Auctioneer (section 4b) |
-| **No change** | — | Counterfeits, Ambush cards, Surge table, Renown cards other than Forge, Barbarian and Rogue boards |
+| **No change** | — | Counterfeits, Ambush cards, Surge table, Renown cards other than Forge, Barbarian, Sorcerer and Rogue boards |
 
 ---
 
@@ -274,7 +274,7 @@ Unchanged: Brazen Bounty Hunter, Marvellous Mascot, Resourceful Recruiter, Skilf
 | Professional | Effect | Flavour |
 |---|---|---|
 | **Quivering Questgiver** | Go on a Quest: roll 3 dice and keep the best 2. | *Adventure awaits! Probably. I wouldn't go myself.* |
-| **Pretentious Pawnbroker** | Sell up to 2 resources from your hoard to the bank at their printed value (no Rep). | *I suppose I could take it off your hands. For a pittance.* |
+| **Pretentious Pawnbroker** | Sell up to 2 resources from your hoard to the bank for their printed value +1 coin each (no Rep). | *I suppose I could take it off your hands. For a pittance.* |
 | **Audacious Auctioneer** | Auction 2: auction up to 2 resources, one after the other. | *Do I hear three? Three! From the gentleman with the suspicious hat!* |
 
 The professional deck goes from 9 to 12 cards; 3 are still dealt face-up each game.
@@ -298,9 +298,9 @@ The professional deck goes from 9 to 12 cards; 3 are still dealt face-up each ga
 - **Active:** Momentum Spend (free, each option once per turn) — 1: Draw 2 · 1: Trade 2 with the Flea Market · 3: Appraise 2 · 3: Break 1 or Steal 1 · 5: Copy any Professional currently in play and resolve it · 5: Gain 1 Rep per player you shared a location with this turn (max 3).
 
 ### Paladin — Jordain Tinkfast
-**What changed:** Honourable Trade no longer mentions Negotiate, and its repair trigger is now: Fortify and repair at least 2 windows (was: Report the Crime repairing at least 1).
+**What changed:** Honourable Trade no longer mentions Negotiate, and its repair trigger is now: Fortify and repair at least 1 window (was: Report the Crime repairing at least 1).
 
-- **Passive:** Honourable Trade — Gain 1 additional Reputation token whenever you: complete a Work Order (gain the recipe's main type), or Fortify at the Barracks and repair at least two Broken windows. Starts with a hand of 4 Renown Cards (drawn from a 10-card personal deck).
+- **Passive:** Honourable Trade — Gain 1 additional Reputation token whenever you: complete a Work Order (gain the recipe's main type), or Fortify at the Barracks and repair at least one Broken window. Starts with a hand of 4 Renown Cards (drawn from a 10-card personal deck).
 - **Active:** Righteous Duel — Name a player and declare a stake. Both roll d6; the Paladin adds their current Renown card count to their roll. Highest total wins both stakes. Tie: both returned.
 - **Active:** Tales of Old (off-turn) — Discard 1 Renown Card from your hand and immediately resolve its Spend effect. Renown is never replenished — once spent, it's gone.
 
@@ -318,13 +318,6 @@ The professional deck goes from 9 to 12 cards; 3 are still dealt face-up each ga
 - **Active:** Call Lightning — Choose 1 player. That player discards 2 resources from their Hoard (their choice). Then you Draw 2 resources.
 - **Active:** Patience of Stone — For each unused Elemental die still in your possession, choose one effect: Repair 1, Trade 1, Draw 1, or Forage 2. Each effect may only be chosen once per use of this ability.
 
-### Sorcerer — Mathias Spellserve
-**What changed:** Shifting a Surge costs 1 Charge (was 2).
-
-- **Passive:** Wild Magic — Whenever you keep a 5 or 6 on any die (Gather, Auction, Clash, Duel, Mascot…), a Wild Surge erupts: roll 2d6 on the Surge Table. Arcane Charge (max 3): gain 1 when you cast a spell or roll a 1. Spend 1 to re-roll a Surge or to shift it up or down by 1.
-- **Active:** Hot Streak! — Name a resource type and draw. If it matches, bank everything or go again (+1 Charge). On a miss, lose every card drawn after the first, then Break 1 of another player's windows. Your first card is always safe.
-- **Active:** Wild Surge — Roll on the Surge Table twice, one after the other (and gain 1 Charge to bend them).
-
 ### Warlock — Kaelan Mortisbane
 **What changed:** Hex now lays a face-up curse that resolves at the start of the victim's turn; the Imp stays until banished, hits every visitor, and eats cards instead of stealing them. Omens max 2 (was 3); Twisting no longer earns a coin; the Warlock can Twist one die of any Quest.
 
@@ -332,7 +325,7 @@ The professional deck goes from 9 to 12 cards; 3 are still dealt face-up each ga
 - **Active:** Hex — Draw 2 Curse cards and lay one face-up in front of a player. At the start of their next turn they resolve it (pay you coins, give up a card of their choice, shutter a window…) and hand it back. The Night Watcher protects against Hexes.
 - **Active:** Summon Imp — Your Imp lurks at a location until someone banishes it. Every other player who uses that location rolls: 1–2 the Imp eats a random card from their hoard, 3–4 it breaks one of their windows, 5–6 it's banished. You can Twist that roll, and spend a token to move the Imp.
 
-**Unchanged boards:** Barbarian (Fearsome Champion is back to 1 coin per Broken window, max 2) and Rogue (still draws 4 Counterfeits; Guild Contacts follows the new Auction payout automatically).
+**Unchanged boards:** Barbarian (Fearsome Champion is back to 1 coin per Broken window, max 2), Sorcerer (Surge shift is back to 2 Charge) and Rogue (still draws 4 Counterfeits; Guild Contacts follows the new Auction payout automatically).
 
 ---
 

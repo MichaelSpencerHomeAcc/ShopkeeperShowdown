@@ -976,7 +976,7 @@ function PaladinAbilities({ player, isActiveTurn }: { player: Player; isActiveTu
           <span className="text-sm font-bold text-parchment-300 uppercase tracking-wide">Passive · Honourable Trade</span>
         </div>
         <div className="px-3 py-2 text-sm text-parchment-400 leading-relaxed">
-          +1 Rep when you complete a Work Order (the recipe's main type), or when Fortify repairs at least two broken windows.
+          +1 Rep when you complete a Work Order (the recipe's main type), or when Fortify repairs at least one broken window.
           {totalClashBonus > 0 && (
             <> <span className="text-gold-400 font-semibold">+{totalClashBonus} to Righteous Duel rolls</span> (current Renown card count).</>
           )}

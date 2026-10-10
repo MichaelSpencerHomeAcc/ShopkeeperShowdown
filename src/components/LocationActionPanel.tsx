@@ -792,10 +792,10 @@ function ShadySaboteurUI({ player, onDone }: { player: Player; onDone: () => voi
 function PawnbrokerUI({ player, onDone }: { player: Player; onDone: () => void }) {
   const pawn = useGameStore(s => s.pawn)
   const [sel, setSel] = useState<string[]>([])
-  const coins = player.hoard.filter(c => sel.includes(c.id)).reduce((n, c) => n + c.value, 0)
+  const coins = player.hoard.filter(c => sel.includes(c.id)).reduce((n, c) => n + c.value + 1, 0)
   return (
     <div className="space-y-2 text-[10px]">
-      <div className="text-parchment-400">Pick up to 2 resources from your hoard to sell at their printed value (no Rep):</div>
+      <div className="text-parchment-400">Pick up to 2 resources from your hoard to sell for their printed value +1 coin each (no Rep):</div>
       <div className="flex flex-wrap gap-1.5">
         {player.hoard.map(c => (
           <ResourceCardMini key={c.id} card={c} size="lg" selected={sel.includes(c.id)}
@@ -1601,7 +1601,7 @@ function BarracksActions({ actionId, onAction, onBack }: { actionId: string; onA
         <p className="text-sm text-parchment-300 leading-relaxed">
           <Keyword name="Repair">Repair</Keyword> all your windows ({broken} broken) and take the <Keyword name="Night Watcher">Night Watcher</Keyword>.
         </p>
-        {player.classId === 'paladin' && repPicker(broken >= 2 ? 'Honourable Trade (2+ repaired) — gain Rep:' : 'Honourable Trade needs 2+ broken windows')}
+        {player.classId === 'paladin' && repPicker(broken >= 1 ? 'Honourable Trade — gain Rep:' : 'Honourable Trade needs a broken window to repair')}
         <button
           type="button"
           disabled={nothingToDo}

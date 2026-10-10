@@ -1008,7 +1008,7 @@ export const MAX_OMENS = 2
 /** Sorcerer: Arcane Charge cap, and what bending a Surge costs */
 export const MAX_CHARGE = 3
 export const SURGE_REROLL_COST = 1
-export const SURGE_SHIFT_COST = 1
+export const SURGE_SHIFT_COST = 2
 /** Wild Magic: a kept die of this or higher sets off a Surge */
 export const SURGE_ON = 5
 /** Casting Wild Surge rolls this many Surges */
@@ -2915,11 +2915,12 @@ export const useGameStore = create<GameStore>((set, get) => ({
     if (!get().players.some(p => p.id === playerId)) return
     set({ questResult: null })
     const rolled = Array.from({ length: Math.max(2, diceCount) }, d6)
-    // Every die still feeds Bottled Fate and Wild Magic
-    for (const die of rolled) { bottleOmen(get, set, die); sorcererDie(get, set, playerId, die) }
     // Keep the best two (the Quest table only gets better as the total rises)
     const kept = rolled.length > 2 ? [...rolled].sort((a, b) => b - a) : rolled
     const dice: [number, number] = [kept[0], kept[1]]
+    // Every die rolled feeds Bottled Fate; Wild Magic only counts the dice kept
+    for (const die of rolled) bottleOmen(get, set, die)
+    for (const die of dice) sorcererDie(get, set, playerId, die)
     if (rolled.length > 2) addLog(set, `Quivering Questgiver — rolled ${rolled.join(', ')}, keeping ${dice[0]} and ${dice[1]}.`, playerId)
     // Twist of Fate: the Warlock may change one die, on anyone's Quest
     const w = get().players.find(p => p.classId === 'warlock' && p.omens.some(o => o !== dice[0] || o !== dice[1]))
@@ -2955,7 +2956,8 @@ export const useGameStore = create<GameStore>((set, get) => ({
     if (!player) return
     const cards = player.hoard.filter(c => cardIds.includes(c.id)).slice(0, 2)
     if (cards.length === 0) return
-    const coins = cards.reduce((n, c) => n + c.value, 0)
+    // The bank pays printed value +1 per card
+    const coins = cards.reduce((n, c) => n + c.value + 1, 0)
     const ids = cards.map(c => c.id)
     set(s => ({
       resourceDiscard: [...cards, ...s.resourceDiscard],
@@ -2997,8 +2999,8 @@ export const useGameStore = create<GameStore>((set, get) => ({
       players: s.players.map(p => {
         if (p.id !== playerId) return p
         const withWindows = { ...p, windows: p.windows.map(w => ({ ...w, status: 'normal' as WindowStatus })) }
-        // Honourable Trade: +1 rep of chosen type — Paladin only, and only when 2+ windows were repaired
-        const withRepType = (repType && p.classId === 'paladin' && brokenCount > 1) ? { ...withWindows, rep: { ...withWindows.rep, [repType]: withWindows.rep[repType] + 1 } } : withWindows
+        // Honourable Trade: +1 rep of chosen type — Paladin only, and only if a window was actually repaired
+        const withRepType = (repType && p.classId === 'paladin' && brokenCount > 0) ? { ...withWindows, rep: { ...withWindows.rep, [repType]: withWindows.rep[repType] + 1 } } : withWindows
         // rn03: additional ARM rep per window repaired
         const withRn03 = rn03 && brokenCount > 0 ? { ...withRepType, rep: { ...withRepType.rep, ARM: withRepType.rep.ARM + brokenCount } } : withRepType
         const withDraw = draw ? { ...withRn03, hoard: [...withRn03.hoard, ...draw.drawn] } : withRn03
@@ -3008,7 +3010,7 @@ export const useGameStore = create<GameStore>((set, get) => ({
       resourceDiscard: draw ? draw.discard : s.resourceDiscard,
       actionLog: [logEntry(
         `${player.name} repaired all windows.` +
-        (repType && brokenCount > 1 && player.classId === 'paladin' ? ` Gained 1 ${repType} rep.` : '') +
+        (repType && brokenCount > 0 && player.classId === 'paladin' ? ` Gained 1 ${repType} rep.` : '') +
         (rn03 && brokenCount > 0 ? ` Gates of Mirhollow — +${brokenCount} ARM Rep.` : '') +
         (draw && draw.drawn.length > 0 ? ` Mercy of Thornwall — drew ${draw.drawn.map(c => c.name).join(', ')}.` : ''),
         playerId

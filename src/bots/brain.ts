@@ -974,8 +974,8 @@ function locationCandidates(s: GameStore, me: Player, ctx: ValueContext): Candid
     const wantsWatcher = !me.hasNightWatcher && s.players.length > 2
     if (broken > 0 || wantsWatcher) {
       const t = bestRepType(me.rep, difficulty)
-      // Honourable Trade: Paladins gain 1 Rep when a Fortify repairs 2+ windows
-      const paladinRep = me.classId === 'paladin' && broken > 1 ? repValue(me.rep, t, difficulty) : 0
+      // Honourable Trade: Paladins gain 1 Rep when a Fortify repairs a window
+      const paladinRep = me.classId === 'paladin' && broken > 0 ? repValue(me.rep, t, difficulty) : 0
       const hoardWorth = me.hoard.reduce((n, c) => n + cardWorth(c, ctx), 0)
       const leading = rankOpponents(s, me.id).every(p => liveScore(p) <= liveScore(me))
       const watcher = wantsWatcher ? hoardWorth * 0.1 + (leading ? pts(1.2) : 0) : 0
@@ -1535,7 +1535,7 @@ function professionalCandidate(
       return { value: questValue(me, ctx, avgDraw, t, 3), tag: t, fn: g => g.quest(me.id, t, 3) }
     }
     case 'p11': { // Pretentious Pawnbroker — sell up to 2 hoard cards at printed value
-      const sells = me.hoard.filter(c => !isCounterfeit(c)).map(c => ({ c, gain: c.value - cardWorth(c, ctx) }))
+      const sells = me.hoard.filter(c => !isCounterfeit(c)).map(c => ({ c, gain: c.value + 1 - cardWorth(c, ctx) }))
         .filter(x => x.gain > 0).sort((a, b) => b.gain - a.gain).slice(0, 2)
       if (sells.length === 0) return null
       return { value: sells.reduce((n, x) => n + x.gain, 0), tag: sells.map(x => x.c.id).join(','), fn: g => g.pawn(me.id, sells.map(x => x.c.id)) }

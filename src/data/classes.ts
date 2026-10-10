@@ -35,7 +35,7 @@ export const CLASSES: ClassCard[] = [
     tagline: 'Honour in every transaction',
     imageFile: '/cards/player-boards/Paladin.png',
     status: 'BETA',
-    passive: 'Honourable Trade — Gain 1 additional Reputation token whenever you: complete a Work Order (gain the recipe\'s main type), or Fortify at the Barracks and repair at least two Broken windows. Starts with a hand of 4 Renown Cards (drawn from a 10-card personal deck).',
+    passive: 'Honourable Trade — Gain 1 additional Reputation token whenever you: complete a Work Order (gain the recipe\'s main type), or Fortify at the Barracks and repair at least one Broken window. Starts with a hand of 4 Renown Cards (drawn from a 10-card personal deck).',
     actives: [
       'Righteous Duel — Name a player and declare a stake. Both roll d6; the Paladin adds their current Renown card count to their roll. Highest total wins both stakes. Tie: both returned.',
       'Tales of Old (off-turn) — Discard 1 Renown Card from your hand and immediately resolve its Spend effect. Renown is never replenished — once spent, it\'s gone.',
@@ -91,7 +91,7 @@ export const CLASSES: ClassCard[] = [
     tagline: "Magic is easy. Aiming it is the hard part.",
     imageFile: '/cards/player-boards/Sorcerer.png',
     status: 'BETA',
-    passive: "Wild Magic — Whenever you keep a 5 or 6 on any die (Gather, Auction, Clash, Duel, Mascot…), a Wild Surge erupts: roll 2d6 on the Surge Table. Arcane Charge (max 3): gain 1 when you cast a spell or roll a 1. Spend 1 to re-roll a Surge or to shift it up or down by 1.",
+    passive: "Wild Magic — Whenever you keep a 5 or 6 on any die (Gather, Auction, Clash, Duel, Mascot…), a Wild Surge erupts: roll 2d6 on the Surge Table. Arcane Charge (max 3): gain 1 when you cast a spell or roll a 1. Spend 1 to re-roll a Surge, or 2 to shift it up or down by 1.",
     actives: [
       "Hot Streak! — Name a resource type and draw. If it matches, bank everything or go again (+1 Charge). On a miss, lose every card drawn after the first, then Break 1 of another player's windows. Your first card is always safe.",
       "Wild Surge — Roll on the Surge Table twice, one after the other (and gain 1 Charge to bend them).",

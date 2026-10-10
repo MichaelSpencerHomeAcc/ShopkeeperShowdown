@@ -125,11 +125,11 @@ Part 1 raised the set bonus from 6 to 10 (it narrowed the gap between classes fr
 |---|---|---|---|
 | **Barbarian** | — | no change (a cut to 1 coin was tried, then undone after the location rework) | 1 coin per Broken window, max 2, as before |
 | **Paladin** | Forge of Ironpeak (Renown) passive | +3 coins when you complete a Work Order | +2 coins |
-| **Paladin** | Honourable Trade | +1 Rep for a Negotiate, a Work Order, or Report the Crime repairing 1+ windows | +1 Rep for a Work Order, or a **Fortify that repairs 2+ windows** |
+| **Paladin** | Honourable Trade | +1 Rep for a Negotiate, a Work Order, or Report the Crime repairing 1+ windows | +1 Rep for a Work Order, or a **Fortify that repairs at least 1 window** |
 | **Ranger** | Master of the Wilderness free gather | half your d6, rounded **down** (min 1) | half your d6, rounded **up**, **minimum 2** |
 | **Rogue** | — | no change (a 5th starting Counterfeit was tried, then undone once Fence paid double) | 4 cards, as before |
 | **Shaman** | Call Lightning | you Draw 1 | you Draw 2 |
-| **Sorcerer** | Arcane Charge to shift a Surge ±1 | 2 Charge | 1 Charge (re-roll still 1) |
+| **Sorcerer** | — | no change (a 1-Charge shift was tried, then undone once the new professionals added more dice) | 2 Charge, as before |
 | **Warlock** | Omen jar size | 3 Omens | 2 Omens |
 | **Warlock** | Twist of Fate | +1 coin for Twisting someone else's roll | no coin; may Twist one die of any Quest (own or rival's) |
 | **Warlock** | Hex / curse deck | see below | see below |
@@ -215,7 +215,7 @@ Hires per game when the professional is face-up (each is dealt into about a thir
 | Professional | Effect | Flavour |
 |---|---|---|
 | **Quivering Questgiver** | Go on a Quest: roll 3 dice and keep the best 2. | *Adventure awaits! Probably. I wouldn't go myself.* |
-| **Pretentious Pawnbroker** | Sell up to 2 resources from your hoard to the bank at their printed value (no Rep). | *I suppose I could take it off your hands. For a pittance.* |
+| **Pretentious Pawnbroker** | Sell up to 2 resources from your hoard to the bank for their printed value +1 coin each (no Rep). | *I suppose I could take it off your hands. For a pittance.* |
 | **Audacious Auctioneer** | Auction 2: auction up to 2 resources, one after the other. | *Do I hear three? Three! From the gentleman with the suspicious hat!* |
 
 The professional deck goes from 9 to 12 cards; 3 are still dealt face-up each game.
@@ -244,7 +244,8 @@ Win index by class (1.00 = fair share). 8,000 mixed games of 2–6 players each.
 | + Fence pays double, Rogue back to 4 Counterfeits (hard) | 0.90 | 1.06 | 0.98 | 1.02 | 1.07 | 1.02 | 1.01 | 0.93 | 0.17 |
 | + Location rework, Monk 3 Momentum, Barbarian max 2, Warlock 3 Omens (hard, 12,000 games) | 1.05 | 1.00 | 0.90 | 1.04 | 1.02 | 1.00 | 0.97 | 1.01 | 0.15 |
 | + Warlock Twists Quest dice, 2 Omens, no Twist coin, Tithe/Misfortune 3 coins, weaker Quest top (hard, 12,000 games) | 1.06 | 1.05 | 0.91 | 1.03 | 0.98 | 1.00 | 0.95 | 1.02 | 0.15 |
-| **+ Professional changes (hard, 12,000 games)** | **1.04** | **0.93** | **0.90** | **1.11** | **0.98** | **1.00** | **1.04** | **1.01** | **0.21** |
+| + Professional changes (hard, 12,000 games) | 1.04 | 0.93 | 0.90 | 1.11 | 0.98 | 1.00 | 1.04 | 1.01 | 0.21 |
+| **+ 3 new professionals, Pawnbroker +1, Sorcerer shift back to 2, Paladin Fortify Rep on 1+ window (hard, 12,000 games)** | **0.97** | **1.02** | **0.94** | **0.98** | **0.99** | **1.04** | **1.01** | **1.05** | **0.11** |
 
 Medium bots play the Warlock less well (0.86); that's expected for a class with this much decision-making.
 
