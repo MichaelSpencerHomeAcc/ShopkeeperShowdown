@@ -1477,10 +1477,10 @@ function professionalCandidate(
       const expected = clamp(1 / Math.max(pRep, 0.15), 1, 5)
       return { value: drawValue(expected, avgDraw, me) + pts(1), tag: 'draw', fn: g => g.skilfulStocker(me.id) }
     }
-    case 'p09': { // Spirited Summoner — Appraise 2
+    case 'p09': { // Spirited Summoner — Appraise 3
       if (s.resourceDeck.length === 0) return null
       return {
-        value: drawValue(2, avgDraw * 1.25, me), tag: 'appraise',
+        value: drawValue(3, avgDraw * 1.15, me), tag: 'appraise',
         fn: g => {
           g.peekAppraise(me.id)
           const peek = st().appraisePeek

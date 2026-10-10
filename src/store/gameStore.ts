@@ -3319,7 +3319,7 @@ export const useGameStore = create<GameStore>((set, get) => ({
     const { resourceDeck } = get()
     const cards = resourceDeck.slice(0, 4)
     if (cards.length === 0) return
-    set({ appraisePeek: { playerId, cards, maxKeep: 2 } })
+    set({ appraisePeek: { playerId, cards, maxKeep: 3 } })
   },
 
   completeAppraise(playerId, keepCardIds) {

@@ -63,7 +63,7 @@ export const PROFESSIONAL_CARDS: ProfessionalCard[] = [
   {
     id: 'p09',
     name: 'Spirited Summoner',
-    effect: 'Appraise 2.',
+    effect: 'Appraise 3.',
     flavour: 'The answers are out there. You just need to know where to look.',
     imageFile: '/cards/professionals/Spontaneous Summoner.png',
   },

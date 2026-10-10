@@ -205,9 +205,8 @@ Bot usage per 4-player game (hard bots, 12,000 games):
 | Charismatic Clerk | Distribute 1, gain the reputation | **Distribute 1, gain the reputation and 2 coins** |
 | Polite Promoter | Reset Flea Market. Trade 2 | **Reset Flea Market. Take 1, then Trade 2** |
 | Shady Saboteur | Break 1, gain half the coin value (rounded down) | **Break 1, gain 1 Reputation of the broken card's type** |
-| Spirited Summoner | Appraise 3 | **Appraise 2** |
 
-Unchanged: Brazen Bounty Hunter, Marvellous Mascot, Resourceful Recruiter, Skilful Stocker.
+Unchanged: Brazen Bounty Hunter, Marvellous Mascot, Resourceful Recruiter, Skilful Stocker, Spirited Summoner (Appraise 3; an Appraise 2 version was tried and dropped to 1.9 hires because it duplicated the Workshop space).
 
 Hires per game when the professional is face-up (each is dealt into about a third of games): Summoner 9.8, Recruiter 8.0, Bounty Hunter 6.3, Mascot 5.3, Stocker 4.5, Saboteur 3.1, Alchemist 1.4, Clerk 0.8, Promoter 0.3 before. After: Recruiter 8.2, Bounty Hunter 5.9, Stocker 4.9, Mascot 4.9, Saboteur 4.9, Clerk 4.0, Promoter 3.1, Alchemist 2.7, Summoner 1.9 (Appraise 2 now duplicates the Workshop space). Bots now know how to use Polite Promoter (they never hired it before).
 

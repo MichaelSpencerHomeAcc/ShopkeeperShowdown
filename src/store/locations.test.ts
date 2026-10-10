@@ -154,10 +154,10 @@ describe('Guildhall — Professionals', () => {
     expect(playerOf('monk').coins).toBe(coins)
   })
 
-  it('Spirited Summoner appraises 2', () => {
+  it('Spirited Summoner appraises 3', () => {
     startGame(['monk', 'shaman'])
     st().peekAppraise(playerOf('monk').id)
-    expect(st().appraisePeek?.maxKeep).toBe(2)
+    expect(st().appraisePeek?.maxKeep).toBe(3)
   })
 
   it('Charismatic Clerk gains the Rep and 2 coins', () => {
