@@ -42,7 +42,7 @@ Place your Clan marker on any location. Appraise 1 (look at the top 4 resources,
 **Difficulty:** 1/5
 
 ### Passive — Master of the Wilderness
-- At the start of your turn: Gather half your d6 roll (round down).
+- At the start of your turn: Gather half your d6 roll (round up, minimum 2).
 - Always on: Whenever any Visitor is completed (by any player), Trade 1 (swap 1 of your resources with 1 from the Flea Market).
 
 ### Active — Ambush
@@ -70,7 +70,7 @@ Force a player to re-roll a die they just rolled.
 At game start, roll all 4 Elemental dice. You may use each die's effect once, on your turn; all used dice recharge at the start of round 4. The result rolled determines the effect available (see Class Feature).
 
 ### Active — Call Lightning
-Choose 1 player. That player must discard 2 resources from their Hoard (their choice). Then Draw 1 resource.
+Choose 1 player. That player must discard 2 resources from their Hoard (their choice). Then Draw 2 resources.
 
 ### Active — Patience of Stone
 For each unused Elemental die still in your possession, choose one effect: Repair 1, Trade 1, Draw 1, or Forage 2. Each effect may only be chosen once per use of this ability.
@@ -136,7 +136,7 @@ Roll on the Surge Table **twice**, one after the other (casting it gives the usu
 
 ### Passive — Flow State
 - Gain 1 Momentum when sharing a location with another player during your turn (max 2 Momentum from this per turn).
-- Gain 2 Momentum when you complete a Visitor's order.
+- Gain 3 Momentum when you complete a Visitor's order.
 
 ### Active — Momentum Spend (no token cost; spend Momentum points instead)
 You may spend Momentum during your turn from this list. Spending is free (no action), and each option can be used once per turn:
@@ -205,9 +205,8 @@ Place 1 Counterfeit from your hand into any window (yours or another player's). 
 
 ### Passive — Honourable Trade
 Gain 1 additional Reputation token whenever you:
-- Resolve a Negotiate action at the Guildhall
 - Complete a Work Order (gain a token of the type the recipe needs most; ties go ARM, CON, TRI, TRG)
-- Use Report the Crime at the Barracks to repair at least one Broken window
+- Fortify at the Barracks and repair at least one Broken window
 
 ### Active — Righteous Duel
 Name a player and declare a stake (a resource or coin amount). They name their stake. Both players roll d6. The Paladin adds the number of Renown Cards currently in their hand to their roll. Highest total wins both stakes. Tie: both stakes returned, no effect.
@@ -230,7 +229,7 @@ Discard 1 Renown Card from your hand. Immediately resolve its Spend effect.
 | The Reckoning at Duskreach | Gain 1 coin whenever any player uses the Thieves' Guild | Name a player; they give you 2 Hoard resources |
 | The Gates of Mirhollow | Gain 1 Rep whenever you Repair a window | Close 2 windows; gain 1 Rep per window closed |
 | The King's Errand | +1 coin per public Visitor completion | Use Town Crier without visiting Barracks (free action) |
-| The Forge of Ironpeak | Work Orders gain +3 bonus coins on completion | Your next Craft needs 1 fewer resource |
+| The Forge of Ironpeak | Work Orders gain +2 bonus coins on completion | Your next Craft needs 1 fewer resource |
 | The Council of Seven | Negotiate twice per Guildhall visit | Resolve a Negotiate with any willing player regardless of location |
 | The Shadow of Vel'sha | Gain 2 coins whenever you are Stolen from | Take 1 resource at random from each player's Hoard |
 | The Mercy of Thornwall | Report the Crime repairs 2 windows instead of all | Repair all windows free, gain 1 Rep |
@@ -246,39 +245,39 @@ Discard 1 Renown Card from your hand. Immediately resolve its Spend effect.
 **Difficulty:** 4/5
 
 ### Class Feature — Bottled Fate
-Keep up to 3 **Omen** dice. Whenever **any** player rolls a 1 or a 6, bottle it as an Omen showing that number.
+Keep up to 2 **Omen** dice. Whenever **any** player rolls a 1 or a 6, bottle it as an Omen showing that number.
 
 ### Passive — Twist of Fate
-After any die is rolled (by anyone, at any time), spend an Omen to change that die to the Omen's number. A twisted die can't be re-rolled. Twisting another player's roll earns you 1 coin.
+After any die is rolled (by anyone, at any time), spend an Omen to change that die to the Omen's number. A twisted die can't be re-rolled. On a Quest, you may Twist one of the two dice — your own Quest or a rival's.
 
 *In the app:* Clash and Duel rolls are made all at once, so the Warlock Twists automatically when that turns a loss into a win.
 
 ### Active — Hex
-Choose a player (not the Night Watcher holder, and not someone already cursed). Draw 2 Curse cards, lay one on them, put the other on the bottom of your deck. A Hex moves the Night Watcher to the victim, like any attack.
-- A curse triggers once, then returns to the bottom of your deck.
-- If it hasn't triggered by the end of the victim's next turn, it fizzles.
+Choose a player (not the Night Watcher holder, and not someone already cursed). Draw 2 Curse cards, lay one **face-up in front of them**, and put the other on the bottom of your deck. A Hex moves the Night Watcher to the victim, like any attack.
+- **At the start of their next turn**, before anything else, the victim resolves the curse and hands the card back (bottom of your deck).
+- That is the only timing to remember — nothing to track in between.
 
 ### Curse deck (8 cards)
-| Curse | Effect on the victim |
+| Curse | At the start of their next turn, the victim… |
 |---|---|
-| Jinx | Their next die roll is 1 lower (minimum 1) |
-| Butterfingers | Their next Gather or Mascot draws 1 fewer card |
-| Tithe | Their next Visitor sale pays you 1 of the coins |
-| Hexed Goods | Their next Visitor sale earns no Reputation from the cards |
-| Leaky Pockets | At the start of their next turn, their cheapest hoard card is discarded |
-| Toll of Shadows | Their next location action costs 1 coin, paid to you |
-| Unsettled Shelves | At the start of their next turn, a random window card slides back into their hoard |
-| Bad Omen | No effect on them — you bottle a 1 |
+| Tithe | Pays you 3 coins |
+| Leaky Pockets | Discards 1 card from their hoard (their choice) |
+| Sticky Fingers | Gives you 1 card from their hoard (their choice) |
+| Hexed Shutters | Shutters 1 of their open windows (their choice) until the start of their following turn |
+| Unsettled Shelves | Moves 1 card from their windows back to their hoard (their choice) |
+| Weariness | Exhausts 1 Active token (a Monk loses 1 Momentum) |
+| Misfortune | Rolls a d6: on 1–3 they pay you 3 coins (you may Twist this roll) |
+| Bad Omen | Nothing — you bottle a 1 as soon as you lay it |
 
 ### Active — Summon Imp
-Place your Imp on a location (everyone can see it) until your next turn. The first other player to use that location rolls a d6:
-- **1–2:** the Imp steals a random card from their hoard for you
+Place your Imp on a location, where everyone can see it. It **stays until someone banishes it**. Every other player who uses that location rolls a d6:
+- **1–2:** the Imp eats a random card from their hoard (it's discarded)
 - **3–4:** it breaks one of their windows
-- **5–6:** it's banished
+- **5–6:** it's banished (back to you)
 
-You may Twist that roll. The Night Watcher drives the Imp off.
+You may Twist that roll. The Night Watcher holder is ignored by the Imp. Using Summon Imp again while it's out moves it to a new location.
 
-**Custom components:** 3 Omen dice, Curse deck (8 cards), Imp figure
+**Custom components:** 2 Omen dice, Curse deck (8 cards), Imp figure
 
 ---
 

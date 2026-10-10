@@ -7,7 +7,7 @@ export const PROFESSIONAL_CARDS: ProfessionalCard[] = [
   {
     id: 'p01',
     name: 'Alluring Alchemist',
-    effect: 'Trade 3, refresh 1 active, repair 1.',
+    effect: 'Trade 3, refresh all your Active tokens, repair all your windows.',
     flavour: 'When in doubt, just shake things up and see what happens.',
     imageFile: '/cards/professionals/Alluring Alchemist.png',
   },
@@ -21,14 +21,14 @@ export const PROFESSIONAL_CARDS: ProfessionalCard[] = [
   {
     id: 'p03',
     name: 'Charismatic Clerk',
-    effect: 'Distribute 1, gain the reputation.',
+    effect: 'Distribute 1, gain the reputation and 2 coins.',
     flavour: 'A little smile goes a long way!',
     imageFile: '/cards/professionals/Charismatic Clerk.png',
   },
   {
     id: 'p04',
     name: 'Polite Promoter',
-    effect: 'Reset Flea Market. Trade 2.',
+    effect: 'Reset Flea Market. Take 1, then Trade 2.',
     flavour: "I've got deals for days!",
     imageFile: '/cards/professionals/Gallant Greeter.png',
   },
@@ -49,7 +49,7 @@ export const PROFESSIONAL_CARDS: ProfessionalCard[] = [
   {
     id: 'p07',
     name: 'Shady Saboteur',
-    effect: 'Break 1, gain half the coin value (rounded down).',
+    effect: 'Break 1, gain 1 Reputation of the broken card\'s type.',
     flavour: "It's not stealing, it's strategic acquisition.",
     imageFile: '/cards/professionals/Shady Saboteur.png',
   },
@@ -66,5 +66,26 @@ export const PROFESSIONAL_CARDS: ProfessionalCard[] = [
     effect: 'Appraise 3.',
     flavour: 'The answers are out there. You just need to know where to look.',
     imageFile: '/cards/professionals/Spontaneous Summoner.png',
+  },
+  {
+    id: 'p10',
+    name: 'Quivering Questgiver',
+    effect: 'Go on a Quest: roll 3 dice and keep the best 2.',
+    flavour: "Adventure awaits! Probably. I wouldn't go myself.",
+    imageFile: '/cards/professionals/Quivering Questgiver.svg', // placeholder art
+  },
+  {
+    id: 'p11',
+    name: 'Pretentious Pawnbroker',
+    effect: 'Sell up to 2 resources from your hoard to the bank for their printed value +1 coin each (no Rep).',
+    flavour: "I suppose I could take it off your hands. For a pittance.",
+    imageFile: '/cards/professionals/Pretentious Pawnbroker.svg', // placeholder art
+  },
+  {
+    id: 'p12',
+    name: 'Audacious Auctioneer',
+    effect: 'Auction 2: auction up to 2 resources, one after the other.',
+    flavour: "Do I hear three? Three! From the gentleman with the suspicious hat!",
+    imageFile: '/cards/professionals/Audacious Auctioneer.svg', // placeholder art
   },
 ]

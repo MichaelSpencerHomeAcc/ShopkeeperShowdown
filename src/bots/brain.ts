@@ -1,6 +1,7 @@
 import {
   useGameStore, CLAN_TOLL, FEARSOME_CHAMPION_MAX, MAX_SALES_PER_VISITOR, rankContributors, type GameStore,
   MOMENTUM_COSTS, SHARED_REP_MAX, FLOW_STATE_MAX, MAX_OMENS, SURGE_REROLL_COST, SURGE_SHIFT_COST, WILD_SURGE_COUNT,
+  CONSULT_CARDS, CONSULT_COINS, QUEST_OUTCOMES, questOutcome, FENCE_MULTIPLIER,
 } from '../store/gameStore'
 import type {
   BotDifficulty, CurseId, DemandMap, DuelStake, Location, MomentumSpendId, Player, RepType, ResourceCard, ResourceType,
@@ -11,6 +12,7 @@ import {
   MIDDLE_WINDOWS, RESOURCE_TYPES, actionsLeft, averageWorth, bestRepType, buildContext, cardWorth,
   clamp, drawValue, harmWeight, heldCards, isCounterfeit, liveScore, marginalRep, rankOpponents,
   missingForOrder, repValue, saleValue, sellPhasesLeft, sortByWorth, targetWorkOrder, type ValueContext,
+  pts, AUCTION_AVG,
 } from './evaluate'
 
 /**
@@ -97,7 +99,7 @@ export function anythingPending(s: GameStore): boolean {
     s.negotiateReview || s.shamanCallLightning || s.ambushPending || s.ambushResult ||
     s.trickShotPending || s.trickShotBonusPending || s.rangerVisitorTradePending ||
     s.rn04RerollPending || s.nightWatcherChoicePending || s.townCrierPeek || s.appraisePeek ||
-    s.foragePeek || s.visitorPrizeQueue.length > 0 || s.twistPending || s.hexPeek || s.surge || s.mirrorPending || s.hotStreak || s.players.some(p => p.hoard.length > 8)
+    s.foragePeek || s.visitorPrizeQueue.length > 0 || s.twistPending || s.questTwist || s.auctionsLeft || s.hexPeek || s.curseChoice || s.surge || s.mirrorPending || s.hotStreak || s.players.some(p => p.hoard.length > 8)
   )
 }
 
@@ -170,7 +172,7 @@ function promptStep(s: GameStore): BotStep | null {
     windows.sort((a, b) => cardWorth(seller!.windows[b].card!, ctx) - cardWorth(seller!.windows[a].card!, ctx))
     const best = windows[0]
     const worthIt = best !== undefined && counterfeit &&
-      (rogueBot.bot === 'easy' ? chance(0.4) : cardWorth(seller!.windows[best].card!, ctx) >= 2)
+      (rogueBot.bot === 'easy' ? chance(0.4) : cardWorth(seller!.windows[best].card!, ctx) >= pts(2))
     return step('shadows', rogueBot, 'think', () => {
       if (worthIt) st().fromTheShadows(rogueBot.id, shadows.sellerId, best!, counterfeit!.id)
       else st().skipRogueShadowsInterrupt()
@@ -217,7 +219,7 @@ function promptStep(s: GameStore): BotStep | null {
         (neg.paladinRepType ? repValue(negBot.rep, neg.paladinRepType, negBot.bot!) : 0)
       // The proposer also gains 2 coins — hard bots won't feed the leader for free
       const feedsLeader = negBot.bot === 'hard' && proposer && rankOpponents(s, negBot.id)[0]?.id === proposer.id
-      accept = gain > (feedsLeader ? 2.5 : 0.5)
+      accept = gain > (feedsLeader ? 2.5 : pts(0.5))
     } else if (accept) {
       accept = chance(0.7)
     }
@@ -295,12 +297,45 @@ function promptStep(s: GameStore): BotStep | null {
     })
   }
 
+  // Audacious Auctioneer: make the granted auctions once any earlier roll has resolved
+  const al = s.auctionsLeft
+  const alBot = botOf(s, al?.playerId)
+  if (al && alBot && !s.twistPending && !s.trickShotPending && !s.rn04RerollPending && !s.questTwist) {
+    const pick = bestAuction(s, alBot, buildContext(s, alBot, alBot.bot!))
+    if (!pick || pick.gain <= 0) return step(`auctioneer-done:${al.count}`, alBot, 'quick', () => st().endAuctioneer())
+    return step(`auctioneer:${pick.card.id}:${al.count}`, alBot, 'think',
+      () => st().auction(alBot.id, pick.card.id, pick.zone, pick.windowIdx, pick.visitorIdx))
+  }
+
+  // Warlock: Twist one die of a Quest roll
+  const qt = s.questTwist
+  const qtBot = botOf(s, qt?.warlockId)
+  if (qt && qtBot) {
+    const pick = chooseQuestTwist(s, qtBot, qt)
+    return step(`quest-twist:${qt.playerId}:${qt.dice.join('')}:${qtBot.omens.join('')}`, qtBot, 'quick', () => st().twistQuest(pick?.die ?? null, pick?.omenIdx))
+  }
+
   // Warlock: Twist of Fate
   const tw = s.twistPending
   const twBot = botOf(s, tw?.warlockId)
   if (tw && twBot) {
     const idx = chooseTwist(s, twBot, tw)
     return step(`twist:${tw.playerId}:${tw.rollType}:${tw.roll}:${twBot.omens.join('')}`, twBot, 'quick', () => st().resolveTwist(idx))
+  }
+
+  // A bot resolving a curse that lets it choose: give up the least it can
+  const cc = s.curseChoice
+  const ccBot = botOf(s, cc?.playerId)
+  if (cc && ccBot) {
+    const ctx = buildContext(s, ccBot, ccBot.bot!)
+    const cheapest = sortByWorth(ccBot.hoard, ctx).slice(-1)[0]
+    const windows = ccBot.windows.map((w, i) => ({ w, i }))
+    const pick = cc.curseId === 'hexedShutters'
+      ? { windowIdx: (windows.find(({ w }) => w.status === 'normal' && !w.card) ?? windows.filter(({ w }) => w.status === 'normal').sort((a, b) => (a.w.card?.value ?? 0) - (b.w.card?.value ?? 0))[0])?.i }
+      : cc.curseId === 'unsettledShelves'
+        ? { windowIdx: windows.filter(({ w }) => w.card).sort((a, b) => a.w.card!.value - b.w.card!.value)[0]?.i }
+        : { cardId: cheapest?.id }
+    return step(`curse:${cc.curseId}`, ccBot, 'think', () => st().resolveCurseChoice(pick))
   }
 
   // Warlock: pick which curse to lay
@@ -326,7 +361,7 @@ function promptStep(s: GameStore): BotStep | null {
   if (mi && miBot) {
     const ctx = buildContext(s, miBot, miBot.bot!)
     const avgDraw = averageWorth(s.resourceDeck.length > 0 ? s.resourceDeck : s.resourceDiscard, ctx, 1)
-    const windowWorth = 2.5 * clamp(sellPhasesLeft(s, miBot.id) / 3, 0.3, 1)
+    const windowWorth = pts(2.5) * clamp(sellPhasesLeft(s, miBot.id) / 3, 0.3, 1)
     const c = professionalCandidate(s, miBot, ctx, mi.professionalId, avgDraw, windowWorth, tokenValue(miBot))
     return step('mirror', miBot, 'think', () => { if (c) c.fn(st()); st().finishMirror() })
   }
@@ -549,9 +584,9 @@ function prizeWorth(s: GameStore, me: Player, ctx: ValueContext, prize: VisitorP
       const flea = s.fleaMarket.filter((c): c is ResourceCard => c !== null)
       return flea.length ? n * averageWorth(flea, ctx, 1) * 1.1 : 0
     }
-    case 'draw': return drawValue(n, 2.6, me)
-    case 'steal': return s.players.some(p => p.id !== me.id && p.hoard.length > 0) ? n * 2.8 : 0
-    case 'break': return n * 1.6 * (s.players.length - 1) * 0.6
+    case 'draw': return drawValue(n, pts(2.6), me)
+    case 'steal': return s.players.some(p => p.id !== me.id && p.hoard.length > 0) ? n * pts(2.8) : 0
+    case 'break': return n * pts(1.6) * (s.players.length - 1) * 0.6
   }
 }
 
@@ -638,7 +673,7 @@ export function planSales(s: GameStore, me: Player, ctx: ValueContext): { visito
 }
 
 /** Workshop "Sell to a Visitor": the best Visitor and up to 2 hoard/window cards to sell into it. */
-function bestMarketSale(s: GameStore, me: Player, ctx: ValueContext) {
+function bestMarketSale(s: GameStore, me: Player, ctx: ValueContext, onlyIdx?: number) {
   const options: SaleOption[] = [
     ...me.hoard.map(card => ({ card, zone: 'hoard' as const })),
     ...me.windows.flatMap((w, i) => (w.card && w.status !== 'broken' ? [{ card: w.card, zone: 'window' as const, windowIdx: i }] : [])),
@@ -647,7 +682,7 @@ function bestMarketSale(s: GameStore, me: Player, ctx: ValueContext) {
   const gain = (o: SaleOption) => (saleValue(o.card, ctx) - cardWorth(o.card, ctx)) * (o.zone === 'window' ? 0.4 : 1)
   let best: { visitorIdx: number; picks: SaleOption[]; value: number } | null = null
   s.activeVisitors.forEach((v, visitorIdx) => {
-    if (!v) return
+    if (!v || (onlyIdx !== undefined && visitorIdx !== onlyIdx)) return
     const start = remainingOf(s, v)
     const sets: SaleOption[][] = []
     options.forEach((a, x) => {
@@ -743,7 +778,7 @@ function turnStep(s: GameStore, me: Player, memory: BotMemory): BotStep | null {
 }
 
 function chooseCandidate(candidates: Candidate[], difficulty: BotDifficulty): Candidate | null {
-  const threshold = difficulty === 'easy' ? 0 : difficulty === 'medium' ? 0.5 : 0.3
+  const threshold = difficulty === 'easy' ? 0 : pts(difficulty === 'medium' ? 0.5 : 0.3)
   const scored = candidates.map(c => ({ c, v: noisy(c.value, difficulty) })).filter(x => x.v > threshold)
   if (scored.length === 0) return null
   scored.sort((a, b) => b.v - a.v)
@@ -752,7 +787,7 @@ function chooseCandidate(candidates: Candidate[], difficulty: BotDifficulty): Ca
 }
 
 function noisy(value: number, difficulty: BotDifficulty) {
-  if (difficulty === 'easy') return value * (0.5 + Math.random()) + (Math.random() - 0.5) * 3
+  if (difficulty === 'easy') return value * (0.5 + Math.random()) + (Math.random() - 0.5) * pts(3)
   if (difficulty === 'medium') return value * (0.85 + Math.random() * 0.3)
   return value * (0.97 + Math.random() * 0.06)
 }
@@ -780,7 +815,7 @@ function arrangeStep(me: Player, ctx: ValueContext, memory: BotMemory): BotStep 
   const windowScore = (c: ResourceCard) => {
     const demand = ctx.demanded[c.type] > 0 ? 1 : 0.55
     // Rogue's own counterfeits sell for coins *and* fire their return effect
-    const bonus = me.classId === 'rogue' && isCounterfeit(c) ? 1.5 : 0
+    const bonus = me.classId === 'rogue' && isCounterfeit(c) ? pts(1.5) : 0
     return saleValue(c, ctx) * demand + bonus
   }
   const ranked = [...pool].sort((a, b) => windowScore(b) - windowScore(a) || a.id.localeCompare(b.id))
@@ -833,7 +868,7 @@ function locationCandidates(s: GameStore, me: Player, ctx: ValueContext): Candid
   const deckPool = s.resourceDeck.length > 0 ? s.resourceDeck : s.resourceDiscard
   const avgDraw = averageWorth(deckPool, ctx, 1)
   const phases = sellPhasesLeft(s, me.id)
-  const windowWorth = 2.5 * clamp(phases / 3, 0.3, 1)
+  const windowWorth = pts(2.5) * clamp(phases / 3, 0.3, 1)
   const tokenVal = tokenValue(me)
 
   const usable = (loc: Location, coinsNeeded = 0) => {
@@ -858,9 +893,30 @@ function locationCandidates(s: GameStore, me: Player, ctx: ValueContext): Candid
   }
 
   // ── Guildhall ──
-  if (usable('guildhall', 3)) {
-    const t = bestRepType(me.rep, difficulty)
-    add('guildhall', `consult:${t}`, repValue(me.rep, t, difficulty) - 3, g => g.consultation(me.id, t), true)
+  if (usable('guildhall')) {
+    for (const t of RESOURCE_TYPES) {
+      // Spend the cheapest cards of that type
+      const pair = sortByWorth(me.hoard.filter(c => c.type === t && !isCounterfeit(c)), ctx).slice(-CONSULT_CARDS)
+      if (pair.length < CONSULT_CARDS) continue
+      const cost = pair.reduce((n, c) => n + cardWorth(c, ctx), 0)
+      add('guildhall', `consult:${t}`, repValue(me.rep, t, difficulty) + CONSULT_COINS - cost, g => g.consultation(me.id, pair.map(c => c.id)), true)
+    }
+    const deadSlots = s.activeVisitors.filter(v => v && visitorPotential(s, me, v) === 0).length
+    if (s.visitorDeck.length + s.visitorDiscard.length >= 3) {
+      const saleNow = bestMarketSale(s, me, ctx)
+      add('guildhall', 'town-crier', pts(deadSlots > 0 ? 2.2 : 0.6) + Math.max(0, saleNow?.value ?? 0) * 0.9, g => {
+        g.peekTownCrier(me.id)
+        const peek = st().townCrierPeek
+        if (!peek || peek.playerId !== me.id) return
+        const choice = chooseTownCrier(st(), st().players.find(p => p.id === me.id)!, peek.cards)
+        if (!choice) return
+        st().completeTownCrier(me.id, choice.cardId, choice.slotIdx)
+        // Then sell up to 2 cards into the Visitor just placed
+        const me2 = st().players.find(p => p.id === me.id)!
+        const sale = bestMarketSale(st(), me2, buildContext(st(), me2, difficulty), choice.slotIdx)
+        if (sale && sale.value > 0) st().marketSale(me.id, sale.visitorIdx, sale.picks.map(o => ({ cardId: o.card.id, zone: o.zone, windowIdx: o.windowIdx })))
+      }, true)
+    }
   }
   if (usable('guildhall')) {
     for (const prof of s.professionalSlots) {
@@ -872,8 +928,10 @@ function locationCandidates(s: GameStore, me: Player, ctx: ValueContext): Candid
 
   // ── Tavern ──
   if (usable('tavern')) {
-    if (me.activeTokens < 2 && tokenVal > 0) {
-      add('tavern', 'refresh', (2 - me.activeTokens) * tokenVal, g => g.refreshActiveTokens(me.id), true)
+    const brokenIdx = me.windows.findIndex(w => w.status === 'broken')
+    if ((me.activeTokens < 2 && tokenVal > 0) || brokenIdx >= 0) {
+      add('tavern', 'rest', (2 - me.activeTokens) * tokenVal + (brokenIdx >= 0 ? windowWorth : 0),
+        g => g.rest(me.id, brokenIdx >= 0 ? brokenIdx : undefined), true)
     }
     const auctionPick = bestAuction(s, me, ctx)
     if (auctionPick) {
@@ -901,48 +959,45 @@ function locationCandidates(s: GameStore, me: Player, ctx: ValueContext): Candid
         }
       }, true)
     }
-    if (left === 1 && !me.pitchCampPending && s.round < 6) {
-      const value = drawValue(2, avgDraw, me) * 0.85 + (me.activeTokens < 2 ? tokenVal * 0.8 : 0)
-      add('wilderness', 'pitch-camp', value, g => g.pitchCamp(me.id), true)
+    {
+      // Quest: expected value of the 2d6 table
+      const t = bestRepType(me.rep, difficulty)
+      const value = questValue(me, ctx, avgDraw, t)
+      add('wilderness', `quest:${t}`, value, g => g.quest(me.id, t), true)
     }
   }
 
   // ── Barracks ──
   if (usable('barracks')) {
+    // Fortify: repair everything and take the Night Watcher
     const broken = me.windows.filter(w => w.status === 'broken').length
-    if (broken > 0) {
+    const wantsWatcher = !me.hasNightWatcher && s.players.length > 2
+    if (broken > 0 || wantsWatcher) {
       const t = bestRepType(me.rep, difficulty)
-      // Honourable Trade: Paladins gain 1 Rep when a window actually gets repaired
-      const paladinRep = me.classId === 'paladin' ? repValue(me.rep, t, difficulty) : 0
-      add('barracks', 'repair', broken * windowWorth + paladinRep,
-        g => g.repairAllWindows(me.id, me.classId === 'paladin' ? t : undefined), true)
+      // Honourable Trade: Paladins gain 1 Rep when a Fortify repairs a window
+      const paladinRep = me.classId === 'paladin' && broken > 0 ? repValue(me.rep, t, difficulty) : 0
+      const hoardWorth = me.hoard.reduce((n, c) => n + cardWorth(c, ctx), 0)
+      const leading = rankOpponents(s, me.id).every(p => liveScore(p) <= liveScore(me))
+      const watcher = wantsWatcher ? hoardWorth * 0.1 + (leading ? pts(1.2) : 0) : 0
+      add('barracks', 'fortify', broken * windowWorth + paladinRep + watcher,
+        g => g.fortify(me.id, me.classId === 'paladin' ? t : undefined), true)
     }
-    if (difficulty !== 'easy') {
-      for (const target of s.players) {
-        if (target.id === me.id) continue
-        const stolen = target.hoard.filter(c => target.stolenHoardCardIds.includes(c.id))
-        if (stolen.length === 0) continue
-        const card = [...stolen].sort((a, b) => b.value - a.value)[0]
+    for (const target of s.players) {
+      if (target.id === me.id) continue
+      const stolen = target.hoard.filter(c => target.stolenHoardCardIds.includes(c.id) && !isCounterfeit(c))
+      if (stolen.length === 0) continue
+      const harm = harmWeight(s, me, target, difficulty) * (s.players.length - 1)
+      if (difficulty !== 'easy') {
+        // Report: they discard the Stolen card they value least; we gain 1 Rep of our choice
+        const card = [...stolen].sort((a, b) => a.value - b.value || a.repTokens - b.repTokens)[0]
         const t = bestRepType(me.rep, difficulty)
-        const repGain = repValue(me.rep, t, difficulty)
-        const value = repGain + card.value * 0.6 * harmWeight(s, me, target, difficulty) * (s.players.length - 1)
-        add('barracks', `report:${target.id}:${card.id}`, value, g => g.reportCrimeB(me.id, target.id, card.id, t))
+        add('barracks', `report:${target.id}`, repValue(me.rep, t, difficulty) + card.value * 0.6 * harm, g => g.reportCrime(me.id, target.id, t))
       }
-      if (me.coins >= 2 && !me.hasNightWatcher && s.players.length > 2) {
-        const hoardWorth = me.hoard.reduce((n, c) => n + cardWorth(c, ctx), 0)
-        const leading = rankOpponents(s, me.id).every(p => liveScore(p) <= liveScore(me))
-        add('barracks', 'bodyguard', hoardWorth * 0.1 + (leading ? 1.2 : 0) - 2, g => g.hireBodyguard(me.id))
-      }
-      const deadSlots = s.activeVisitors.filter(v => v && visitorPotential(s, me, v) === 0).length
-      if (s.visitorDeck.length + s.visitorDiscard.length >= 3 && phases > 1) {
-        add('barracks', 'town-crier', deadSlots > 0 ? 2.2 : 0.6, g => {
-          g.peekTownCrier(me.id)
-          const peek = st().townCrierPeek
-          if (peek && peek.playerId === me.id) {
-            const choice = chooseTownCrier(st(), st().players.find(p => p.id === me.id)!, peek.cards)
-            if (choice) st().completeTownCrier(me.id, choice.cardId, choice.slotIdx)
-          }
-        })
+      if (!target.hasNightWatcher) {
+        // Recover Goods: take their best Stolen card (it stays Stolen, so it can be reported or fenced)
+        const card = sortByWorth(stolen, ctx)[0]
+        add('barracks', `recover:${target.id}:${card.id}`, cardWorth(card, ctx, 1) - pts(1) + card.value * 0.5 * harm,
+          g => g.recoverGoods(me.id, target.id, card.id))
       }
     }
   }
@@ -965,7 +1020,7 @@ function locationCandidates(s: GameStore, me: Player, ctx: ValueContext): Candid
       if (!wo) return
       const plan = craftPlan(me, ctx, wo)
       if (!plan || plan.missing > 0) return
-      const bonus = me.classId === 'paladin' && me.renownCards.some(c => c.id === 'rn02') ? 3 : 0
+      const bonus = me.classId === 'paladin' && me.renownCards.some(c => c.id === 'rn02') ? 2 : 0
       // Hard bots also value snatching an order a rival could finish on their next turn
       const rivalReady = difficulty === 'hard' && s.players.some(p => p.id !== me.id && missingForOrder(p, wo) === 0)
       const denial = rivalReady ? wo.price * 0.3 : 0
@@ -974,10 +1029,15 @@ function locationCandidates(s: GameStore, me: Player, ctx: ValueContext): Candid
       add('workshop', `craft:${wo.id}:${plan.cardIds.join(',')}`, wo.price + bonus + denial + honour - plan.cost * 0.85,
         g => g.completeCraft(me.id, idx, plan.cardIds), true)
     })
-    const sale = bestMarketSale(s, me, ctx)
-    if (sale && sale.value > 0) {
-      add('workshop', `sell-visitor:${sale.visitorIdx}:${sale.picks.map(o => o.card.id).join(',')}`, sale.value,
-        g => g.marketSale(me.id, sale.visitorIdx, sale.picks.map(o => ({ cardId: o.card.id, zone: o.zone, windowIdx: o.windowIdx }))), true)
+    if (s.resourceDeck.length > 0) {
+      add('workshop', 'appraise', drawValue(2, avgDraw * 1.25, me), g => {
+        g.peekWorkshopAppraise(me.id)
+        const peek = st().appraisePeek
+        if (peek && peek.playerId === me.id) {
+          const c2 = buildContext(st(), st().players.find(p => p.id === me.id)!, difficulty)
+          st().completeAppraise(me.id, sortByWorth(peek.cards, c2).slice(0, peek.maxKeep).map(c => c.id))
+        }
+      }, true)
     }
   }
 
@@ -986,7 +1046,7 @@ function locationCandidates(s: GameStore, me: Player, ctx: ValueContext): Candid
     const stealTarget = bestStealTarget(s, me, ctx)
     if (stealTarget) {
       const value = averageWorth(stealTarget.hoard, ctx, 1) * 0.85 +
-        4 * harmWeight(s, me, stealTarget, difficulty) * (s.players.length - 1) * 0.5
+        pts(4) * harmWeight(s, me, stealTarget, difficulty) * (s.players.length - 1) * 0.5
       add('thieves-guild', `steal:${stealTarget.id}`, value, g => g.steal(me.id, stealTarget.id), true)
     }
     if (me.classId === 'rogue' && me.counterfeitHand.length > 0 && difficulty !== 'easy') {
@@ -1026,12 +1086,12 @@ function tokenValue(me: Player): number {
   switch (me.classId) {
     case 'barbarian':
     case 'rogue':
-      return 3
+      return pts(3)
     case 'shaman':
     case 'ranger':
     case 'sorcerer':
     case 'warlock':
-      return 2.5
+      return pts(2.5)
     case 'monk':
       // A Refresh only gives a Monk 1 Momentum
       return 0.6
@@ -1060,6 +1120,10 @@ function chooseTwist(s: GameStore, w: Player, tw: NonNullable<GameStore['twistPe
     // The Imp steals on 1–2, breaks on 3–4: push a banishing roll down
     return one >= 0 && tw.roll >= 3 ? one : null
   }
+  if (tw.rollType === 'misfortune') {
+    // Misfortune pays out on 1–3
+    return one >= 0 && tw.roll >= 4 ? one : null
+  }
   if (tw.playerId === w.id) return six >= 0 && tw.roll <= (d === 'hard' ? 4 : 3) ? six : null
   if (one < 0) return null
   if (d === 'easy') return tw.roll >= 5 && chance(0.4) ? one : null
@@ -1068,14 +1132,61 @@ function chooseTwist(s: GameStore, w: Player, tw: NonNullable<GameStore['twistPe
   return tw.roll >= (d === 'hard' || harsh ? 4 : 5) ? one : null
 }
 
+/** Quest results from worst (Ambushed) to best (Legend). */
+const questRank = (total: number) => QUEST_OUTCOMES.indexOf(questOutcome(total))
+
+/** Twist of Fate on a Quest: lift its own roll with a 6, or sink a rival's with a 1. */
+function chooseQuestTwist(s: GameStore, w: Player, qt: NonNullable<GameStore['questTwist']>): { die: number; omenIdx: number } | null {
+  const total = qt.dice[0] + qt.dice[1]
+  if (qt.playerId === w.id) {
+    const six = w.omens.indexOf(6)
+    const die = qt.dice[0] <= qt.dice[1] ? 0 : 1
+    return six >= 0 && questRank(qt.dice[1 - die] + 6) > questRank(total) ? { die, omenIdx: six } : null
+  }
+  const one = w.omens.indexOf(1)
+  if (one < 0) return null
+  const d = w.bot ?? 'medium'
+  if (d === 'easy' && !chance(0.4)) return null
+  const die = qt.dice[0] >= qt.dice[1] ? 0 : 1
+  const drop = questRank(total) - questRank(qt.dice[1 - die] + 1)
+  const victim = s.players.find(p => p.id === qt.playerId)
+  const harsh = !!victim && harmWeight(s, w, victim, d) > 0.4
+  return drop > 0 && (d === 'hard' || harsh || drop >= 2) ? { die, omenIdx: one } : null
+}
+
+/** Expected value of a Quest outcome table, with the Warlock's own Twist (a 6) when it has one. */
+function questValue(me: Player, ctx: ValueContext, avgDraw: number, t: RepType, diceCount = 2): number {
+  const loss = me.hoard.length ? averageWorth(me.hoard, ctx, 0) : 0
+  const worth = (total: number) => {
+    const o = questOutcome(total)
+    return -(o.discard ?? 0) * loss + (o.draw ? drawValue(o.draw, avgDraw, me) : 0) + (o.coins ?? 0) + (o.rep ? marginalRep(me.rep, t, o.rep) : 0)
+  }
+  const sixOmen = me.classId === 'warlock' && me.omens.includes(6)
+  // Every combination of the dice rolled; keep the best two
+  let sum = 0, n = 0
+  const roll = (dice: number[]) => {
+    if (dice.length < diceCount) { for (let d = 1; d <= 6; d++) roll([...dice, d]); return }
+    const [a, b] = [...dice].sort((x, y) => y - x)
+    sum += Math.max(worth(a + b), sixOmen ? worth(a + 6) : -Infinity)
+    n++
+  }
+  roll([])
+  return sum / n
+}
+
 /** A bot Warlock's pick between the two Curse cards it drew. */
 function chooseCurse(s: GameStore, w: Player, targetId: string, cards: CurseId[]): CurseId {
   const t = s.players.find(p => p.id === targetId)
-  const repInShop = t ? [...t.hoard, ...t.windows.flatMap(x => (x.card ? [x.card] : []))].reduce((n, c) => n + c.repTokens, 0) : 0
+  const hoard = t?.hoard.length ?? 0
+  const sellable = t?.windows.filter(x => x.card && x.status === 'normal').length ?? 0
   const score: Record<CurseId, number> = {
-    tithe: 2.2, tollOfShadows: 2, leakyPockets: 1.8, jinx: 1.6, butterfingers: 1.5,
-    hexedGoods: repInShop > 0 ? 2.4 : 0.5,
-    unsettledShelves: 1,
+    stickyFingers: hoard > 0 ? 2.6 : 0,
+    misfortune: (t?.coins ?? 0) >= 2 ? 1.6 + (w.omens.includes(1) ? 1 : 0) : 0.4,
+    hexedShutters: sellable > 0 ? 1.9 : 0.3,
+    tithe: (t?.coins ?? 0) > 0 ? 1.7 : 0,
+    leakyPockets: hoard > 0 ? 1.5 : 0,
+    weariness: t && (t.classId === 'monk' ? t.momentumTokens : t.activeTokens) > 0 ? 1.4 : 0,
+    unsettledShelves: sellable > 0 ? 1 : 0,
     badOmen: w.omens.length < MAX_OMENS ? 1.2 : 0.2,
   }
   if (w.bot === 'easy') return pickRandom(cards)!
@@ -1088,19 +1199,19 @@ function surgeValues(s: GameStore, me: Player): Record<number, number> {
   const avgDraw = averageWorth(s.resourceDeck.length > 0 ? s.resourceDeck : s.resourceDiscard, ctx, 1)
   const others = s.players.length - 1
   const ownWindow = me.windows.find((w, i) => i > 0 && i < 4 && w.status === 'normal')
-  const windowWorth = 2.5 * clamp(sellPhasesLeft(s, me.id) / 3, 0.3, 1)
+  const windowWorth = pts(2.5) * clamp(sellPhasesLeft(s, me.id) / 3, 0.3, 1)
   const bestPro = Math.max(0, ...s.professionalSlots.map(p => (p ? professionalCandidate(s, me, ctx, p.id, avgDraw, windowWorth, tokenValue(me))?.value ?? 0 : 0)))
   const v: Record<number, number> = {
-    2: ownWindow ? -(windowWorth + (ownWindow.card ? 1 : 0)) : 0,
+    2: ownWindow ? -(windowWorth + (ownWindow.card ? pts(1) : 0)) : 0,
     3: me.hoard.length ? -averageWorth(me.hoard, ctx, 0) : 0,
-    4: -0.5,
+    4: -pts(0.5),
     5: 0,
     6: 3 - others * 0.6,
     7: drawValue(2, avgDraw, me),
-    8: s.currentTurnPlayerId === me.id ? 4 : avgDraw,
-    9: 2,
+    8: s.currentTurnPlayerId === me.id ? pts(4) : avgDraw,
+    9: pts(2),
     10: bestPro,
-    11: others * 1.4,
+    11: others * pts(1.4),
   }
   v[12] = Math.max(...Object.values(v))
   return v
@@ -1112,7 +1223,7 @@ const TWO_D6: Record<number, number> = { 2: 1, 3: 2, 4: 3, 5: 4, 6: 5, 7: 6, 8: 
 /** A bot Sorcerer's Surge plan: bend it with Charge if worth it, otherwise resolve with the best choices. */
 function planSurge(s: GameStore, me: Player, total: number): { bend?: 'reroll' | 'up' | 'down'; choice: SurgeChoice } {
   const v = surgeValues(s, me)
-  const chargeWorth = 1.2
+  const chargeWorth = pts(1.2)
   const now = v[total]
   const avg = Object.entries(TWO_D6).reduce((n, [t, w]) => n + v[Number(t)] * w, 0) / 36
   if (me.bot !== 'easy') {
@@ -1121,7 +1232,7 @@ function planSurge(s: GameStore, me: Player, total: number): { bend?: 'reroll' |
     if (me.charge >= SURGE_SHIFT_COST && total < 12) opts.push({ bend: 'up', gain: v[total + 1] - now - chargeWorth * SURGE_SHIFT_COST })
     if (me.charge >= SURGE_SHIFT_COST && total > 2) opts.push({ bend: 'down', gain: v[total - 1] - now - chargeWorth * SURGE_SHIFT_COST })
     const best = opts.sort((a, b) => b.gain - a.gain)[0]
-    if (best && best.gain > 0.5) return { bend: best.bend, choice: {} }
+    if (best && best.gain > pts(0.5)) return { bend: best.bend, choice: {} }
   }
   // Wish: take the best result
   const wish = total === 12 ? Number(Object.entries(v).filter(([t]) => t !== '12').sort((a, b) => b[1] - a[1])[0][0]) : undefined
@@ -1138,7 +1249,7 @@ function planSurge(s: GameStore, me: Player, total: number): { bend?: 'reroll' |
   if (effective === 10) {
     const ctx = buildContext(s, me, me.bot ?? 'medium')
     const avgDraw = averageWorth(s.resourceDeck.length > 0 ? s.resourceDeck : s.resourceDiscard, ctx, 1)
-    const windowWorth = 2.5 * clamp(sellPhasesLeft(s, me.id) / 3, 0.3, 1)
+    const windowWorth = pts(2.5) * clamp(sellPhasesLeft(s, me.id) / 3, 0.3, 1)
     const best = s.professionalSlots
       .flatMap(p => (p ? [{ id: p.id, value: professionalCandidate(s, me, ctx, p.id, avgDraw, windowWorth, tokenValue(me))?.value ?? -1 }] : []))
       .sort((a, b) => b.value - a.value)[0]
@@ -1164,7 +1275,7 @@ function bestTrades(s: GameStore, me: Player, ctx: ValueContext, max: number, ho
   const swaps: Swap[] = []
   for (let n = 0; n < Math.min(max, mine.length, flea.length); n++) {
     const gain = cardWorth(flea[n].c, ctx) - cardWorth(mine[n], ctx)
-    if (gain <= 0.4) break
+    if (gain <= pts(0.4)) break
     swaps.push({ cardId: mine[n].id, fleaIdx: flea[n].i, gain })
   }
   return swaps
@@ -1178,7 +1289,7 @@ function bestAuction(s: GameStore, me: Player, ctx: ValueContext) {
   ]
   let best: SaleOption & { gain: number; visitorIdx?: number } | null = null
   for (const o of options) {
-    const base = 3.5 + o.card.repTokens * repValue(me.rep, o.card.type, ctx.difficulty) - cardWorth(o.card, ctx)
+    const base = AUCTION_AVG + o.card.repTokens * repValue(me.rep, o.card.type, ctx.difficulty) - cardWorth(o.card, ctx)
     // Selling into a Visitor it fits pays the same roll and counts toward that Visitor's prizes
     let visitorIdx: number | undefined
     let extra = 0
@@ -1187,7 +1298,7 @@ function bestAuction(s: GameStore, me: Player, ctx: ValueContext) {
       const rem = demandAfter(remainingOf(s, v), [o.card])
       if (!rem) return
       const completes = demandTotal(rem) === 0
-      const value = contributionValue(s, me, ctx, v, 1, completes) + (completes ? 1 : 0)
+      const value = contributionValue(s, me, ctx, v, 1, completes) + (completes ? pts(1) : 0)
       if (visitorIdx === undefined || value > extra) { visitorIdx = i; extra = value }
     })
     const gain = base + Math.max(0, extra)
@@ -1201,8 +1312,8 @@ function bestStealTarget(s: GameStore, me: Player, ctx: ValueContext): Player | 
   if (targets.length === 0) return null
   if (ctx.difficulty === 'easy') return pickRandom(targets)!
   return targets.sort((a, b) =>
-    (averageWorth(b.hoard, ctx) + 4 * harmWeight(s, me, b, ctx.difficulty)) -
-    (averageWorth(a.hoard, ctx) + 4 * harmWeight(s, me, a, ctx.difficulty)))[0]
+    (averageWorth(b.hoard, ctx) + pts(4) * harmWeight(s, me, b, ctx.difficulty)) -
+    (averageWorth(a.hoard, ctx) + pts(4) * harmWeight(s, me, a, ctx.difficulty)))[0]
 }
 
 function bestBreak(s: GameStore, me: Player, ctx: ValueContext) {
@@ -1213,7 +1324,7 @@ function bestBreak(s: GameStore, me: Player, ctx: ValueContext) {
     for (const i of MIDDLE_WINDOWS) {
       const w = target.windows[i]
       if (w.status !== 'normal') continue
-      const loss = w.card ? w.card.value * 0.5 + 2 : 1.2
+      const loss = w.card ? w.card.value * 0.5 + pts(2) : pts(1.2)
       // Barbarian passive pays 1 coin per broken window (capped) at each of their turn starts
       const brokenOnBoard = s.players.reduce((n, p) => n + p.windows.filter(x => x.status === 'broken').length, 0)
       const passive = me.classId === 'barbarian' && brokenOnBoard < FEARSOME_CHAMPION_MAX ? Math.min(3, Math.max(0, 6 - s.round)) * 0.5 : 0
@@ -1232,7 +1343,7 @@ function bestHeist(s: GameStore, me: Player, ctx: ValueContext) {
     if (target.id === me.id || target.hasNightWatcher) continue
     for (const [i, w] of target.windows.entries()) {
       if (!w.card || w.status === 'shuttered') continue
-      const value = cardWorth(w.card, ctx, 1) + w.card.value * harmWeight(s, me, target, ctx.difficulty) + 1
+      const value = cardWorth(w.card, ctx, 1) + w.card.value * harmWeight(s, me, target, ctx.difficulty) + pts(1)
       if (!best || value > best.value) best = { target, windowIdx: i, counterfeitId: counterfeit.id, value }
     }
   }
@@ -1246,7 +1357,7 @@ function bestFence(s: GameStore, me: Player, ctx: ValueContext) {
   ].filter(c => !isCounterfeit(c) && c.type !== s.lastGuildFenceType)
   let best: { card: ResourceCard; value: number } | null = null
   for (const card of stolen) {
-    const value = card.value + 0.5 - cardWorth(card, ctx)
+    const value = card.value * FENCE_MULTIPLIER + pts(0.5) - cardWorth(card, ctx)
     if (!best || value > best.value) best = { card, value }
   }
   return best
@@ -1314,18 +1425,17 @@ function professionalCandidate(
 ): { value: number; tag: string; fn: (s: GameStore) => void } | null {
   const difficulty = ctx.difficulty
   switch (profId) {
-    case 'p01': { // Alluring Alchemist — Trade 3, refresh 1, repair 1
+    case 'p01': { // Alluring Alchemist — Trade 3, refresh all, repair all
       const swaps = bestTrades(s, me, ctx, 3, false)
       if (swaps.length === 0) return null
-      const broken = me.windows.findIndex(w => w.status === 'broken')
       const value = swaps.reduce((n, x) => n + x.gain, 0) +
-        (me.activeTokens < 2 ? tokenVal : 0) + (broken >= 0 ? windowWorth : 0)
+        (2 - me.activeTokens) * tokenVal + me.windows.filter(w => w.status === 'broken').length * windowWorth
       return {
         value, tag: swaps.map(x => x.cardId).join(','),
         fn: g => {
           g.tradeWithFleaMarket(me.id, swaps.map(x => x.cardId), swaps.map(x => x.fleaIdx))
-          st().refreshOneActiveToken(me.id)
-          if (broken >= 0) st().repairWindow(me.id, broken)
+          st().refreshActiveTokens(me.id)
+          st().repairAllWindows(me.id)
         },
       }
     }
@@ -1351,7 +1461,7 @@ function professionalCandidate(
       for (const [i, c] of s.fleaMarket.entries()) {
         if (!c) continue
         const n = c.repTokens > 0 ? c.repTokens : 1
-        const v = marginalRep(me.rep, c.type, n) + (difficulty === 'hard' ? 0.5 : 0)
+        const v = 2 + marginalRep(me.rep, c.type, n) + (difficulty === 'hard' ? pts(0.5) : 0)
         if (!best || v > best.value) best = { value: v, tag: c.id, fn: g => g.distribute(me.id, i) }
       }
       return best
@@ -1365,14 +1475,14 @@ function professionalCandidate(
       if (spent === 0) return null
       return { value: drawValue(spent, avgDraw * 0.95, me), tag: String(spent), fn: g => g.resourcefulRecruiter(me.id) }
     }
-    case 'p07': { // Shady Saboteur — break a filled middle window, gain half its value
+    case 'p07': { // Shady Saboteur — break a filled middle window, gain 1 Rep of its type
       let best: { value: number; tag: string; fn: (s: GameStore) => void } | null = null
       for (const target of s.players) {
         if (target.id === me.id || target.hasNightWatcher) continue
         for (const i of MIDDLE_WINDOWS) {
           const w = target.windows[i]
           if (w.status !== 'normal' || !w.card) continue
-          const v = Math.floor(w.card.value / 2) + (w.card.value * 0.5 + 2) * harmWeight(s, me, target, difficulty) * (s.players.length - 1) * 0.6
+          const v = repValue(me.rep, w.card.type, difficulty) + (w.card.value * 0.5 + pts(2)) * harmWeight(s, me, target, difficulty) * (s.players.length - 1) * 0.6
           if (!best || v > best.value) best = { value: v, tag: `${target.id}:${i}`, fn: g => g.shadySaboteur(me.id, target.id, i) }
         }
       }
@@ -1382,7 +1492,7 @@ function professionalCandidate(
       const deck = s.resourceDeck
       const pRep = deck.length > 0 ? deck.filter(c => c.repTokens > 0).length / deck.length : 0.4
       const expected = clamp(1 / Math.max(pRep, 0.15), 1, 5)
-      return { value: drawValue(expected, avgDraw, me) + 1, tag: 'draw', fn: g => g.skilfulStocker(me.id) }
+      return { value: drawValue(expected, avgDraw, me) + pts(1), tag: 'draw', fn: g => g.skilfulStocker(me.id) }
     }
     case 'p09': { // Spirited Summoner — Appraise 3
       if (s.resourceDeck.length === 0) return null
@@ -1398,8 +1508,49 @@ function professionalCandidate(
         },
       }
     }
+    case 'p04': { // Polite Promoter — reset the Flea Market, Take 1, then Trade 2
+      // A fresh market is worth roughly an average draw per slot; swap away the two weakest cards held
+      const weakest = [...me.hoard, ...me.windows.flatMap(w => (w.card && w.status !== 'broken' ? [w.card] : []))]
+        .map(c => cardWorth(c, ctx)).sort((x, y) => x - y).slice(0, 2)
+      const value = weakest.reduce((n, w) => n + Math.max(0, avgDraw * 1.15 - w), 0) + drawValue(1, avgDraw * 1.2, me)
+      if (value <= 0) return null
+      return {
+        value, tag: 'reset',
+        fn: g => {
+          g.resetFleaMarket()
+          useGameStore.setState({ politePromoterResetUsed: true })
+          {
+            const c1 = buildContext(st(), st().players.find(p => p.id === me.id)!, difficulty)
+            const best = st().fleaMarket.map((c, i) => ({ c, i })).filter(x => x.c).sort((a, b) => cardWorth(b.c!, c1, 1) - cardWorth(a.c!, c1, 1))[0]
+            if (best) st().takeManyFromFleaMarket(me.id, [best.i])
+          }
+          const me2 = st().players.find(p => p.id === me.id)!
+          const swaps = bestTrades(st(), me2, buildContext(st(), me2, difficulty), 2, false)
+          if (swaps.length) st().tradeWithFleaMarket(me.id, swaps.map(x => x.cardId), swaps.map(x => x.fleaIdx))
+        },
+      }
+    }
+    case 'p10': { // Quivering Questgiver — Quest with 3 dice, keep the best 2
+      const t = bestRepType(me.rep, difficulty)
+      return { value: questValue(me, ctx, avgDraw, t, 3), tag: t, fn: g => g.quest(me.id, t, 3) }
+    }
+    case 'p11': { // Pretentious Pawnbroker — sell up to 2 hoard cards at printed value
+      const sells = me.hoard.filter(c => !isCounterfeit(c)).map(c => ({ c, gain: c.value + 1 - cardWorth(c, ctx) }))
+        .filter(x => x.gain > 0).sort((a, b) => b.gain - a.gain).slice(0, 2)
+      if (sells.length === 0) return null
+      return { value: sells.reduce((n, x) => n + x.gain, 0), tag: sells.map(x => x.c.id).join(','), fn: g => g.pawn(me.id, sells.map(x => x.c.id)) }
+    }
+    case 'p12': { // Audacious Auctioneer — Auction 2
+      const gains = [
+        ...me.hoard.filter(c => !isCounterfeit(c)),
+        ...me.windows.flatMap(w => (w.card && w.status !== 'broken' && !isCounterfeit(w.card) ? [w.card] : [])),
+      ].map(c => AUCTION_AVG + c.repTokens * repValue(me.rep, c.type, difficulty) - cardWorth(c, ctx))
+        .filter(v => v > 0).sort((a, b) => b - a).slice(0, 2)
+      if (gains.length === 0) return null
+      return { value: gains.reduce((n, v) => n + v, 0) * 1.1, tag: 'auction2', fn: g => g.startAuctioneer(me.id) }
+    }
     default:
-      return null // p04 Polite Promoter needs a two-step UI flow — bots skip it
+      return null
   }
 }
 
@@ -1412,7 +1563,7 @@ function abilityCandidates(s: GameStore, me: Player, ctx: ValueContext): Candida
   const avgDraw = averageWorth(s.resourceDeck.length > 0 ? s.resourceDeck : s.resourceDiscard, ctx, 1)
   const tokenCost = tokenValue(me) * 0.6
   // Medium bots are a little hesitant to spend tokens
-  const minGain = difficulty === 'medium' ? 1.5 : 0.8
+  const minGain = pts(difficulty === 'medium' ? 1.5 : 0.8)
   const push = (key: string, value: number, run: () => void) => {
     if (value >= minGain) out.push({ key: `ability:${key}`, value, run })
   }
@@ -1430,7 +1581,7 @@ function abilityCandidates(s: GameStore, me: Player, ctx: ValueContext): Candida
           .slice(0, count)
         if (windows.length === 0) continue
         const harm = harmWeight(s, me, target, difficulty) * (s.players.length - 1) * 0.6
-        const value = windows.reduce((n, i) => n + ((target.windows[i].card?.value ?? 0) * 0.5 + 1.5) * harm + 0.8, 0)
+        const value = windows.reduce((n, i) => n + ((target.windows[i].card?.value ?? 0) * 0.5 + pts(1.5)) * harm + pts(0.8), 0)
         if (!best || value > best.value) best = { target, windows, value }
       }
       if (best) {
@@ -1455,7 +1606,7 @@ function abilityCandidates(s: GameStore, me: Player, ctx: ValueContext): Candida
         if (target.id === me.id) continue
         for (const [i, w] of target.windows.entries()) {
           if (!w.card || w.status === 'shuttered') continue
-          const value = cardWorth(w.card, ctx, 1) + w.card.value * harmWeight(s, me, target, difficulty) * 0.6 + 1
+          const value = cardWorth(w.card, ctx, 1) + w.card.value * harmWeight(s, me, target, difficulty) * 0.6 + pts(1)
           if (!best || value > best.value) best = { target, windowIdx: i, value }
         }
       }
@@ -1471,7 +1622,7 @@ function abilityCandidates(s: GameStore, me: Player, ctx: ValueContext): Candida
     ].filter(c => !isCounterfeit(c))
     for (const card of stolen) {
       const rv = repValue(me.rep, card.type, difficulty)
-      const value = 3.5 + card.repTokens * rv + (2 / 6) * rv - cardWorth(card, ctx)
+      const value = AUCTION_AVG + card.repTokens * rv + (2 / 6) * rv - cardWorth(card, ctx)
       push(`guild:${card.id}`, value - tokenCost, () => st().guildContacts(me.id, card.id))
     }
   }
@@ -1479,10 +1630,10 @@ function abilityCandidates(s: GameStore, me: Player, ctx: ValueContext): Candida
   if (me.classId === 'shaman') {
     me.elementalDice.forEach((die, idx) => {
       if (die.used) return
-      const keep = 1.5 // option value of saving a one-shot die for later
+      const keep = pts(1.5) // option value of saving a one-shot die for later
       switch (die.face) {
         case 1:
-          push(`die:${idx}`, drawValue(3, avgDraw, me) - keep - 2, () => st().activateElementalDie(me.id, idx))
+          push(`die:${idx}`, drawValue(3, avgDraw, me) - keep - pts(2), () => st().activateElementalDie(me.id, idx))
           break
         case 2: {
           const swaps = bestTrades(s, me, ctx, 5, true)
@@ -1495,7 +1646,7 @@ function abilityCandidates(s: GameStore, me: Player, ctx: ValueContext): Candida
         }
         case 3: {
           const broken = me.windows.map((w, i) => (w.status === 'broken' ? i : -1)).filter(i => i >= 0).slice(0, 2)
-          if (broken.length > 0) push(`die:${idx}`, broken.length * 2.5 - keep, () => st().activateElementalDie(me.id, idx, { windowIndices: broken }))
+          if (broken.length > 0) push(`die:${idx}`, broken.length * pts(2.5) - keep, () => st().activateElementalDie(me.id, idx, { windowIndices: broken }))
           break
         }
         case 4:
@@ -1506,14 +1657,14 @@ function abilityCandidates(s: GameStore, me: Player, ctx: ValueContext): Candida
           break
         case 6:
           // Extra action is worth most at the start of the turn
-          if (s.turnActionsUsed === 0) push(`die:${idx}`, 5 - keep, () => st().activateElementalDie(me.id, idx))
+          if (s.turnActionsUsed === 0) push(`die:${idx}`, pts(5) - keep, () => st().activateElementalDie(me.id, idx))
           break
       }
     })
     if (me.activeTokens >= 1 && !used('callLightning') && !s.shamanCallLightning) {
       const target = rankOpponents(s, me.id).find(p => p.hoard.length >= 2)
       if (target) {
-        const value = avgDraw + 4 * harmWeight(s, me, target, difficulty) * (s.players.length - 1) * 0.5
+        const value = drawValue(2, avgDraw, me) + pts(4) * harmWeight(s, me, target, difficulty) * (s.players.length - 1) * 0.5
         push(`lightning:${target.id}`, value - tokenCost, () => st().callLightning(me.id, target.id))
       }
     }
@@ -1523,12 +1674,12 @@ function abilityCandidates(s: GameStore, me: Player, ctx: ValueContext): Candida
     if (!used('hotStreak') && !s.hotStreak) {
       // One safe card, ~25% for each extra, and a Break on the usual miss
       const hit = bestBreak(s, me, ctx)
-      push('hotStreak', avgDraw * 1.3 + (hit ? hit.value * 0.7 : 0) + 0.5 - tokenCost, () => st().startHotStreak(me.id))
+      push('hotStreak', avgDraw * 1.3 + (hit ? hit.value * 0.7 : 0) + pts(0.5) - tokenCost, () => st().startHotStreak(me.id))
     }
     if (!used('wildSurge') && !s.surge) {
       const v = surgeValues(s, me)
       const ev = Object.entries(TWO_D6).reduce((n, [t, w]) => n + v[Number(t)] * w, 0) / 36
-      push('wildSurge', ev * WILD_SURGE_COUNT + 0.6 - tokenCost, () => st().castWildSurge(me.id))
+      push('wildSurge', ev * WILD_SURGE_COUNT + pts(0.6) - tokenCost, () => st().castWildSurge(me.id))
     }
   }
 
@@ -1559,7 +1710,7 @@ function abilityCandidates(s: GameStore, me: Player, ctx: ValueContext): Candida
       }
     }
     if (can('copyPro')) {
-      const windowWorth = 2.5 * clamp(sellPhasesLeft(s, me.id) / 3, 0.3, 1)
+      const windowWorth = pts(2.5) * clamp(sellPhasesLeft(s, me.id) / 3, 0.3, 1)
       for (const prof of s.professionalSlots) {
         if (!prof) continue
         const c = professionalCandidate(s, me, ctx, prof.id, avgDraw, windowWorth, tokenValue(me))
@@ -1585,16 +1736,17 @@ function abilityCandidates(s: GameStore, me: Player, ctx: ValueContext): Candida
     if (!used('hex') && !s.hexPeek && me.curseDeck.length > 0) {
       const victim = rankOpponents(s, me.id).find(p => !p.hasNightWatcher && !p.curse)
       if (victim) {
-        const value = 1.8 + 2 * harmWeight(s, me, victim, difficulty) * (s.players.length - 1) * 0.4
+        const value = pts(1.8) + pts(2) * harmWeight(s, me, victim, difficulty) * (s.players.length - 1) * 0.4
         push(`hex:${victim.id}`, value - tokenCost, () => st().hex(me.id, victim.id))
       }
     }
+    // The Imp stays until banished, so only summon it when it isn't already out
     if (!used('imp') && !s.imp && s.round < 6) {
       // Lurk where rivals most often go
       const busy: Location[] = ['wilderness', 'guildhall', 'workshop', 'barracks', 'tavern', 'thieves-guild']
       const loc = difficulty === 'easy' ? pickRandom(busy)! : busy[0]
       const omenBoost = me.omens.includes(1) ? 0.8 : 0
-      push(`imp:${loc}`, 2.2 * Math.min(1, (s.players.length - 1) / 2) + omenBoost - tokenCost, () => st().summonImp(me.id, loc))
+      push(`imp:${loc}`, pts(2.6) * Math.min(1.5, (s.players.length - 1) / 2) + omenBoost - tokenCost, () => st().summonImp(me.id, loc))
     }
   }
 
@@ -1607,7 +1759,7 @@ function abilityCandidates(s: GameStore, me: Player, ctx: ValueContext): Candida
       .slice(0, Math.min(2, room))
     if (cards.length > 0 && s.round < 6) {
       // Keep one token in reserve for Trick Shot
-      const value = cards.length * 1.6 * Math.min(1, (s.players.length - 1) / 2) - tokenCost - (me.activeTokens === 1 ? 1 : 0)
+      const value = cards.length * pts(1.6) * Math.min(1, (s.players.length - 1) / 2) - tokenCost - (me.activeTokens === 1 ? pts(1) : 0)
       push(`ambush:${cards.map(c => c.id).join(',')}`, value, () => st().placeAmbush(me.id, cards.map(c => c.id)))
     }
   }
