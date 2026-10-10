@@ -197,6 +197,20 @@ Bot usage per 4-player game (hard bots, 12,000 games):
 | Recover Goods | — | 2.0 |
 | Appraise 2 (was Sell to a Visitor) | 5.2 | 2.5 |
 
+## 3c. Professionals
+
+| Professional | Old effect | **New effect** |
+|---|---|---|
+| Alluring Alchemist | Trade 3, refresh 1 active, repair 1 | **Trade 3, refresh all your Active tokens, repair all your windows** |
+| Charismatic Clerk | Distribute 1, gain the reputation | **Distribute 1, gain the reputation and 2 coins** |
+| Polite Promoter | Reset Flea Market. Trade 2 | **Reset Flea Market. Take 1, then Trade 2** |
+| Shady Saboteur | Break 1, gain half the coin value (rounded down) | **Break 1, gain 1 Reputation of the broken card's type** |
+| Spirited Summoner | Appraise 3 | **Appraise 2** |
+
+Unchanged: Brazen Bounty Hunter, Marvellous Mascot, Resourceful Recruiter, Skilful Stocker.
+
+Hires per game when the professional is face-up (each is dealt into about a third of games): Summoner 9.8, Recruiter 8.0, Bounty Hunter 6.3, Mascot 5.3, Stocker 4.5, Saboteur 3.1, Alchemist 1.4, Clerk 0.8, Promoter 0.3 before. After: Recruiter 8.2, Bounty Hunter 5.9, Stocker 4.9, Mascot 4.9, Saboteur 4.9, Clerk 4.0, Promoter 3.1, Alchemist 2.7, Summoner 1.9 (Appraise 2 now duplicates the Workshop space). Bots now know how to use Polite Promoter (they never hired it before).
+
 ## 4. Bots
 
 - Bot valuations were recalibrated for the halved economy. Every hand-set worth that isn't a real coin amount now goes through one `VALUE_SCALE` (0.5) in `src/bots/evaluate.ts`, and the bots expect an average auction payout of 2.
@@ -220,7 +234,8 @@ Win index by class (1.00 = fair share). 8,000 mixed games of 2–6 players each.
 | Final (medium bots) | 0.95 | 1.12 | 0.93 | 1.07 | 1.01 | 1.12 | 0.94 | 0.86 | 0.27 |
 | + Fence pays double, Rogue back to 4 Counterfeits (hard) | 0.90 | 1.06 | 0.98 | 1.02 | 1.07 | 1.02 | 1.01 | 0.93 | 0.17 |
 | + Location rework, Monk 3 Momentum, Barbarian max 2, Warlock 3 Omens (hard, 12,000 games) | 1.05 | 1.00 | 0.90 | 1.04 | 1.02 | 1.00 | 0.97 | 1.01 | 0.15 |
-| **+ Warlock Twists Quest dice, 2 Omens, no Twist coin, Tithe/Misfortune 3 coins, weaker Quest top (hard, 12,000 games)** | **1.06** | **1.05** | **0.91** | **1.03** | **0.98** | **1.00** | **0.95** | **1.02** | **0.15** |
+| + Warlock Twists Quest dice, 2 Omens, no Twist coin, Tithe/Misfortune 3 coins, weaker Quest top (hard, 12,000 games) | 1.06 | 1.05 | 0.91 | 1.03 | 0.98 | 1.00 | 0.95 | 1.02 | 0.15 |
+| **+ Professional changes (hard, 12,000 games)** | **1.04** | **0.93** | **0.90** | **1.11** | **0.98** | **1.00** | **1.04** | **1.01** | **0.21** |
 
 Medium bots play the Warlock less well (0.86); that's expected for a class with this much decision-making.
 

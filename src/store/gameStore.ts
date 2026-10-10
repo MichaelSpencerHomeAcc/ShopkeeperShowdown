@@ -3272,16 +3272,17 @@ export const useGameStore = create<GameStore>((set, get) => ({
     }
     const win = target.windows[windowIdx]
     if (!isBreakableWindowIndex(windowIdx) || win?.status !== 'normal' || !win.card) return
-    const coinGain = Math.floor(win.card.value / 2)
+    // Gain 1 Reputation matching the broken card's type
+    const repType = win.card.type
     const cardName = win.card.name
     set(s => ({
       players: s.players.map(p => {
-        if (p.id === byPlayerId) return { ...p, coins: p.coins + coinGain }
+        if (p.id === byPlayerId) return { ...p, rep: { ...p.rep, [repType]: p.rep[repType] + 1 } }
         if (p.id === targetPlayerId) return { ...p, windows: p.windows.map((w, i) => i === windowIdx ? { ...w, status: 'broken' as WindowStatus } : w), hasNightWatcher: players.length > 2 }
         return { ...p, hasNightWatcher: false }
       }),
       actionLog: [logEntry(
-        `Professional | Player: ${attacker.name} | Professional: Shady Saboteur | Target: ${target.name} | Break | Card: ${cardName} | Window: ${windowIdx + 1} | Gained: ${coinGain} coins.` +
+        `Professional | Player: ${attacker.name} | Professional: Shady Saboteur | Target: ${target.name} | Break | Card: ${cardName} | Window: ${windowIdx + 1} | Gained: 1 ${repType} Rep.` +
         (players.length > 2 ? ` ${target.name} now holds the Night Watcher.` : ''),
         byPlayerId
       ), ...s.actionLog.slice(0, 49)],
@@ -3318,7 +3319,7 @@ export const useGameStore = create<GameStore>((set, get) => ({
     const { resourceDeck } = get()
     const cards = resourceDeck.slice(0, 4)
     if (cards.length === 0) return
-    set({ appraisePeek: { playerId, cards, maxKeep: 3 } })
+    set({ appraisePeek: { playerId, cards, maxKeep: 2 } })
   },
 
   completeAppraise(playerId, keepCardIds) {
@@ -3383,9 +3384,9 @@ export const useGameStore = create<GameStore>((set, get) => ({
       fleaMarket: s.fleaMarket.map((c, i) => i === fleaSlotIdx ? null : c),
       resourceDiscard: [card, ...s.resourceDiscard],
       players: s.players.map(p =>
-        p.id === byPlayerId ? { ...p, rep: { ...p.rep, [card.type]: p.rep[card.type] + repGained } } : p
+        p.id === byPlayerId ? { ...p, coins: p.coins + 2, rep: { ...p.rep, [card.type]: p.rep[card.type] + repGained } } : p
       ),
-      actionLog: [logEntry(`${player.name} distributed ${card.name} (${card.type}) to a Visitor — gained ${repGained} ${card.type} rep.`, byPlayerId), ...s.actionLog.slice(0, 49)],
+      actionLog: [logEntry(`${player.name} distributed ${card.name} (${card.type}) to a Visitor — gained ${repGained} ${card.type} rep and 2 coins.`, byPlayerId), ...s.actionLog.slice(0, 49)],
     }))
   },
 

@@ -557,12 +557,9 @@ function MascotUI({ player, onDone }: { player: Player; onDone: () => void }) {
 }
 
 function AlluringAlchemistUI({ player, onDone }: { player: Player; onDone: () => void }) {
-  const { fleaMarket, tradeWithFleaMarket, refreshOneActiveToken, repairWindow } = useGameStore()
+  const { fleaMarket, tradeWithFleaMarket, refreshActiveTokens, repairAllWindows } = useGameStore()
   const [selHoard, setSelHoard] = useState<string[]>([])
   const [selFlea, setSelFlea] = useState<number[]>([])
-  const [repairIdx, setRepairIdx] = useState<number>(
-    player.windows.findIndex(w => w.status === 'broken')
-  )
 
   const brokenWindows = player.windows.map((w, i) => ({ ...w, i })).filter(w => w.status === 'broken')
   const canTrade = selHoard.length > 0 && selHoard.length === selFlea.length && selHoard.length <= 3
@@ -597,25 +594,13 @@ function AlluringAlchemistUI({ player, onDone }: { player: Player; onDone: () =>
             onClick={() => setSelFlea(prev => toggle(prev, i, 3))} />
         ) : null)}
       </div>
-      {brokenWindows.length > 0 && (
-        <div>
-          <div className="text-parchment-400 mb-0.5">Repair 1 window:</div>
-          <div className="flex gap-1">
-            {brokenWindows.map(w => (
-              <button type="button" key={w.i} onClick={() => setRepairIdx(w.i)}
-                className={`px-1.5 py-0.5 rounded border ${repairIdx === w.i ? 'bg-gold-500/30 border-gold-400 text-gold-200' : 'bg-ink-700 border-parchment-700/30 text-parchment-400'}`}>
-                Window {w.i + 1}
-              </button>
-            ))}
-          </div>
-        </div>
-      )}
+      <div className="text-parchment-400">Then: refresh all your Active tokens{brokenWindows.length > 0 ? ` and repair all ${brokenWindows.length} broken window${brokenWindows.length !== 1 ? 's' : ''}` : ''}.</div>
       <button
         type="button"
         onClick={() => {
           if (canTrade) tradeWithFleaMarket(player.id, selHoard, selFlea)
-          refreshOneActiveToken(player.id)
-          if (brokenWindows.length > 0 && repairIdx >= 0) repairWindow(player.id, repairIdx)
+          refreshActiveTokens(player.id)
+          repairAllWindows(player.id)
           onDone()
         }}
         disabled={!canTrade}
@@ -679,7 +664,7 @@ function CharismaticClerkUI({ player, onDone }: { player: Player; onDone: () => 
 
   return (
     <div className="space-y-1.5 text-[10px]">
-      <div className="text-parchment-400">Pick flea market card to distribute to a visitor. Gain its rep type.</div>
+      <div className="text-parchment-400">Pick a Flea Market card to distribute to a Visitor. Gain its Rep type and 2 coins.</div>
       <div className="flex flex-wrap gap-1.5">
         {available.map(({ c, i }) => c && (
           <ResourceCardMini key={i} card={c} size="lg"
@@ -694,16 +679,17 @@ function CharismaticClerkUI({ player, onDone }: { player: Player; onDone: () => 
         disabled={slotIdx < 0}
         className="btn-primary text-xs px-2 py-0.5 disabled:opacity-50"
       >
-        Distribute → gain rep
+        Distribute → gain Rep + 2 coins
       </button>
     </div>
   )
 }
 
 function PolitePromoterUI({ player, onDone }: { player: Player; onDone: () => void }) {
-  const { fleaMarket, resetFleaMarket, tradeWithFleaMarket, politePromoterResetUsed } = useGameStore()
+  const { fleaMarket, resetFleaMarket, tradeWithFleaMarket, takeManyFromFleaMarket, politePromoterResetUsed } = useGameStore()
   const [selHoard, setSelHoard] = useState<string[]>([])
   const [selFlea, setSelFlea] = useState<number[]>([])
+  const [took, setTook] = useState(false)
 
   function toggle<T>(arr: T[], val: T, max: number): T[] {
     return arr.includes(val) ? arr.filter(x => x !== val) : arr.length < max ? [...arr, val] : arr
@@ -721,9 +707,19 @@ function PolitePromoterUI({ player, onDone }: { player: Player; onDone: () => vo
         >
           Step 1: Reset Flea Market
         </button>
+      ) : !took ? (
+        <>
+          <div className="text-gold-300 text-[10px]">✓ Flea Market reset. Step 2: Take 1:</div>
+          <div className="flex flex-wrap gap-1.5">
+            {fleaMarket.map((c, i) => c ? (
+              <ResourceCardMini key={i} card={c} size="lg" onClick={() => { takeManyFromFleaMarket(player.id, [i]); setTook(true) }} />
+            ) : null)}
+          </div>
+          <button type="button" onClick={() => setTook(true)} className="btn-secondary text-xs px-2 py-0.5">Skip taking</button>
+        </>
       ) : (
         <>
-          <div className="text-gold-300 text-[10px]">✓ Flea Market reset. Trade up to 2:</div>
+          <div className="text-gold-300 text-[10px]">Step 3: Trade up to 2:</div>
           <div className="text-parchment-400">Your cards:</div>
           <div className="flex flex-wrap gap-1.5">
             {player.hoard.map(c => (
@@ -754,7 +750,7 @@ function PolitePromoterUI({ player, onDone }: { player: Player; onDone: () => vo
             disabled={!canTrade}
             className="btn-primary text-xs px-2 py-0.5 disabled:opacity-50"
           >
-            Step 2: Trade {selHoard.length}/2
+            Step 3: Trade {selHoard.length}/2
           </button>
         </>
       )}
@@ -765,12 +761,11 @@ function PolitePromoterUI({ player, onDone }: { player: Player; onDone: () => vo
 function ShadySaboteurUI({ player, onDone }: { player: Player; onDone: () => void }) {
   const { players, shadySaboteur } = useGameStore()
   const [target, setTarget] = useState<TargetChoice | null>(null)
-  // Shady Saboteur pays half the broken card's value, so it only hits windows holding a card
-  const windowRule: WindowRule = (p, i) => breakWindowRule(p, i) ?? (p.windows[i].card ? null : 'Empty — nothing to profit from')
+  // Shady Saboteur gains Rep of the broken card's type, so it only hits windows holding a card
+  const windowRule: WindowRule = (p, i) => breakWindowRule(p, i) ?? (p.windows[i].card ? null : 'Empty — nothing to gain from')
   const targetPlayer = target ? players.find(p => p.id === target.playerId) : undefined
   const winIdx = target?.windowIdxs[0]
   const card = targetPlayer && winIdx !== undefined ? targetPlayer.windows[winIdx].card : null
-  const coinGain = card ? Math.floor(card.value / 2) : 0
 
   return (
     <div className="space-y-2">
@@ -784,7 +779,7 @@ function ShadySaboteurUI({ player, onDone }: { player: Player; onDone: () => voi
         disabled={!card}
         className="btn-primary w-full text-sm py-2 disabled:opacity-50"
       >
-        {!targetPlayer ? 'Pick a target' : !card ? 'Pick a window' : `Break ${targetPlayer.name}'s Window ${winIdx! + 1}, gain $${coinGain}`}
+        {!targetPlayer ? 'Pick a target' : !card ? 'Pick a window' : `Break ${targetPlayer.name}'s Window ${winIdx! + 1}, gain 1 ${card.type} Rep`}
       </button>
     </div>
   )

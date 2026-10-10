@@ -1408,18 +1408,17 @@ function professionalCandidate(
 ): { value: number; tag: string; fn: (s: GameStore) => void } | null {
   const difficulty = ctx.difficulty
   switch (profId) {
-    case 'p01': { // Alluring Alchemist — Trade 3, refresh 1, repair 1
+    case 'p01': { // Alluring Alchemist — Trade 3, refresh all, repair all
       const swaps = bestTrades(s, me, ctx, 3, false)
       if (swaps.length === 0) return null
-      const broken = me.windows.findIndex(w => w.status === 'broken')
       const value = swaps.reduce((n, x) => n + x.gain, 0) +
-        (me.activeTokens < 2 ? tokenVal : 0) + (broken >= 0 ? windowWorth : 0)
+        (2 - me.activeTokens) * tokenVal + me.windows.filter(w => w.status === 'broken').length * windowWorth
       return {
         value, tag: swaps.map(x => x.cardId).join(','),
         fn: g => {
           g.tradeWithFleaMarket(me.id, swaps.map(x => x.cardId), swaps.map(x => x.fleaIdx))
-          st().refreshOneActiveToken(me.id)
-          if (broken >= 0) st().repairWindow(me.id, broken)
+          st().refreshActiveTokens(me.id)
+          st().repairAllWindows(me.id)
         },
       }
     }
@@ -1445,7 +1444,7 @@ function professionalCandidate(
       for (const [i, c] of s.fleaMarket.entries()) {
         if (!c) continue
         const n = c.repTokens > 0 ? c.repTokens : 1
-        const v = marginalRep(me.rep, c.type, n) + (difficulty === 'hard' ? pts(0.5) : 0)
+        const v = 2 + marginalRep(me.rep, c.type, n) + (difficulty === 'hard' ? pts(0.5) : 0)
         if (!best || v > best.value) best = { value: v, tag: c.id, fn: g => g.distribute(me.id, i) }
       }
       return best
@@ -1459,14 +1458,14 @@ function professionalCandidate(
       if (spent === 0) return null
       return { value: drawValue(spent, avgDraw * 0.95, me), tag: String(spent), fn: g => g.resourcefulRecruiter(me.id) }
     }
-    case 'p07': { // Shady Saboteur — break a filled middle window, gain half its value
+    case 'p07': { // Shady Saboteur — break a filled middle window, gain 1 Rep of its type
       let best: { value: number; tag: string; fn: (s: GameStore) => void } | null = null
       for (const target of s.players) {
         if (target.id === me.id || target.hasNightWatcher) continue
         for (const i of MIDDLE_WINDOWS) {
           const w = target.windows[i]
           if (w.status !== 'normal' || !w.card) continue
-          const v = Math.floor(w.card.value / 2) + (w.card.value * 0.5 + pts(2)) * harmWeight(s, me, target, difficulty) * (s.players.length - 1) * 0.6
+          const v = repValue(me.rep, w.card.type, difficulty) + (w.card.value * 0.5 + pts(2)) * harmWeight(s, me, target, difficulty) * (s.players.length - 1) * 0.6
           if (!best || v > best.value) best = { value: v, tag: `${target.id}:${i}`, fn: g => g.shadySaboteur(me.id, target.id, i) }
         }
       }
@@ -1478,10 +1477,10 @@ function professionalCandidate(
       const expected = clamp(1 / Math.max(pRep, 0.15), 1, 5)
       return { value: drawValue(expected, avgDraw, me) + pts(1), tag: 'draw', fn: g => g.skilfulStocker(me.id) }
     }
-    case 'p09': { // Spirited Summoner — Appraise 3
+    case 'p09': { // Spirited Summoner — Appraise 2
       if (s.resourceDeck.length === 0) return null
       return {
-        value: drawValue(3, avgDraw * 1.15, me), tag: 'appraise',
+        value: drawValue(2, avgDraw * 1.25, me), tag: 'appraise',
         fn: g => {
           g.peekAppraise(me.id)
           const peek = st().appraisePeek
@@ -1492,8 +1491,30 @@ function professionalCandidate(
         },
       }
     }
+    case 'p04': { // Polite Promoter — reset the Flea Market, Take 1, then Trade 2
+      // A fresh market is worth roughly an average draw per slot; swap away the two weakest cards held
+      const weakest = [...me.hoard, ...me.windows.flatMap(w => (w.card && w.status !== 'broken' ? [w.card] : []))]
+        .map(c => cardWorth(c, ctx)).sort((x, y) => x - y).slice(0, 2)
+      const value = weakest.reduce((n, w) => n + Math.max(0, avgDraw * 1.15 - w), 0) + drawValue(1, avgDraw * 1.2, me)
+      if (value <= 0) return null
+      return {
+        value, tag: 'reset',
+        fn: g => {
+          g.resetFleaMarket()
+          useGameStore.setState({ politePromoterResetUsed: true })
+          {
+            const c1 = buildContext(st(), st().players.find(p => p.id === me.id)!, difficulty)
+            const best = st().fleaMarket.map((c, i) => ({ c, i })).filter(x => x.c).sort((a, b) => cardWorth(b.c!, c1, 1) - cardWorth(a.c!, c1, 1))[0]
+            if (best) st().takeManyFromFleaMarket(me.id, [best.i])
+          }
+          const me2 = st().players.find(p => p.id === me.id)!
+          const swaps = bestTrades(st(), me2, buildContext(st(), me2, difficulty), 2, false)
+          if (swaps.length) st().tradeWithFleaMarket(me.id, swaps.map(x => x.cardId), swaps.map(x => x.fleaIdx))
+        },
+      }
+    }
     default:
-      return null // p04 Polite Promoter needs a two-step UI flow — bots skip it
+      return null
   }
 }
 

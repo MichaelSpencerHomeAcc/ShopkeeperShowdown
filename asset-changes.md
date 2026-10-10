@@ -15,7 +15,8 @@ Every physical component that needs redesigning, compared with `main` (PR #15). 
 | Warlock components | 8 cards + dice + figure | New Curse deck, 2 Omen dice (was 3), Imp figure |
 | Player aid / scoring card | 1 | Rep table, set bonus 5, starting coins 2 |
 | Coins | — | Fewer needed; denominations suggested below |
-| **No change** | — | Professionals, Counterfeits, Ambush cards, Surge table, Renown cards other than Forge, Barbarian and Rogue boards |
+| Professional cards | 5 of 9 | Alchemist, Clerk, Promoter, Saboteur, Summoner (section 4b) |
+| **No change** | — | Counterfeits, Ambush cards, Surge table, Renown cards other than Forge, Barbarian and Rogue boards |
 
 ---
 
@@ -257,6 +258,20 @@ Every board keeps 3 spaces. **Bold** = new or changed.
 
 ---
 
+## 4b. Professional cards
+
+| Professional | Old effect | **New effect** |
+|---|---|---|
+| Alluring Alchemist | Trade 3, refresh 1 active, repair 1 | **Trade 3, refresh all your Active tokens, repair all your windows** |
+| Charismatic Clerk | Distribute 1, gain the reputation | **Distribute 1, gain the reputation and 2 coins** |
+| Polite Promoter | Reset Flea Market. Trade 2 | **Reset Flea Market. Take 1, then Trade 2** |
+| Shady Saboteur | Break 1, gain half the coin value (rounded down) | **Break 1, gain 1 Reputation of the broken card's type** |
+| Spirited Summoner | Appraise 3 | **Appraise 2** |
+
+Unchanged: Brazen Bounty Hunter, Marvellous Mascot, Resourceful Recruiter, Skilful Stocker.
+
+---
+
 ## 5. Renown card
 
 | Card | Old passive | **New passive** | Spend (unchanged) |
@@ -365,7 +380,6 @@ A single player rarely holds more than ~110 coins.
 
 ## 10. Not changing
 
-- **Professionals:** all 9 unchanged. Shady Saboteur still gains "half the coin value, rounded down", but on the new values that's 0–2 coins. Worth a look if it feels flat.
 - **Counterfeits:** values ($1–2) and return effects unchanged.
 - **Unchanged components:** Ambush cards, the Surge table, Renown cards other than Forge, and the Barbarian and Rogue boards.
 - **Needs a redesign:** The Council of Seven (Renown) has the passive "Negotiate twice per Guildhall visit", but Negotiate is no longer a Guildhall action. Its Spend effect still works.

@@ -140,3 +140,33 @@ describe('Tavern — Rest', () => {
     expect(playerOf('shaman').windows[2].status).toBe('normal')
   })
 })
+
+describe('Guildhall — Professionals', () => {
+  it('Shady Saboteur breaks a window and gains 1 Rep of the broken card\'s type', () => {
+    startGame(['monk', 'shaman', 'rogue'])
+    const [card] = cardsOf('TRG')
+    const t = playerOf('rogue')
+    patchPlayer(t.id, { windows: t.windows.map((w, i) => (i === 2 ? { ...w, card, status: 'normal' } : w)), hasNightWatcher: false })
+    const coins = playerOf('monk').coins
+    st().shadySaboteur(playerOf('monk').id, t.id, 2)
+    expect(playerOf('rogue').windows[2].status).toBe('broken')
+    expect(playerOf('monk').rep.TRG).toBe(1)
+    expect(playerOf('monk').coins).toBe(coins)
+  })
+
+  it('Spirited Summoner appraises 2', () => {
+    startGame(['monk', 'shaman'])
+    st().peekAppraise(playerOf('monk').id)
+    expect(st().appraisePeek?.maxKeep).toBe(2)
+  })
+
+  it('Charismatic Clerk gains the Rep and 2 coins', () => {
+    startGame(['monk', 'shaman'])
+    const p = playerOf('monk')
+    const idx = st().fleaMarket.findIndex(c => c)
+    const card = st().fleaMarket[idx]!
+    st().distribute(p.id, idx)
+    expect(playerOf('monk').coins).toBe(p.coins + 2)
+    expect(playerOf('monk').rep[card.type]).toBe(card.repTokens > 0 ? card.repTokens : 1)
+  })
+})

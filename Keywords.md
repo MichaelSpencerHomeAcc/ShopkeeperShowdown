@@ -8,7 +8,7 @@ Keywords are universal game terms that appear on cards and abilities throughout 
 
 Look at the top 4 resources of the resource deck. Keep X of them. Return the rest in any order on top of the deck.
 
-Used by: Spirited Summoner (Appraise 3), Barbarian Raiding Party (Appraise 1), Monk Momentum spend, Sorcerer abilities.
+Used by: Spirited Summoner (Appraise 2), Workshop (Appraise 2), Barbarian Raiding Party (Appraise 1), Monk Momentum spend, Sorcerer abilities.
 
 ---
 
