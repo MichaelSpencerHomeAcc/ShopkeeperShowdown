@@ -210,6 +210,16 @@ Unchanged: Brazen Bounty Hunter, Marvellous Mascot, Resourceful Recruiter, Skilf
 
 Hires per game when the professional is face-up (each is dealt into about a third of games): Summoner 9.8, Recruiter 8.0, Bounty Hunter 6.3, Mascot 5.3, Stocker 4.5, Saboteur 3.1, Alchemist 1.4, Clerk 0.8, Promoter 0.3 before. After: Recruiter 8.2, Bounty Hunter 5.9, Stocker 4.9, Mascot 4.9, Saboteur 4.9, Clerk 4.0, Promoter 3.1, Alchemist 2.7, Summoner 1.9 (Appraise 2 now duplicates the Workshop space). Bots now know how to use Polite Promoter (they never hired it before).
 
+**New professionals (need art — the app uses placeholder cards for now):**
+
+| Professional | Effect | Flavour |
+|---|---|---|
+| **Quivering Questgiver** | Go on a Quest: roll 3 dice and keep the best 2. | *Adventure awaits! Probably. I wouldn't go myself.* |
+| **Pretentious Pawnbroker** | Sell up to 2 resources from your hoard to the bank at their printed value (no Rep). | *I suppose I could take it off your hands. For a pittance.* |
+| **Audacious Auctioneer** | Auction 2: auction up to 2 resources, one after the other. | *Do I hear three? Three! From the gentleman with the suspicious hat!* |
+
+The professional deck goes from 9 to 12 cards; 3 are still dealt face-up each game.
+
 ## 4. Bots
 
 - Bot valuations were recalibrated for the halved economy. Every hand-set worth that isn't a real coin amount now goes through one `VALUE_SCALE` (0.5) in `src/bots/evaluate.ts`, and the bots expect an average auction payout of 2.

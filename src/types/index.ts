@@ -331,6 +331,8 @@ export interface GameState {
   questTwist: { playerId: string; repType: RepType; dice: [number, number]; warlockId: string } | null
   /** The last Quest result, for the quester's result screen */
   questResult: { playerId: string; repType: RepType; dice: [number, number]; total: number; outcome: string } | null
+  /** Audacious Auctioneer: auctions this player may still make, one after another */
+  auctionsLeft: { playerId: string; count: number } | null
 
   // ── Monk ──  // ── Monk ──
   /** Players the Monk has shared a location with this turn (Flow State + the 7-Momentum Rep spend) */

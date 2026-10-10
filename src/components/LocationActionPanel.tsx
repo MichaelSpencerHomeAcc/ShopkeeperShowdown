@@ -504,6 +504,9 @@ export function ProfessionalUI({ profId, player, onDone }: { profId: string; pla
       </div>
     )
     case 'p09': return <AppraisePeekUI player={player} onDone={onDone} />
+    case 'p10': return <QuestActionUI player={player} diceCount={3} onConsumeAction={() => {}} onClose={onDone} />
+    case 'p11': return <PawnbrokerUI player={player} onDone={onDone} />
+    case 'p12': return <AuctioneerUI player={player} onDone={onDone} />
     default: return null
   }
 }
@@ -781,6 +784,82 @@ function ShadySaboteurUI({ player, onDone }: { player: Player; onDone: () => voi
       >
         {!targetPlayer ? 'Pick a target' : !card ? 'Pick a window' : `Break ${targetPlayer.name}'s Window ${winIdx! + 1}, gain 1 ${card.type} Rep`}
       </button>
+    </div>
+  )
+}
+
+/** Pretentious Pawnbroker — sell up to 2 hoard resources to the bank at printed value */
+function PawnbrokerUI({ player, onDone }: { player: Player; onDone: () => void }) {
+  const pawn = useGameStore(s => s.pawn)
+  const [sel, setSel] = useState<string[]>([])
+  const coins = player.hoard.filter(c => sel.includes(c.id)).reduce((n, c) => n + c.value, 0)
+  return (
+    <div className="space-y-2 text-[10px]">
+      <div className="text-parchment-400">Pick up to 2 resources from your hoard to sell at their printed value (no Rep):</div>
+      <div className="flex flex-wrap gap-1.5">
+        {player.hoard.map(c => (
+          <ResourceCardMini key={c.id} card={c} size="lg" selected={sel.includes(c.id)}
+            onClick={() => setSel(prev => (prev.includes(c.id) ? prev.filter(x => x !== c.id) : prev.length < 2 ? [...prev, c.id] : prev))} />
+        ))}
+        {player.hoard.length === 0 && <span className="text-parchment-600 italic">Your hoard is empty</span>}
+      </div>
+      <button type="button" disabled={sel.length === 0} onClick={() => { pawn(player.id, sel); onDone() }} className="btn-primary text-xs px-2 py-0.5 disabled:opacity-50">
+        Sell {sel.length > 0 ? `${sel.length} for $${coins}` : ''}
+      </button>
+    </div>
+  )
+}
+
+/** Audacious Auctioneer — Auction 2: two auctions, each once the previous roll has resolved */
+function AuctioneerUI({ player, onDone }: { player: Player; onDone: () => void }) {
+  const { auctionsLeft, startAuctioneer, endAuctioneer, auction, twistPending, trickShotPending, rn04RerollPending } = useGameStore()
+  const [started, setStarted] = useState(false)
+  const [pick, setPick] = useState<{ cardId: string; zone: 'hoard' | 'window'; windowIdx?: number } | null>(null)
+  const [visitorIdx, setVisitorIdx] = useState<number | null>(null)
+  const mine = auctionsLeft?.playerId === player.id ? auctionsLeft : null
+  const rolling = !!(twistPending || trickShotPending || rn04RerollPending)
+
+  if (!started) {
+    return (
+      <div className="space-y-2 text-[10px]">
+        <div className="text-parchment-400">Auction up to 2 resources, one after the other. Each one rolls like a Tavern Auction.</div>
+        <button type="button" onClick={() => { startAuctioneer(player.id); setStarted(true) }} className="btn-primary text-xs px-2 py-0.5">Start the auction</button>
+      </div>
+    )
+  }
+  if (!mine) {
+    return (
+      <div className="space-y-2 text-[10px]">
+        <div className="text-gold-300">The auction is over.</div>
+        <button type="button" onClick={onDone} className="btn-primary text-xs px-2 py-0.5">Done</button>
+      </div>
+    )
+  }
+  if (rolling) return <div className="text-xs text-parchment-400 animate-pulse py-3 text-center">Waiting for the roll to resolve…</div>
+
+  const options = [
+    ...player.hoard.filter(c => !(c as { counterfeit?: boolean }).counterfeit).map(c => ({ card: c, zone: 'hoard' as const, windowIdx: undefined as number | undefined })),
+    ...player.windows.flatMap((w, i) => (w.card && w.status !== 'broken' && !(w.card as { counterfeit?: boolean }).counterfeit ? [{ card: w.card, zone: 'window' as const, windowIdx: i }] : [])),
+  ]
+  const chosen = options.find(o => o.card.id === pick?.cardId)
+  return (
+    <div className="space-y-2 text-[10px]">
+      <div className="text-gold-300">Auction {3 - mine.count} of 2 — pick a resource:</div>
+      <div className="flex flex-wrap gap-1.5">
+        {options.map(o => (
+          <ResourceCardMini key={o.card.id} card={o.card} size="lg" selected={pick?.cardId === o.card.id}
+            onClick={() => { setPick({ cardId: o.card.id, zone: o.zone, windowIdx: o.windowIdx }); setVisitorIdx(null) }} />
+        ))}
+      </div>
+      {chosen && (
+        <VisitorChooser selectedIdx={visitorIdx} onSelect={setVisitorIdx} canTake={rem => fitsDemand(rem, chosen.card.type)} noneLabel="No Visitor (discard pile)" />
+      )}
+      <div className="flex gap-2">
+        <button type="button" disabled={!chosen}
+          onClick={() => { if (!pick) return; auction(player.id, pick.cardId, pick.zone, pick.windowIdx, visitorIdx ?? undefined); setPick(null); setVisitorIdx(null) }}
+          className="btn-primary text-xs px-2 py-0.5 disabled:opacity-50">Roll the auction 🎲</button>
+        <button type="button" onClick={() => { endAuctioneer(); onDone() }} className="btn-secondary text-xs px-2 py-0.5">Finish</button>
+      </div>
     </div>
   )
 }
@@ -1172,11 +1251,13 @@ function WildernessActions({
 }
 
 /** Quest — name a Rep type, roll 2d6 on the Quest table, take the result */
-function QuestActionUI({ player, onBack, onConsumeAction, onClose }: {
+function QuestActionUI({ player, onBack, onConsumeAction, onClose, diceCount = 2 }: {
   player: Player
-  onBack: () => void
+  onBack?: () => void
   onConsumeAction: () => void
   onClose: () => void
+  /** Quivering Questgiver rolls 3 and keeps the best 2 */
+  diceCount?: number
 }) {
   const { quest, questTwist, questResult, clearQuestResult, players } = useGameStore()
   const [repType, setRepType] = useState<RepType>('ARM')
@@ -1208,8 +1289,10 @@ function QuestActionUI({ player, onBack, onConsumeAction, onClose }: {
 
   return (
     <div className="space-y-3">
-      <BackButton onBack={onBack} />
-      <p className="text-sm text-parchment-300">Name a Rep type, then roll 2d6. A Warlock may Twist one of the dice.</p>
+      {onBack && <BackButton onBack={onBack} />}
+      <p className="text-sm text-parchment-300">
+        Name a Rep type, then roll {diceCount > 2 ? `${diceCount} dice and keep the best 2` : '2d6'}. A Warlock may Twist one of the dice.
+      </p>
       <table className="w-full text-xs">
         <tbody>
           {QUEST_OUTCOMES.map(o => (
@@ -1231,7 +1314,7 @@ function QuestActionUI({ player, onBack, onConsumeAction, onClose }: {
       <IrreversibleWarning />
       <button
         type="button"
-        onClick={() => { quest(player.id, repType); onConsumeAction(); setRolled(true) }}
+        onClick={() => { quest(player.id, repType, diceCount); onConsumeAction(); setRolled(true) }}
         className="btn-primary text-xs px-4 py-1.5"
       >
         Set out on the Quest 🎲

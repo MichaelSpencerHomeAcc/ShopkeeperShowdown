@@ -15,7 +15,7 @@ Every physical component that needs redesigning, compared with `main` (PR #15). 
 | Warlock components | 8 cards + dice + figure | New Curse deck, 2 Omen dice (was 3), Imp figure |
 | Player aid / scoring card | 1 | Rep table, set bonus 5, starting coins 2 |
 | Coins | — | Fewer needed; denominations suggested below |
-| Professional cards | 4 of 9 | Alchemist, Clerk, Promoter, Saboteur (section 4b) |
+| Professional cards | 4 changed + 3 new | Alchemist, Clerk, Promoter, Saboteur; new: Quivering Questgiver, Pretentious Pawnbroker, Audacious Auctioneer (section 4b) |
 | **No change** | — | Counterfeits, Ambush cards, Surge table, Renown cards other than Forge, Barbarian and Rogue boards |
 
 ---
@@ -268,6 +268,16 @@ Every board keeps 3 spaces. **Bold** = new or changed.
 | Shady Saboteur | Break 1, gain half the coin value (rounded down) | **Break 1, gain 1 Reputation of the broken card's type** |
 
 Unchanged: Brazen Bounty Hunter, Marvellous Mascot, Resourceful Recruiter, Skilful Stocker, Spirited Summoner (Appraise 3).
+
+**New professionals (need art — the app uses placeholder cards for now):**
+
+| Professional | Effect | Flavour |
+|---|---|---|
+| **Quivering Questgiver** | Go on a Quest: roll 3 dice and keep the best 2. | *Adventure awaits! Probably. I wouldn't go myself.* |
+| **Pretentious Pawnbroker** | Sell up to 2 resources from your hoard to the bank at their printed value (no Rep). | *I suppose I could take it off your hands. For a pittance.* |
+| **Audacious Auctioneer** | Auction 2: auction up to 2 resources, one after the other. | *Do I hear three? Three! From the gentleman with the suspicious hat!* |
+
+The professional deck goes from 9 to 12 cards; 3 are still dealt face-up each game.
 
 ---
 

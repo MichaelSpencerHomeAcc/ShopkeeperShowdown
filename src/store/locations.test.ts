@@ -170,3 +170,36 @@ describe('Guildhall — Professionals', () => {
     expect(playerOf('monk').rep[card.type]).toBe(card.repTokens > 0 ? card.repTokens : 1)
   })
 })
+
+describe('Guildhall — new Professionals', () => {
+  it('Quivering Questgiver rolls 3 dice and keeps the best 2', () => {
+    startGame(['monk', 'shaman'])
+    rolls(1, 5, 6)
+    st().quest(playerOf('monk').id, 'ARM', 3)
+    expect(st().questResult).toMatchObject({ dice: [6, 5], total: 11, outcome: 'Legend' })
+  })
+
+  it('Pretentious Pawnbroker sells up to 2 hoard cards at printed value, without Rep', () => {
+    startGame(['monk', 'shaman'])
+    const p = playerOf('monk')
+    const cards = cardsOf('ARM', 'CON', 'TRI').map(c => ({ ...c, repTokens: 1 }))
+    patchPlayer(p.id, { hoard: cards, coins: 0 })
+    st().pawn(p.id, cards.map(c => c.id))
+    expect(playerOf('monk').hoard).toHaveLength(1)
+    expect(playerOf('monk').coins).toBe(cards[0].value + cards[1].value)
+    expect(playerOf('monk').rep).toEqual(p.rep)
+  })
+
+  it('Audacious Auctioneer grants two auctions, one after the other', () => {
+    startGame(['monk', 'shaman'])
+    const p = playerOf('monk')
+    const cards = cardsOf('ARM', 'CON')
+    patchPlayer(p.id, { hoard: cards })
+    st().startAuctioneer(p.id)
+    st().auction(p.id, cards[0].id, 'hoard')
+    expect(st().auctionsLeft).toEqual({ playerId: p.id, count: 1 })
+    st().auction(p.id, cards[1].id, 'hoard')
+    expect(st().auctionsLeft).toBeNull()
+    expect(playerOf('monk').hoard).toHaveLength(0)
+  })
+})

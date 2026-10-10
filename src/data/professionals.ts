@@ -67,4 +67,25 @@ export const PROFESSIONAL_CARDS: ProfessionalCard[] = [
     flavour: 'The answers are out there. You just need to know where to look.',
     imageFile: '/cards/professionals/Spontaneous Summoner.png',
   },
+  {
+    id: 'p10',
+    name: 'Quivering Questgiver',
+    effect: 'Go on a Quest: roll 3 dice and keep the best 2.',
+    flavour: "Adventure awaits! Probably. I wouldn't go myself.",
+    imageFile: '/cards/professionals/Quivering Questgiver.svg', // placeholder art
+  },
+  {
+    id: 'p11',
+    name: 'Pretentious Pawnbroker',
+    effect: 'Sell up to 2 resources from your hoard to the bank at their printed value (no Rep).',
+    flavour: "I suppose I could take it off your hands. For a pittance.",
+    imageFile: '/cards/professionals/Pretentious Pawnbroker.svg', // placeholder art
+  },
+  {
+    id: 'p12',
+    name: 'Audacious Auctioneer',
+    effect: 'Auction 2: auction up to 2 resources, one after the other.',
+    flavour: "Do I hear three? Three! From the gentleman with the suspicious hat!",
+    imageFile: '/cards/professionals/Audacious Auctioneer.svg', // placeholder art
+  },
 ]

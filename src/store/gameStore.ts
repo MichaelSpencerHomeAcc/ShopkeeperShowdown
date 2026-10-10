@@ -245,6 +245,7 @@ function buildInitialGameState(players: Player[]): GameState {
     curseChoice: null,
     questTwist: null,
     questResult: null,
+    auctionsLeft: null,
     monkSharedWith: [],
     monkFlowGained: 0,
     startPlayerOffset: 0,
@@ -400,7 +401,13 @@ export interface GameStore extends GameState {
   /** Refresh all your Active tokens, then Repair 1 window */
   rest: (playerId: string, windowIdx?: number) => void
   /** Name a Rep type and roll 2d6 on the Quest table (the Warlock may Twist one die first) */
-  quest: (playerId: string, repType: RepType) => void
+  /** `diceCount` 3 = Quivering Questgiver: roll 3, keep the best 2 */
+  quest: (playerId: string, repType: RepType, diceCount?: number) => void
+  /** Pretentious Pawnbroker: sell up to 2 hoard resources at printed value */
+  pawn: (playerId: string, cardIds: string[]) => void
+  /** Audacious Auctioneer: grant 2 auctions, made one after the other */
+  startAuctioneer: (playerId: string) => void
+  endAuctioneer: () => void
   /** Warlock: Twist die `dieIdx` of the pending Quest roll with Omen `omenIdx`, or let it stand (null) */
   twistQuest: (dieIdx: number | null, omenIdx?: number) => void
   clearQuestResult: () => void
@@ -558,6 +565,7 @@ const INITIAL: GameState = {
   curseChoice: null,
   questTwist: null,
   questResult: null,
+  auctionsLeft: null,
   monkSharedWith: [],
   monkFlowGained: 0,
   startPlayerOffset: 0,
@@ -2296,6 +2304,9 @@ export const useGameStore = create<GameStore>((set, get) => ({
       card = player.windows[windowIdx ?? 0]?.card ?? null
     }
     if (!card) return
+    // Audacious Auctioneer: this uses one of the granted auctions
+    const al = get().auctionsLeft
+    if (al?.playerId === playerId) set({ auctionsLeft: al.count > 1 ? { ...al, count: al.count - 1 } : null })
 
     const roll = Math.ceil(Math.random() * 6)
     const hasReroll = player.renownCards.some(c => c.id === 'rn04') && !player.rn04RerollUsed
@@ -2900,12 +2911,16 @@ export const useGameStore = create<GameStore>((set, get) => ({
     addLog(set, `${player.name} rested at the Tavern — Active tokens refreshed${repair ? ' and a window repaired' : ''}.`, playerId)
   },
 
-  quest(playerId, repType) {
+  quest(playerId, repType, diceCount = 2) {
     if (!get().players.some(p => p.id === playerId)) return
     set({ questResult: null })
-    const dice: [number, number] = [d6(), d6()]
+    const rolled = Array.from({ length: Math.max(2, diceCount) }, d6)
     // Every die still feeds Bottled Fate and Wild Magic
-    for (const die of dice) { bottleOmen(get, set, die); sorcererDie(get, set, playerId, die) }
+    for (const die of rolled) { bottleOmen(get, set, die); sorcererDie(get, set, playerId, die) }
+    // Keep the best two (the Quest table only gets better as the total rises)
+    const kept = rolled.length > 2 ? [...rolled].sort((a, b) => b - a) : rolled
+    const dice: [number, number] = [kept[0], kept[1]]
+    if (rolled.length > 2) addLog(set, `Quivering Questgiver — rolled ${rolled.join(', ')}, keeping ${dice[0]} and ${dice[1]}.`, playerId)
     // Twist of Fate: the Warlock may change one die, on anyone's Quest
     const w = get().players.find(p => p.classId === 'warlock' && p.omens.some(o => o !== dice[0] || o !== dice[1]))
     if (w) { set({ questTwist: { playerId, repType, dice, warlockId: w.id } }); return }
@@ -2933,6 +2948,32 @@ export const useGameStore = create<GameStore>((set, get) => ({
 
   clearQuestResult() {
     set({ questResult: null })
+  },
+
+  pawn(playerId, cardIds) {
+    const player = get().players.find(p => p.id === playerId)
+    if (!player) return
+    const cards = player.hoard.filter(c => cardIds.includes(c.id)).slice(0, 2)
+    if (cards.length === 0) return
+    const coins = cards.reduce((n, c) => n + c.value, 0)
+    const ids = cards.map(c => c.id)
+    set(s => ({
+      resourceDiscard: [...cards, ...s.resourceDiscard],
+      players: s.players.map(p => (p.id !== playerId ? p : {
+        ...p, coins: p.coins + coins,
+        hoard: p.hoard.filter(c => !ids.includes(c.id)),
+        stolenHoardCardIds: p.stolenHoardCardIds.filter(id => !ids.includes(id)),
+      })),
+      actionLog: [logEntry(`Professional | Player: ${player.name} | Professional: Pretentious Pawnbroker | Sold: ${cards.map(c => c.name).join(', ')} for ${coins} coins.`, playerId), ...s.actionLog.slice(0, 49)],
+    }))
+  },
+
+  startAuctioneer(playerId) {
+    set({ auctionsLeft: { playerId, count: 2 } })
+  },
+
+  endAuctioneer() {
+    set({ auctionsLeft: null })
   },
 
   peekWorkshopAppraise(playerId) {

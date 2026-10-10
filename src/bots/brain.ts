@@ -99,7 +99,7 @@ export function anythingPending(s: GameStore): boolean {
     s.negotiateReview || s.shamanCallLightning || s.ambushPending || s.ambushResult ||
     s.trickShotPending || s.trickShotBonusPending || s.rangerVisitorTradePending ||
     s.rn04RerollPending || s.nightWatcherChoicePending || s.townCrierPeek || s.appraisePeek ||
-    s.foragePeek || s.visitorPrizeQueue.length > 0 || s.twistPending || s.questTwist || s.hexPeek || s.curseChoice || s.surge || s.mirrorPending || s.hotStreak || s.players.some(p => p.hoard.length > 8)
+    s.foragePeek || s.visitorPrizeQueue.length > 0 || s.twistPending || s.questTwist || s.auctionsLeft || s.hexPeek || s.curseChoice || s.surge || s.mirrorPending || s.hotStreak || s.players.some(p => p.hoard.length > 8)
   )
 }
 
@@ -295,6 +295,16 @@ function promptStep(s: GameStore): BotStep | null {
       if (swap) st().resolveRangerVisitorTrade(swap.cardId, swap.fleaIdx)
       else st().dismissRangerVisitorTrade()
     })
+  }
+
+  // Audacious Auctioneer: make the granted auctions once any earlier roll has resolved
+  const al = s.auctionsLeft
+  const alBot = botOf(s, al?.playerId)
+  if (al && alBot && !s.twistPending && !s.trickShotPending && !s.rn04RerollPending && !s.questTwist) {
+    const pick = bestAuction(s, alBot, buildContext(s, alBot, alBot.bot!))
+    if (!pick || pick.gain <= 0) return step(`auctioneer-done:${al.count}`, alBot, 'quick', () => st().endAuctioneer())
+    return step(`auctioneer:${pick.card.id}:${al.count}`, alBot, 'think',
+      () => st().auction(alBot.id, pick.card.id, pick.zone, pick.windowIdx, pick.visitorIdx))
   }
 
   // Warlock: Twist one die of a Quest roll
@@ -1145,16 +1155,23 @@ function chooseQuestTwist(s: GameStore, w: Player, qt: NonNullable<GameStore['qu
 }
 
 /** Expected value of a Quest outcome table, with the Warlock's own Twist (a 6) when it has one. */
-function questValue(me: Player, ctx: ValueContext, avgDraw: number, t: RepType): number {
+function questValue(me: Player, ctx: ValueContext, avgDraw: number, t: RepType, diceCount = 2): number {
   const loss = me.hoard.length ? averageWorth(me.hoard, ctx, 0) : 0
   const worth = (total: number) => {
     const o = questOutcome(total)
     return -(o.discard ?? 0) * loss + (o.draw ? drawValue(o.draw, avgDraw, me) : 0) + (o.coins ?? 0) + (o.rep ? marginalRep(me.rep, t, o.rep) : 0)
   }
   const sixOmen = me.classId === 'warlock' && me.omens.includes(6)
-  let sum = 0
-  for (let a = 1; a <= 6; a++) for (let b = 1; b <= 6; b++) sum += Math.max(worth(a + b), sixOmen ? worth(Math.max(a, b) + 6) : -Infinity)
-  return sum / 36
+  // Every combination of the dice rolled; keep the best two
+  let sum = 0, n = 0
+  const roll = (dice: number[]) => {
+    if (dice.length < diceCount) { for (let d = 1; d <= 6; d++) roll([...dice, d]); return }
+    const [a, b] = [...dice].sort((x, y) => y - x)
+    sum += Math.max(worth(a + b), sixOmen ? worth(a + 6) : -Infinity)
+    n++
+  }
+  roll([])
+  return sum / n
 }
 
 /** A bot Warlock's pick between the two Curse cards it drew. */
@@ -1512,6 +1529,25 @@ function professionalCandidate(
           if (swaps.length) st().tradeWithFleaMarket(me.id, swaps.map(x => x.cardId), swaps.map(x => x.fleaIdx))
         },
       }
+    }
+    case 'p10': { // Quivering Questgiver — Quest with 3 dice, keep the best 2
+      const t = bestRepType(me.rep, difficulty)
+      return { value: questValue(me, ctx, avgDraw, t, 3), tag: t, fn: g => g.quest(me.id, t, 3) }
+    }
+    case 'p11': { // Pretentious Pawnbroker — sell up to 2 hoard cards at printed value
+      const sells = me.hoard.filter(c => !isCounterfeit(c)).map(c => ({ c, gain: c.value - cardWorth(c, ctx) }))
+        .filter(x => x.gain > 0).sort((a, b) => b.gain - a.gain).slice(0, 2)
+      if (sells.length === 0) return null
+      return { value: sells.reduce((n, x) => n + x.gain, 0), tag: sells.map(x => x.c.id).join(','), fn: g => g.pawn(me.id, sells.map(x => x.c.id)) }
+    }
+    case 'p12': { // Audacious Auctioneer — Auction 2
+      const gains = [
+        ...me.hoard.filter(c => !isCounterfeit(c)),
+        ...me.windows.flatMap(w => (w.card && w.status !== 'broken' && !isCounterfeit(w.card) ? [w.card] : [])),
+      ].map(c => AUCTION_AVG + c.repTokens * repValue(me.rep, c.type, difficulty) - cardWorth(c, ctx))
+        .filter(v => v > 0).sort((a, b) => b - a).slice(0, 2)
+      if (gains.length === 0) return null
+      return { value: gains.reduce((n, v) => n + v, 0) * 1.1, tag: 'auction2', fn: g => g.startAuctioneer(me.id) }
     }
     default:
       return null
