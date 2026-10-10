@@ -1,7 +1,7 @@
 import {
   useGameStore, CLAN_TOLL, FEARSOME_CHAMPION_MAX, MAX_SALES_PER_VISITOR, rankContributors, type GameStore,
   MOMENTUM_COSTS, SHARED_REP_MAX, FLOW_STATE_MAX, MAX_OMENS, SURGE_REROLL_COST, SURGE_SHIFT_COST, WILD_SURGE_COUNT,
-  CONSULT_CARDS, CONSULT_COINS, QUEST_OUTCOMES, twoD6Chance, FENCE_MULTIPLIER,
+  CONSULT_CARDS, CONSULT_COINS, QUEST_OUTCOMES, questOutcome, FENCE_MULTIPLIER,
 } from '../store/gameStore'
 import type {
   BotDifficulty, CurseId, DemandMap, DuelStake, Location, MomentumSpendId, Player, RepType, ResourceCard, ResourceType,
@@ -99,7 +99,7 @@ export function anythingPending(s: GameStore): boolean {
     s.negotiateReview || s.shamanCallLightning || s.ambushPending || s.ambushResult ||
     s.trickShotPending || s.trickShotBonusPending || s.rangerVisitorTradePending ||
     s.rn04RerollPending || s.nightWatcherChoicePending || s.townCrierPeek || s.appraisePeek ||
-    s.foragePeek || s.visitorPrizeQueue.length > 0 || s.twistPending || s.hexPeek || s.curseChoice || s.surge || s.mirrorPending || s.hotStreak || s.players.some(p => p.hoard.length > 8)
+    s.foragePeek || s.visitorPrizeQueue.length > 0 || s.twistPending || s.questTwist || s.hexPeek || s.curseChoice || s.surge || s.mirrorPending || s.hotStreak || s.players.some(p => p.hoard.length > 8)
   )
 }
 
@@ -295,6 +295,14 @@ function promptStep(s: GameStore): BotStep | null {
       if (swap) st().resolveRangerVisitorTrade(swap.cardId, swap.fleaIdx)
       else st().dismissRangerVisitorTrade()
     })
+  }
+
+  // Warlock: Twist one die of a Quest roll
+  const qt = s.questTwist
+  const qtBot = botOf(s, qt?.warlockId)
+  if (qt && qtBot) {
+    const pick = chooseQuestTwist(s, qtBot, qt)
+    return step(`quest-twist:${qt.playerId}:${qt.dice.join('')}:${qtBot.omens.join('')}`, qtBot, 'quick', () => st().twistQuest(pick?.die ?? null, pick?.omenIdx))
   }
 
   // Warlock: Twist of Fate
@@ -944,9 +952,7 @@ function locationCandidates(s: GameStore, me: Player, ctx: ValueContext): Candid
     {
       // Quest: expected value of the 2d6 table
       const t = bestRepType(me.rep, difficulty)
-      const loss = me.hoard.length ? averageWorth(me.hoard, ctx, 0) : 0
-      const value = QUEST_OUTCOMES.reduce((n, o) => n + twoD6Chance(o.min, o.max) * (
-        -(o.discard ?? 0) * loss + (o.draw ? drawValue(o.draw, avgDraw, me) : 0) + (o.coins ?? 0) + (o.rep ? marginalRep(me.rep, t, o.rep) : 0)), 0)
+      const value = questValue(me, ctx, avgDraw, t)
       add('wilderness', `quest:${t}`, value, g => g.quest(me.id, t), true)
     }
   }
@@ -1114,6 +1120,41 @@ function chooseTwist(s: GameStore, w: Player, tw: NonNullable<GameStore['twistPe
   const victim = s.players.find(p => p.id === tw.playerId)
   const harsh = victim && harmWeight(s, w, victim, d) > 0.4
   return tw.roll >= (d === 'hard' || harsh ? 4 : 5) ? one : null
+}
+
+/** Quest results from worst (Ambushed) to best (Legend). */
+const questRank = (total: number) => QUEST_OUTCOMES.indexOf(questOutcome(total))
+
+/** Twist of Fate on a Quest: lift its own roll with a 6, or sink a rival's with a 1. */
+function chooseQuestTwist(s: GameStore, w: Player, qt: NonNullable<GameStore['questTwist']>): { die: number; omenIdx: number } | null {
+  const total = qt.dice[0] + qt.dice[1]
+  if (qt.playerId === w.id) {
+    const six = w.omens.indexOf(6)
+    const die = qt.dice[0] <= qt.dice[1] ? 0 : 1
+    return six >= 0 && questRank(qt.dice[1 - die] + 6) > questRank(total) ? { die, omenIdx: six } : null
+  }
+  const one = w.omens.indexOf(1)
+  if (one < 0) return null
+  const d = w.bot ?? 'medium'
+  if (d === 'easy' && !chance(0.4)) return null
+  const die = qt.dice[0] >= qt.dice[1] ? 0 : 1
+  const drop = questRank(total) - questRank(qt.dice[1 - die] + 1)
+  const victim = s.players.find(p => p.id === qt.playerId)
+  const harsh = !!victim && harmWeight(s, w, victim, d) > 0.4
+  return drop > 0 && (d === 'hard' || harsh || drop >= 2) ? { die, omenIdx: one } : null
+}
+
+/** Expected value of a Quest outcome table, with the Warlock's own Twist (a 6) when it has one. */
+function questValue(me: Player, ctx: ValueContext, avgDraw: number, t: RepType): number {
+  const loss = me.hoard.length ? averageWorth(me.hoard, ctx, 0) : 0
+  const worth = (total: number) => {
+    const o = questOutcome(total)
+    return -(o.discard ?? 0) * loss + (o.draw ? drawValue(o.draw, avgDraw, me) : 0) + (o.coins ?? 0) + (o.rep ? marginalRep(me.rep, t, o.rep) : 0)
+  }
+  const sixOmen = me.classId === 'warlock' && me.omens.includes(6)
+  let sum = 0
+  for (let a = 1; a <= 6; a++) for (let b = 1; b <= 6; b++) sum += Math.max(worth(a + b), sixOmen ? worth(Math.max(a, b) + 6) : -Infinity)
+  return sum / 36
 }
 
 /** A bot Warlock's pick between the two Curse cards it drew. */

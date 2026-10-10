@@ -327,6 +327,10 @@ export interface GameState {
   imp: { warlockId: string; location: Location } | null
   /** A curse resolving at the start of its victim's turn that needs them to pick a card or window */
   curseChoice: { playerId: string; curseId: CurseId } | null
+  /** A Quest roll waiting for the Warlock to Twist one die (or let it stand) */
+  questTwist: { playerId: string; repType: RepType; dice: [number, number]; warlockId: string } | null
+  /** The last Quest result, for the quester's result screen */
+  questResult: { playerId: string; repType: RepType; dice: [number, number]; total: number; outcome: string } | null
 
   // ── Monk ──  // ── Monk ──
   /** Players the Monk has shared a location with this turn (Flow State + the 7-Momentum Rep spend) */

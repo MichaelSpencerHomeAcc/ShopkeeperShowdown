@@ -245,10 +245,10 @@ Discard 1 Renown Card from your hand. Immediately resolve its Spend effect.
 **Difficulty:** 4/5
 
 ### Class Feature — Bottled Fate
-Keep up to 3 **Omen** dice. Whenever **any** player rolls a 1 or a 6, bottle it as an Omen showing that number.
+Keep up to 2 **Omen** dice. Whenever **any** player rolls a 1 or a 6, bottle it as an Omen showing that number.
 
 ### Passive — Twist of Fate
-After any die is rolled (by anyone, at any time), spend an Omen to change that die to the Omen's number. A twisted die can't be re-rolled. Twisting another player's roll earns you 1 coin.
+After any die is rolled (by anyone, at any time), spend an Omen to change that die to the Omen's number. A twisted die can't be re-rolled. On a Quest, you may Twist one of the two dice — your own Quest or a rival's.
 
 *In the app:* Clash and Duel rolls are made all at once, so the Warlock Twists automatically when that turns a loss into a win.
 
@@ -260,13 +260,13 @@ Choose a player (not the Night Watcher holder, and not someone already cursed). 
 ### Curse deck (8 cards)
 | Curse | At the start of their next turn, the victim… |
 |---|---|
-| Tithe | Pays you 2 coins |
+| Tithe | Pays you 3 coins |
 | Leaky Pockets | Discards 1 card from their hoard (their choice) |
 | Sticky Fingers | Gives you 1 card from their hoard (their choice) |
 | Hexed Shutters | Shutters 1 of their open windows (their choice) until the start of their following turn |
 | Unsettled Shelves | Moves 1 card from their windows back to their hoard (their choice) |
 | Weariness | Exhausts 1 Active token (a Monk loses 1 Momentum) |
-| Misfortune | Rolls a d6: on 1–3 they pay you 2 coins (you may Twist this roll) |
+| Misfortune | Rolls a d6: on 1–3 they pay you 3 coins (you may Twist this roll) |
 | Bad Omen | Nothing — you bottle a 1 as soon as you lay it |
 
 ### Active — Summon Imp
@@ -277,7 +277,7 @@ Place your Imp on a location, where everyone can see it. It **stays until someon
 
 You may Twist that roll. The Night Watcher holder is ignored by the Imp. Using Summon Imp again while it's out moves it to a new location.
 
-**Custom components:** 3 Omen dice, Curse deck (8 cards), Imp figure
+**Custom components:** 2 Omen dice, Curse deck (8 cards), Imp figure
 
 ---
 

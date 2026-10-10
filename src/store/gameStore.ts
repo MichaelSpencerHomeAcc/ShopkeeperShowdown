@@ -243,6 +243,8 @@ function buildInitialGameState(players: Player[]): GameState {
     hexPeek: null,
     imp: null,
     curseChoice: null,
+    questTwist: null,
+    questResult: null,
     monkSharedWith: [],
     monkFlowGained: 0,
     startPlayerOffset: 0,
@@ -397,8 +399,11 @@ export interface GameStore extends GameState {
   recoverGoods: (byPlayerId: string, targetPlayerId: string, cardId: string) => void
   /** Refresh all your Active tokens, then Repair 1 window */
   rest: (playerId: string, windowIdx?: number) => void
-  /** Name a Rep type and roll 2d6 on the Quest table */
-  quest: (playerId: string, repType: RepType) => { dice: [number, number]; total: number; outcome: QuestOutcome } | null
+  /** Name a Rep type and roll 2d6 on the Quest table (the Warlock may Twist one die first) */
+  quest: (playerId: string, repType: RepType) => void
+  /** Warlock: Twist die `dieIdx` of the pending Quest roll with Omen `omenIdx`, or let it stand (null) */
+  twistQuest: (dieIdx: number | null, omenIdx?: number) => void
+  clearQuestResult: () => void
   /** Workshop Appraise 2: look at the top 4 resources, keep up to 2 */
   peekWorkshopAppraise: (playerId: string) => void
   repairAllWindows: (playerId: string, repType?: import('../types').RepType) => void
@@ -551,6 +556,8 @@ const INITIAL: GameState = {
   hexPeek: null,
   imp: null,
   curseChoice: null,
+  questTwist: null,
+  questResult: null,
   monkSharedWith: [],
   monkFlowGained: 0,
   startPlayerOffset: 0,
@@ -633,13 +640,43 @@ export const QUEST_OUTCOMES: QuestOutcome[] = [
   { min: 2, max: 4, name: 'Ambushed', text: 'Discard a random card from your hoard.', discard: 1 },
   { min: 5, max: 6, name: 'Supplies', text: 'Draw 3 resources.', draw: 3 },
   { min: 7, max: 8, name: 'Treasure', text: 'Gain 4 coins and draw 1 resource.', coins: 4, draw: 1 },
-  { min: 9, max: 10, name: 'Trophy', text: 'Gain 2 Rep of the type you named and 2 coins.', rep: 2, coins: 2 },
-  { min: 11, max: 12, name: 'Legend', text: 'Gain 3 Rep of the type you named and 4 coins.', rep: 3, coins: 4 },
+  { min: 9, max: 10, name: 'Trophy', text: 'Gain 2 Rep of the type you named.', rep: 2 },
+  { min: 11, max: 12, name: 'Legend', text: 'Gain 3 Rep of the type you named and 2 coins.', rep: 3, coins: 2 },
 ]
 /** Chance of rolling between min and max on 2d6. */
 export const twoD6Chance = (min: number, max: number) =>
   [2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12].filter(t => t >= min && t <= max).reduce((n, t) => n + (6 - Math.abs(7 - t)), 0) / 36
 export const questOutcome = (total: number) => QUEST_OUTCOMES.find(o => total >= o.min && total <= o.max)!
+
+/** Apply a (possibly Twisted) Quest roll and record it for the quester's result screen. */
+function resolveQuest(get: () => GameStore, set: SetFn, playerId: string, repType: RepType, dice: [number, number]) {
+  const player = get().players.find(p => p.id === playerId)
+  if (!player) return
+  const total = dice[0] + dice[1]
+  const outcome = questOutcome(total)
+  const me = () => get().players.find(p => p.id === playerId)!
+  const bits: string[] = []
+  for (let i = 0; i < (outcome.discard ?? 0); i++) {
+    const lost = me().hoard[Math.floor(Math.random() * me().hoard.length)]
+    if (!lost) { bits.push('nothing to lose'); break }
+    set(s => ({
+      resourceDiscard: [lost, ...s.resourceDiscard],
+      players: s.players.map(p => (p.id === playerId ? { ...p, hoard: p.hoard.filter(c => c.id !== lost.id), stolenHoardCardIds: p.stolenHoardCardIds.filter(id => id !== lost.id) } : p)),
+    }))
+    bits.push(`lost ${lost.name}`)
+  }
+  for (let i = 0; i < (outcome.draw ?? 0); i++) get().drawResource(playerId, true)
+  if (outcome.draw) bits.push(`drew ${outcome.draw}`)
+  const coins = outcome.coins ?? 0, rep = outcome.rep ?? 0
+  if (coins || rep) {
+    set(s => ({ players: s.players.map(p => (p.id === playerId ? { ...p, coins: p.coins + coins, rep: { ...p.rep, [repType]: p.rep[repType] + rep } } : p)) }))
+    if (rep) bits.push(`+${rep} ${repType} Rep`)
+    if (coins) bits.push(`+${coins} coins`)
+  }
+  const detail = bits.length ? ` — ${bits.join(', ')}` : ''
+  set({ diceResult: total, questResult: { playerId, repType, dice, total, outcome: outcome.name } })
+  addLog(set, `${player.name} went on a Quest — rolled ${dice[0]} + ${dice[1]} = ${total}: ${outcome.name}${detail}.`, playerId)
+}
 /** Fencing a stolen card pays this many times its value (no Rep). */
 export const FENCE_MULTIPLIER = 2
 
@@ -959,7 +996,7 @@ export const VISITOR_MOMENTUM = 3
 export const SHARED_REP_MAX = 3
 
 /** Warlock: Omen dice in the jar */
-export const MAX_OMENS = 3
+export const MAX_OMENS = 2
 /** Sorcerer: Arcane Charge cap, and what bending a Surge costs */
 export const MAX_CHARGE = 3
 export const SURGE_REROLL_COST = 1
@@ -1147,8 +1184,8 @@ function applyContestFate<T extends { playerId: string; roll: number; die?: numb
         const other = pick.targetId !== w.id
         const targetName = get().players.find(p => p.id === pick.targetId)?.name
         set(s => ({
-          players: s.players.map(p => (p.id === w.id ? { ...p, omens: p.omens.filter((_, i) => i !== idx), coins: p.coins + (other ? 1 : 0) } : p)),
-          actionLog: [logEntry(`${w.name} twists ${other ? `${targetName}'s` : 'their own'} roll to a ${pick.value} (Twist of Fate).${other ? ' +1 coin.' : ''}`, w.id), ...s.actionLog.slice(0, 49)],
+          players: s.players.map(p => (p.id === w.id ? { ...p, omens: p.omens.filter((_, i) => i !== idx), } : p)),
+          actionLog: [logEntry(`${w.name} twists ${other ? `${targetName}'s` : 'their own'} roll to a ${pick.value} (Twist of Fate).`, w.id), ...s.actionLog.slice(0, 49)],
         }))
         out = pick.rs
       }
@@ -1305,7 +1342,7 @@ function resolveCurseAtTurnStart(get: () => GameStore, set: SetFn, victim: Playe
     return
   }
   if (c.id === 'tithe') {
-    const pay = Math.min(2, victim.coins)
+    const pay = Math.min(3, victim.coins)
     set(s => ({ players: s.players.map(p => (p.id === victim.id ? { ...p, coins: p.coins - pay } : p.id === c.warlockId ? { ...p, coins: p.coins + pay } : p)) }))
     liftCurse(get, set, victim.id, `${victim.name}'s Tithe — ${pay ? `pays ${w?.name} ${pay} coin${pay !== 1 ? 's' : ''}` : 'has nothing to pay'}.`)
   } else if (c.id === 'weariness') {
@@ -1314,7 +1351,7 @@ function resolveCurseAtTurnStart(get: () => GameStore, set: SetFn, victim: Playe
       : { ...p, activeTokens: Math.max(0, p.activeTokens - 1) })) }))
     liftCurse(get, set, victim.id, `${victim.name}'s Weariness — ${victim.classId === 'monk' ? '1 Momentum' : '1 Active token'} lost.`)
   } else if (c.id === 'misfortune') {
-    liftCurse(get, set, victim.id, `${victim.name} rolls against Misfortune (1–3 pays ${w?.name} 2 coins)…`)
+    liftCurse(get, set, victim.id, `${victim.name} rolls against Misfortune (1–3 pays ${w?.name} 3 coins)…`)
     finishRoll(get, set, { playerId: victim.id, rollType: 'misfortune', roll: d6(), note: '', sourceWarlockId: c.warlockId })
   } else {
     liftCurse(get, set, victim.id)
@@ -1371,7 +1408,7 @@ function _applyTrickShotRoll(
     const w = players.find(p => p.id === sourceWarlockId)
     if (!w) return
     if (finalRoll <= 3) {
-      const pay = Math.min(2, player.coins)
+      const pay = Math.min(3, player.coins)
       set(s => ({ players: s.players.map(p => (p.id === playerId ? { ...p, coins: p.coins - pay } : p.id === w.id ? { ...p, coins: p.coins + pay } : p)) }))
       addLog(set, `${player.name}'s Misfortune — rolled ${finalRoll}: pays ${w.name} ${pay} coin${pay !== 1 ? 's' : ''}.`, w.id)
     } else {
@@ -2864,36 +2901,38 @@ export const useGameStore = create<GameStore>((set, get) => ({
   },
 
   quest(playerId, repType) {
-    const player = get().players.find(p => p.id === playerId)
-    if (!player) return null
+    if (!get().players.some(p => p.id === playerId)) return
+    set({ questResult: null })
     const dice: [number, number] = [d6(), d6()]
     // Every die still feeds Bottled Fate and Wild Magic
     for (const die of dice) { bottleOmen(get, set, die); sorcererDie(get, set, playerId, die) }
-    const total = dice[0] + dice[1]
-    const outcome = questOutcome(total)
-    const me = () => get().players.find(p => p.id === playerId)!
-    const bits: string[] = []
-    for (let i = 0; i < (outcome.discard ?? 0); i++) {
-      const lost = me().hoard[Math.floor(Math.random() * me().hoard.length)]
-      if (!lost) { bits.push('nothing to lose'); break }
+    // Twist of Fate: the Warlock may change one die, on anyone's Quest
+    const w = get().players.find(p => p.classId === 'warlock' && p.omens.some(o => o !== dice[0] || o !== dice[1]))
+    if (w) { set({ questTwist: { playerId, repType, dice, warlockId: w.id } }); return }
+    resolveQuest(get, set, playerId, repType, dice)
+  },
+
+  twistQuest(dieIdx, omenIdx) {
+    const qt = get().questTwist
+    if (!qt) return
+    set({ questTwist: null })
+    const dice: [number, number] = [qt.dice[0], qt.dice[1]]
+    const w = get().players.find(p => p.id === qt.warlockId)
+    const value = w && dieIdx !== null && omenIdx !== undefined ? w.omens[omenIdx] : undefined
+    if (w && dieIdx !== null && value !== undefined && value !== dice[dieIdx]) {
+      const other = qt.playerId !== w.id
+      const victim = get().players.find(p => p.id === qt.playerId)?.name
       set(s => ({
-        resourceDiscard: [lost, ...s.resourceDiscard],
-        players: s.players.map(p => (p.id === playerId ? { ...p, hoard: p.hoard.filter(c => c.id !== lost.id), stolenHoardCardIds: p.stolenHoardCardIds.filter(id => id !== lost.id) } : p)),
+        players: s.players.map(p => (p.id === w.id ? { ...p, omens: p.omens.filter((_, i) => i !== omenIdx), } : p)),
+        actionLog: [logEntry(`${w.name} twists ${other ? `${victim}'s` : 'their own'} Quest die: ${dice[dieIdx]} → ${value} (Twist of Fate).`, w.id), ...s.actionLog.slice(0, 49)],
       }))
-      bits.push(`lost ${lost.name}`)
+      dice[dieIdx] = value
     }
-    for (let i = 0; i < (outcome.draw ?? 0); i++) get().drawResource(playerId, true)
-    if (outcome.draw) bits.push(`drew ${outcome.draw}`)
-    const coins = outcome.coins ?? 0, rep = outcome.rep ?? 0
-    if (coins || rep) {
-      set(s => ({ players: s.players.map(p => (p.id === playerId ? { ...p, coins: p.coins + coins, rep: { ...p.rep, [repType]: p.rep[repType] + rep } } : p)) }))
-      if (rep) bits.push(`+${rep} ${repType} Rep`)
-      if (coins) bits.push(`+${coins} coins`)
-    }
-    const detail = bits.length ? ` — ${bits.join(', ')}` : ''
-    set({ diceResult: total })
-    addLog(set, `${player.name} went on a Quest — rolled ${dice[0]} + ${dice[1]} = ${total}: ${outcome.name}${detail}.`, playerId)
-    return { dice, total, outcome }
+    resolveQuest(get, set, qt.playerId, qt.repType, dice)
+  },
+
+  clearQuestResult() {
+    set({ questResult: null })
   },
 
   peekWorkshopAppraise(playerId) {
@@ -5015,8 +5054,8 @@ export const useGameStore = create<GameStore>((set, get) => ({
       const other = pend.playerId !== w.id
       const victim = get().players.find(p => p.id === pend.playerId)?.name
       set(s => ({
-        players: s.players.map(p => (p.id === w.id ? { ...p, omens: p.omens.filter((_, i) => i !== omenIdx), coins: p.coins + (other ? 1 : 0) } : p)),
-        actionLog: [logEntry(`${w.name} twists ${other ? `${victim}'s` : 'their own'} roll: ${pend.roll} → ${roll} (Twist of Fate).${other ? ' +1 coin.' : ''}`, w.id), ...s.actionLog.slice(0, 49)],
+        players: s.players.map(p => (p.id === w.id ? { ...p, omens: p.omens.filter((_, i) => i !== omenIdx), } : p)),
+        actionLog: [logEntry(`${w.name} twists ${other ? `${victim}'s` : 'their own'} roll: ${pend.roll} → ${roll} (Twist of Fate).`, w.id), ...s.actionLog.slice(0, 49)],
       }))
       note += ` (Twisted: ${pend.roll}→${roll})`
     }

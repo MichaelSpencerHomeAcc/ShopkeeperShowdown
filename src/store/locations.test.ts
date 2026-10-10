@@ -35,8 +35,8 @@ describe('Wilderness — Quest', () => {
     const p = playerOf('shaman')
     patchPlayer(p.id, { coins: 0 })
     rolls(6, 6)
-    const r = st().quest(p.id, 'CON')
-    expect(r?.total).toBe(12)
+    st().quest(p.id, 'CON')
+    expect(st().questResult?.total).toBe(12)
     const legend = questOutcome(12)
     expect(playerOf('shaman').rep.CON).toBe(legend.rep)
     expect(playerOf('shaman').coins).toBe(legend.coins)
@@ -47,8 +47,49 @@ describe('Wilderness — Quest', () => {
     const p = playerOf('shaman')
     patchPlayer(p.id, { hoard: cardsOf('ARM', 'CON') })
     rolls(1, 2)
-    expect(st().quest(p.id, 'ARM')?.outcome.name).toBe('Ambushed')
+    st().quest(p.id, 'ARM')
+    expect(st().questResult?.outcome).toBe('Ambushed')
     expect(playerOf('shaman').hoard).toHaveLength(1)
+  })
+})
+
+describe('Wilderness — Quest and the Warlock', () => {
+  it('waits for the Warlock, who can Twist one die of their own Quest', () => {
+    startGame(['warlock', 'shaman'])
+    const w = playerOf('warlock')
+    patchPlayer(w.id, { omens: [6], coins: 0 })
+    rolls(2, 3)
+    st().quest(w.id, 'TRI')
+    expect(st().questTwist).toMatchObject({ playerId: w.id, dice: [2, 3] })
+    expect(st().questResult).toBeNull()
+    st().twistQuest(0, 0) // 2 → 6: 6 + 3 = 9, Trophy
+    expect(st().questTwist).toBeNull()
+    expect(st().questResult).toMatchObject({ total: 9, outcome: 'Trophy' })
+    expect(playerOf('warlock').omens).toEqual([])
+    expect(playerOf('warlock').rep.TRI).toBe(questOutcome(9).rep)
+    expect(playerOf('warlock').coins).toBe(questOutcome(9).coins ?? 0)
+  })
+
+  it("the Warlock can Twist a rival's Quest die", () => {
+    startGame(['warlock', 'shaman'])
+    const w = playerOf('warlock')
+    const t = playerOf('shaman')
+    patchPlayer(w.id, { omens: [1], coins: 0 })
+    patchPlayer(t.id, { hoard: cardsOf('ARM') })
+    rolls(3, 3)
+    st().quest(t.id, 'ARM')
+    st().twistQuest(1, 0) // 3 → 1: 3 + 1 = 4, Ambushed
+    expect(st().questResult?.outcome).toBe('Ambushed')
+    expect(playerOf('shaman').hoard).toHaveLength(0)
+    expect(playerOf('warlock').omens).toEqual([])
+  })
+
+  it('a Quest resolves straight away when no Warlock holds an Omen', () => {
+    startGame(['monk', 'shaman'])
+    rolls(4, 4)
+    st().quest(playerOf('monk').id, 'CON')
+    expect(st().questTwist).toBeNull()
+    expect(st().questResult?.total).toBe(8)
   })
 })
 

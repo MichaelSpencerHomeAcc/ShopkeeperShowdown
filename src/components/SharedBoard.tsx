@@ -15,7 +15,7 @@ import { VisitorPrizeInfo, VisitorPrizeModal } from './VisitorPrizes'
 import { TargetPicker, WindowPicker, type TargetChoice } from './TargetPicker'
 import { IncidentSpotlight } from './IncidentSpotlight'
 import {
-  AppraiseKeepModal, CurseChoiceModal, HexChoiceModal, HotStreakModal, MirrorModal, SurgeModal, TwistModal,
+  AppraiseKeepModal, CurseChoiceModal, HexChoiceModal, HotStreakModal, MirrorModal, SurgeModal, TwistModal, QuestTwistModal,
 } from './NewClassModals'
 import { CURSE_BY_ID } from '../data/curses'
 import { useIncidentFeed, useIncidentStore } from '../store/incidentStore'
@@ -168,7 +168,7 @@ export function SharedBoard({ canAct = true, localPlayerName }: SharedBoardProps
     auction, tradeWithFleaMarket, breakWindow,
     resourceDeck, resourceDiscard,
     townCrierPeek, completeTownCrier, activeVisitors, visitorDemandRemaining, visitorPrizeQueue,
-    surge, mirrorPending, hotStreak, twistPending, hexPeek, imp, curseChoice,
+    surge, mirrorPending, hotStreak, twistPending, questTwist, hexPeek, imp, curseChoice,
     professionalSlots,
     actionLog, lastGuildFencedCard,
     steal, heist,
@@ -1496,7 +1496,10 @@ export function SharedBoard({ canAct = true, localPlayerName }: SharedBoardProps
       {hexPeek && (isMe(hexPeek.warlockId)
         ? <HexChoiceModal />
         : <WaitingOverlay name={players.find(p => p.id === hexPeek.warlockId)?.name} action="choosing a curse" classId="warlock" />)}
-      {surge && !twistPending && (isMe(surge.playerId)
+      {questTwist && (isMe(questTwist.warlockId)
+        ? <QuestTwistModal />
+        : <WaitingOverlay name={players.find(p => p.id === questTwist.warlockId)?.name} action="deciding whether to Twist a Quest die" classId="warlock" />)}
+      {surge && !twistPending && !questTwist && (isMe(surge.playerId)
         ? <SurgeModal />
         : <WaitingOverlay name={players.find(p => p.id === surge.playerId)?.name} action="unleashing a Wild Surge" classId="sorcerer" />)}
       {mirrorPending && !surge && (isMe(mirrorPending.playerId)

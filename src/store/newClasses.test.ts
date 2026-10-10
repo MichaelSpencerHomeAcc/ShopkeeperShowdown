@@ -172,7 +172,7 @@ describe('Warlock', () => {
     expect(me('warlock').omens).toEqual([1])
   })
 
-  it('Twist of Fate: turns a rival’s Gather 5 into a 1 and earns a coin', () => {
+  it('Twist of Fate: turns a rival’s Gather 5 into a 1', () => {
     myTurn(['warlock', 'shaman'], 'shaman')
     const w = me('warlock')
     patchPlayer(w.id, { omens: [1] })
@@ -184,7 +184,7 @@ describe('Warlock', () => {
     st().resolveTwist(0)
     expect(me('shaman').hoard.length).toBe(before + 1)
     expect(me('warlock').omens).toEqual([])
-    expect(me('warlock').coins).toBe(coins + 1)
+    expect(me('warlock').coins).toBe(coins)
   })
 
   it('letting a roll stand keeps it', () => {
@@ -212,8 +212,8 @@ describe('Warlock', () => {
     const wCoins = me('warlock').coins
     untilTurnOf(t.id)
     expect(me('shaman').curse).toBeNull()
-    expect(me('shaman').coins).toBe(3)
-    expect(me('warlock').coins).toBeGreaterThanOrEqual(wCoins + 2)
+    expect(me('shaman').coins).toBe(2)
+    expect(me('warlock').coins).toBeGreaterThanOrEqual(wCoins + 3)
     expect(me('warlock').curseDeck).toEqual(['badOmen', 'weariness', 'tithe'])
   })
 
@@ -249,8 +249,8 @@ describe('Warlock', () => {
     untilTurnOf(me('shaman').id)
     expect(st().twistPending).toMatchObject({ rollType: 'misfortune', roll: 5 })
     st().resolveTwist(0)
-    expect(me('shaman').coins).toBe(4)
-    // +2 from the curse, +1 for twisting a rival's roll
+    expect(me('shaman').coins).toBe(3)
+    // +3 from the curse (Twisting earns nothing extra)
     expect(me('warlock').coins).toBe(wCoins + 3)
   })
 

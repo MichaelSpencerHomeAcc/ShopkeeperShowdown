@@ -1,7 +1,7 @@
 import { useState, useEffect } from 'react'
 import type { Location, RepType, Player, ResourceCard, WorkOrderCard, DemandMap } from '../types'
 import { canPlayerCraft } from '../utils/crafting'
-import { useGameStore, fitsDemand, MAX_SALES_PER_VISITOR, CONSULT_COINS, QUEST_OUTCOMES, twoD6Chance, type QuestOutcome } from '../store/gameStore'
+import { useGameStore, fitsDemand, MAX_SALES_PER_VISITOR, CONSULT_COINS, QUEST_OUTCOMES, twoD6Chance } from '../store/gameStore'
 import { VisitorPrizeInfo } from './VisitorPrizes'
 import { TargetPicker, type TargetChoice } from './TargetPicker'
 import { breakWindowRule, heistWindowRule, stealRule, windowTargetRule, type WindowRule } from '../utils/targets'
@@ -1183,25 +1183,38 @@ function QuestActionUI({ player, onBack, onConsumeAction, onClose }: {
   onConsumeAction: () => void
   onClose: () => void
 }) {
-  const quest = useGameStore(s => s.quest)
+  const { quest, questTwist, questResult, clearQuestResult, players } = useGameStore()
   const [repType, setRepType] = useState<RepType>('ARM')
-  const [result, setResult] = useState<{ dice: [number, number]; total: number; outcome: QuestOutcome } | null>(null)
+  const [rolled, setRolled] = useState(false)
 
-  if (result) {
+  if (rolled && questTwist?.playerId === player.id) {
+    const w = players.find(p => p.id === questTwist.warlockId)
     return (
-      <div className="space-y-3 text-center">
-        <div className="text-2xl text-parchment-200">🎲 {result.dice[0]} + {result.dice[1]} = <span className="font-bold text-gold-300">{result.total}</span></div>
-        <div className="text-lg font-display font-bold text-parchment-100">{result.outcome.name}</div>
-        <div className="text-sm text-parchment-300">{result.outcome.text.replace('the type you named', repType)}</div>
-        <button type="button" onClick={onClose} className="btn-primary text-xs px-4 py-1.5">Done</button>
+      <div className="space-y-2 text-center">
+        <div className="text-2xl text-parchment-200">🎲 {questTwist.dice[0]} + {questTwist.dice[1]}</div>
+        <div className="text-sm text-purple-300 animate-pulse">🔮 {w?.id === player.id ? 'Twist of Fate — choose in the prompt.' : `${w?.name} is deciding whether to Twist a die…`}</div>
       </div>
     )
   }
 
+  if (rolled && questResult?.playerId === player.id) {
+    const outcome = QUEST_OUTCOMES.find(o => o.name === questResult.outcome)
+    return (
+      <div className="space-y-3 text-center">
+        <div className="text-2xl text-parchment-200">🎲 {questResult.dice[0]} + {questResult.dice[1]} = <span className="font-bold text-gold-300">{questResult.total}</span></div>
+        <div className="text-lg font-display font-bold text-parchment-100">{questResult.outcome}</div>
+        <div className="text-sm text-parchment-300">{outcome?.text.replace('the type you named', questResult.repType)}</div>
+        <button type="button" onClick={() => { clearQuestResult(); onClose() }} className="btn-primary text-xs px-4 py-1.5">Done</button>
+      </div>
+    )
+  }
+
+  if (rolled) return <div className="text-xs text-parchment-400 animate-pulse py-3 text-center">Rolling…</div>
+
   return (
     <div className="space-y-3">
       <BackButton onBack={onBack} />
-      <p className="text-sm text-parchment-300">Name a Rep type, then roll 2d6:</p>
+      <p className="text-sm text-parchment-300">Name a Rep type, then roll 2d6. A Warlock may Twist one of the dice.</p>
       <table className="w-full text-xs">
         <tbody>
           {QUEST_OUTCOMES.map(o => (
@@ -1223,7 +1236,7 @@ function QuestActionUI({ player, onBack, onConsumeAction, onClose }: {
       <IrreversibleWarning />
       <button
         type="button"
-        onClick={() => { const r = quest(player.id, repType); if (r) { onConsumeAction(); setResult(r) } }}
+        onClick={() => { quest(player.id, repType); onConsumeAction(); setRolled(true) }}
         className="btn-primary text-xs px-4 py-1.5"
       >
         Set out on the Quest 🎲

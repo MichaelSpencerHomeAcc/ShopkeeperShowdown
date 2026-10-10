@@ -339,7 +339,7 @@ export function WarlockAbilities({ player, isActiveTurn }: { player: Player; isA
       <ClassHeader player={player} right={<ActiveTokens player={player} />} />
 
       <Passive title="Passive · Twist of Fate">
-        <div>After <b>any</b> die is rolled — by anyone — spend an Omen to change it to the Omen&apos;s number. Twisting someone else&apos;s roll earns you 1 coin.</div>
+        <div>After <b>any</b> die is rolled — by anyone — spend an Omen to change it to the Omen&apos;s number.</div>
         <div className="text-xs text-parchment-500">Bottled Fate: every 1 or 6 rolled at the table goes into your jar (max {MAX_OMENS}). In Clashes and Duels you Twist automatically when it turns a loss into a win.</div>
         <div className="pt-1"><OmenJar omens={player.omens} max={MAX_OMENS} /></div>
       </Passive>

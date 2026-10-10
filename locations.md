@@ -58,15 +58,15 @@ Roll your d6. Draw that many resources from the top of the resource deck.
 Look at the top 4 resources of the discard pile. Keep 2. Return the rest in any order on top of the discard pile.
 
 **Quest**
-Name a Reputation type, then roll 2d6:
+Name a Reputation type, then roll 2d6. The Warlock may Twist one of the two dice (on anyone's Quest, including their own).
 
 | Roll | Result |
 |---|---|
 | 2–4 | **Ambushed:** discard a random card from your hoard |
 | 5–6 | **Supplies:** draw 3 resources |
 | 7–8 | **Treasure:** gain 4 coins and draw 1 resource |
-| 9–10 | **Trophy:** gain 2 Rep of the named type and 2 coins |
-| 11–12 | **Legend:** gain 3 Rep of the named type and 4 coins |
+| 9–10 | **Trophy:** gain 2 Rep of the named type |
+| 11–12 | **Legend:** gain 3 Rep of the named type and 2 coins |
 
 ---
 

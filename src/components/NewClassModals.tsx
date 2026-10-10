@@ -1,6 +1,6 @@
 import { useState, type ReactNode } from 'react'
 import type { Player, RepType, ResourceType } from '../types'
-import { useGameStore, SURGE_REROLL_COST, SURGE_SHIFT_COST } from '../store/gameStore'
+import { useGameStore, SURGE_REROLL_COST, SURGE_SHIFT_COST, questOutcome } from '../store/gameStore'
 import { TargetPicker, type TargetChoice } from './TargetPicker'
 import { ResourceCardMini } from './ResourceCardMini'
 import { ProfessionalUI } from './LocationActionPanel'
@@ -20,7 +20,7 @@ const TYPE_NAME: Record<ResourceType, string> = { ARM: 'Armament', CON: 'Consuma
 const ROLL_NAME = { gather: 'Gather', auction: 'Auction', mascot: 'Mascot', imp: 'the Imp', misfortune: 'Misfortune' } as const
 const ROLL_STAKES: Partial<Record<keyof typeof ROLL_NAME, string>> = {
   imp: ' — 1–2 it steals, 3–4 it breaks, 5–6 banished',
-  misfortune: ' — 1–3 pays the Warlock 2 coins',
+  misfortune: ' — 1–3 pays the Warlock 3 coins',
 }
 
 function Modal({ border, children, wide = false }: { border: string; children: ReactNode; wide?: boolean }) {
@@ -367,7 +367,7 @@ export function TwistModal() {
         <span className="text-sm text-parchment-400 mt-1">{pend.roll}{ROLL_STAKES[pend.rollType] ?? ''}</span>
       </div>
       <div className="text-xs text-parchment-400 text-center">
-        Spend an Omen to change the die to its number.{!own && ' Twisting someone else’s roll earns you 1 coin.'}
+        Spend an Omen to change the die to its number.
       </div>
       <div className="flex justify-center gap-2">
         {w.omens.map((o, i) => (
@@ -379,6 +379,43 @@ export function TwistModal() {
         ))}
       </div>
       <button type="button" onClick={() => resolve(null)} className="btn-secondary w-full text-sm py-2">Let it stand</button>
+    </Modal>
+  )
+}
+
+/** Twist of Fate on a Quest roll: change one of the two dice. */
+export function QuestTwistModal() {
+  const qt = useGameStore(s => s.questTwist)
+  const players = useGameStore(s => s.players)
+  const twist = useGameStore(s => s.twistQuest)
+  if (!qt) return null
+  const w = players.find(p => p.id === qt.warlockId)
+  const quester = players.find(p => p.id === qt.playerId)
+  if (!w || !quester) return null
+  const own = w.id === quester.id
+  const total = qt.dice[0] + qt.dice[1]
+  return (
+    <Modal border="border-purple-500/80" wide>
+      <Title player={w} icon="🔮" title="Twist of Fate" sub={<>{own ? 'You' : quester.name} rolled {total} on a Quest — <b className="text-purple-200">{questOutcome(total).name}</b></>} />
+      <div className="flex justify-center gap-8">
+        {qt.dice.map((d, di) => (
+          <div key={di} className="flex flex-col items-center gap-2">
+            <span className="text-7xl leading-none">{FACES[d - 1]}</span>
+            <div className="flex flex-col gap-1">
+              {w.omens.map((o, oi) => (o === d ? null : (
+                <button key={oi} type="button" onClick={() => twist(di, oi)}
+                  className={`rounded-lg border-2 px-3 py-1 text-xs font-bold ${o === 1 ? 'border-purple-400 bg-purple-950/60 text-purple-100' : 'border-amber-300 bg-amber-950/50 text-amber-100'} hover:brightness-125`}>
+                  Twist to {o} → {questOutcome(qt.dice[1 - di] + o).name}
+                </button>
+              )))}
+            </div>
+          </div>
+        ))}
+      </div>
+      <div className="text-xs text-parchment-400 text-center">
+        Spend an Omen to change one die.
+      </div>
+      <button type="button" onClick={() => twist(null)} className="btn-secondary w-full text-sm py-2">Let it stand</button>
     </Modal>
   )
 }

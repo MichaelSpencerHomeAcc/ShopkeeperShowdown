@@ -98,7 +98,7 @@ Prizes are no longer dealt at random: each Visitor now has a fixed 1st and 2nd p
 
 ### Kept the same on purpose (small coin effects)
 
-Clan toll 1 · Twist of Fate +1 coin · Misfortune 2 coins · Brazen Bounty Hunter takes 2 coins · Negotiate gives both players +2 coins · Merchant of Saltholm +3 coins · Shadow of Vel'sha +2 coins · Forge of Ironpeak +2 coins · Assorted Seeds return effect 2 coins · Gold Rain surge · unspent Momentum still scores 1 coin each.
+Clan toll 1 · Brazen Bounty Hunter takes 2 coins · Merchant of Saltholm +3 coins · Shadow of Vel'sha +2 coins · Forge of Ironpeak +2 coins · Assorted Seeds return effect 2 coins · Gold Rain surge · unspent Momentum still scores 1 coin each.
 
 ---
 
@@ -130,6 +130,8 @@ Part 1 raised the set bonus from 6 to 10 (it narrowed the gap between classes fr
 | **Rogue** | — | no change (a 5th starting Counterfeit was tried, then undone once Fence paid double) | 4 cards, as before |
 | **Shaman** | Call Lightning | you Draw 1 | you Draw 2 |
 | **Sorcerer** | Arcane Charge to shift a Surge ±1 | 2 Charge | 1 Charge (re-roll still 1) |
+| **Warlock** | Omen jar size | 3 Omens | 2 Omens |
+| **Warlock** | Twist of Fate | +1 coin for Twisting someone else's roll | no coin; may Twist one die of any Quest (own or rival's) |
 | **Warlock** | Hex / curse deck | see below | see below |
 | **Warlock** | Summon Imp | see below | see below |
 | **Monk** | Momentum for completing a Visitor | 2 | 3 |
@@ -142,13 +144,13 @@ Part 1 raised the set bonus from 6 to 10 (it narrowed the gap between classes fr
 
 | Old curse | Old effect | New curse | New effect (at the start of the victim's next turn) |
 |---|---|---|---|
-| Tithe | Their next Visitor sale pays the Warlock 1 coin | **Tithe** | Pay the Warlock **2 coins** |
+| Tithe | Their next Visitor sale pays the Warlock 1 coin | **Tithe** | Pay the Warlock **3 coins** |
 | Leaky Pockets | Cheapest hoard card discarded | **Leaky Pockets** | Discard 1 hoard card (**their choice**) |
 | Jinx | Their next die roll is 1 lower | **Sticky Fingers** | Give the Warlock 1 hoard card (their choice) |
 | Butterfingers | Next Gather/Mascot draws 1 fewer | **Hexed Shutters** | Shutter 1 of their open windows (their choice) until their following turn |
 | Unsettled Shelves | A random window card returns to hoard | **Unsettled Shelves** | Move 1 window card back to hoard (**their choice**) |
 | Toll of Shadows | Next location action costs 1 coin to the Warlock | **Weariness** | Exhaust 1 Active token (a Monk loses 1 Momentum) |
-| Hexed Goods | Next Visitor sale earns no Rep | **Misfortune** | Roll a d6: on 1–3 pay the Warlock 2 coins (the Warlock may Twist the roll) |
+| Hexed Goods | Next Visitor sale earns no Rep | **Misfortune** | Roll a d6: on 1–3 pay the Warlock 3 coins (the Warlock may Twist the roll) |
 | Bad Omen | Warlock bottles a 1 | **Bad Omen** | No change: the Warlock bottles a 1 straight away |
 
 ### Warlock — Summon Imp
@@ -176,7 +178,7 @@ Every location keeps 3 spaces. Dead spaces were replaced with combinations of ex
 | Guildhall | Consultation: pay coins for 1 Rep | **Consultation:** spend 1 resource from your hoard → 1 Rep of its type + 2 coins |
 | Guildhall | Negotiate | **Town Crier** (moved from Barracks): swap in a Visitor from the top 3, then sell up to 2 cards into it |
 | Tavern | Refresh Actives | **Rest:** Refresh all Active tokens, then Repair 1 window |
-| Wilderness | Pitch Camp | **Quest:** name a Rep type, roll 2d6 (2–4 lose a card · 5–6 draw 3 · 7–8 4 coins + draw 1 · 9–10 2 Rep + 2 coins · 11–12 3 Rep + 4 coins) |
+| Wilderness | Pitch Camp | **Quest:** name a Rep type, roll 2d6 (2–4 lose a card · 5–6 draw 3 · 7–8 4 coins + draw 1 · 9–10 2 Rep · 11–12 3 Rep + 2 coins). The Warlock may Twist one die, on anyone's Quest |
 | Barracks | Report the Crime: repair all, or +1 Rep and a rival discards a Stolen card (reporter picked it) | **Report the Crime:** a rival discards a Stolen card of **their** choice; +1 Rep of your choice (repair moved to Fortify) |
 | Barracks | Hire Bodyguard | **Fortify:** Repair all your windows and take the Night Watcher |
 | Barracks | Town Crier | **Recover Goods:** take 1 Stolen card from a rival's hoard (it stays Stolen) |
@@ -217,7 +219,8 @@ Win index by class (1.00 = fair share). 8,000 mixed games of 2–6 players each.
 | **Final (hard bots)** | **0.97** | **1.05** | **0.92** | **0.99** | **1.07** | **1.03** | **1.00** | **0.97** | **0.16** |
 | Final (medium bots) | 0.95 | 1.12 | 0.93 | 1.07 | 1.01 | 1.12 | 0.94 | 0.86 | 0.27 |
 | + Fence pays double, Rogue back to 4 Counterfeits (hard) | 0.90 | 1.06 | 0.98 | 1.02 | 1.07 | 1.02 | 1.01 | 0.93 | 0.17 |
-| **+ Location rework, Monk 3 Momentum, Barbarian max 2, Warlock 3 Omens (hard, 12,000 games)** | **1.05** | **1.00** | **0.90** | **1.04** | **1.02** | **1.00** | **0.97** | **1.01** | **0.15** |
+| + Location rework, Monk 3 Momentum, Barbarian max 2, Warlock 3 Omens (hard, 12,000 games) | 1.05 | 1.00 | 0.90 | 1.04 | 1.02 | 1.00 | 0.97 | 1.01 | 0.15 |
+| **+ Warlock Twists Quest dice, 2 Omens, no Twist coin, Tithe/Misfortune 3 coins, weaker Quest top (hard, 12,000 games)** | **1.06** | **1.05** | **0.91** | **1.03** | **0.98** | **1.00** | **0.95** | **1.02** | **0.15** |
 
 Medium bots play the Warlock less well (0.86); that's expected for a class with this much decision-making.
 

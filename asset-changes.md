@@ -12,7 +12,7 @@ Every physical component that needs redesigning, compared with `main` (PR #15). 
 | Location boards | 10 of 18 spaces | New layout: see section 4 (Negotiate, Pitch Camp, Hire Bodyguard and Sell to a Visitor are gone) |
 | Renown card | 1 | Forge of Ironpeak |
 | Class boards | 6 | Monk, Paladin, Ranger, Shaman, Sorcerer, Warlock |
-| Warlock components | 8 cards + figure | New Curse deck, Imp figure (Omen dice unchanged: 3) |
+| Warlock components | 8 cards + dice + figure | New Curse deck, 2 Omen dice (was 3), Imp figure |
 | Player aid / scoring card | 1 | Rep table, set bonus 5, starting coins 2 |
 | Coins | — | Fewer needed; denominations suggested below |
 | **No change** | — | Professionals, Counterfeits, Ambush cards, Surge table, Renown cards other than Forge, Barbarian and Rogue boards |
@@ -240,7 +240,7 @@ Every board keeps 3 spaces. **Bold** = new or changed.
 |---|---|---|---|
 | Guildhall | Hire a Professional | **Consultation:** spend 1 resource from your hoard → 1 Rep of its type + 2 coins (was: pay coins for 1 Rep) | **Town Crier** (moved from Barracks): swap in a Visitor from the top 3, then sell up to 2 cards into it (replaces Negotiate) |
 | Tavern | **Rest:** Refresh all your Active tokens, then Repair 1 window (was: Refresh Actives) | **Auction 1:** roll d6, gain half (rounded up, 1–3) | Trade 3 |
-| Wilderness | Gather | Forage 2 | **Quest** (replaces Pitch Camp): name a Rep type, roll 2d6 (table below) |
+| Wilderness | Gather | Forage 2 | **Quest** (replaces Pitch Camp): name a Rep type, roll 2d6 (table below); the Warlock may Twist one die |
 | Barracks | **Report the Crime:** a rival discards a Stolen card of their choice; you gain 1 Rep of your choice (the repair option moved to Fortify) | **Fortify:** Repair all your windows and take the Night Watcher (replaces Hire Bodyguard) | **Recover Goods:** take 1 Stolen card from a rival's hoard; it stays Stolen. The Night Watcher holder can't be targeted (replaces Town Crier) |
 | Workshop | Take 2 | Craft | **Appraise 2:** look at the top 4 resources, keep up to 2 (replaces Sell to a Visitor) |
 | Thieves' Guild | Steal 1 / Break 1 | **Fence:** sell 1 Stolen resource for **double** its value (no Rep); its type must differ from the last card fenced here | Launder 3 |
@@ -252,8 +252,8 @@ Every board keeps 3 spaces. **Bold** = new or changed.
 | 2–4 | 17% | **Ambushed:** discard a random card from your hoard |
 | 5–6 | 25% | **Supplies:** draw 3 resources |
 | 7–8 | 31% | **Treasure:** gain 4 coins and draw 1 resource |
-| 9–10 | 19% | **Trophy:** gain 2 Rep of the named type and 2 coins |
-| 11–12 | 8% | **Legend:** gain 3 Rep of the named type and 4 coins |
+| 9–10 | 19% | **Trophy:** gain 2 Rep of the named type |
+| 11–12 | 8% | **Legend:** gain 3 Rep of the named type and 2 coins |
 
 ---
 
@@ -302,9 +302,9 @@ Every board keeps 3 spaces. **Bold** = new or changed.
 - **Active:** Wild Surge — Roll on the Surge Table twice, one after the other (and gain 1 Charge to bend them).
 
 ### Warlock — Kaelan Mortisbane
-**What changed:** Hex now lays a face-up curse that resolves at the start of the victim's turn; the Imp stays until banished, hits every visitor, and eats cards instead of stealing them. (Omens stay at 3.)
+**What changed:** Hex now lays a face-up curse that resolves at the start of the victim's turn; the Imp stays until banished, hits every visitor, and eats cards instead of stealing them. Omens max 2 (was 3); Twisting no longer earns a coin; the Warlock can Twist one die of any Quest.
 
-- **Passive:** Twist of Fate — After any die is rolled, by anyone, spend an Omen to change it to the Omen's number. Twisting someone else's roll earns you 1 coin. Bottled Fate: whenever any player rolls a 1 or a 6, bottle it as an Omen (max 3). In Clashes and Duels you Twist automatically when it turns a loss into a win.
+- **Passive:** Twist of Fate — After any die is rolled, by anyone, spend an Omen to change it to the Omen's number (on a Quest, change one of the two dice). Bottled Fate: whenever any player rolls a 1 or a 6, bottle it as an Omen (max 2). In Clashes and Duels you Twist automatically when it turns a loss into a win.
 - **Active:** Hex — Draw 2 Curse cards and lay one face-up in front of a player. At the start of their next turn they resolve it (pay you coins, give up a card of their choice, shutter a window…) and hand it back. The Night Watcher protects against Hexes.
 - **Active:** Summon Imp — Your Imp lurks at a location until someone banishes it. Every other player who uses that location rolls: 1–2 the Imp eats a random card from their hoard, 3–4 it breaks one of their windows, 5–6 it's banished. You can Twist that roll, and spend a token to move the Imp.
 
@@ -318,17 +318,17 @@ Every board keeps 3 spaces. **Bold** = new or changed.
 
 | Card | Effect (resolve at the start of your turn, then hand the card back to the Warlock) | Flavour |
 |---|---|---|
-| 🪙 **Tithe** | Pay the Warlock 2 coins. | *The shadows always take their cut.* |
+| 🪙 **Tithe** | Pay the Warlock 3 coins. | *The shadows always take their cut.* |
 | 🕳️ **Leaky Pockets** | Discard 1 card from your hoard (your choice). | *Just a small hole. Just a small loss.* |
 | 🖐️ **Sticky Fingers** | Give the Warlock 1 card from your hoard (your choice). | *Something unseen tugs at the satchel.* |
 | 🪟 **Hexed Shutters** | Shutter 1 of your open windows (your choice) until the start of your next turn. | *The latch won’t budge, no matter how you pull.* |
 | 🌫️ **Unsettled Shelves** | Move 1 card from your windows back to your hoard (your choice). | *Things never stay where you put them.* |
 | 😮‍💨 **Weariness** | Exhaust 1 of your Active tokens (a Monk loses 1 Momentum). | *Your limbs feel like lead this morning.* |
-| 🎲 **Misfortune** | Roll a d6. On a 1–3, pay the Warlock 2 coins. | *Luck sours like milk left in the sun.* |
+| 🎲 **Misfortune** | Roll a d6. On a 1–3, pay the Warlock 3 coins. | *Luck sours like milk left in the sun.* |
 | 🐦 **Bad Omen** | No effect on you — the Warlock bottles a 1 straight away. | *A crow lands on the sign. Nobody says a word.* |
 
 ### Omen dice
-**3 dice** (unchanged).
+**2 dice** (was 3).
 
 ### Imp
 Figure or standee, placed on a location. Reference text for the board or a card:
