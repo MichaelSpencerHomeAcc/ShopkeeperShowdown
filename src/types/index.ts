@@ -283,7 +283,7 @@ export interface GameState {
   /** Type of the last card fenced at the Thieves' Guild (shown on board tile) */
   lastGuildFenceType: ResourceType | null
   diceResult: number | null
-  townCrierPeek: { playerId: string; cards: VisitorCard[] } | null
+  townCrierPeek: { playerId: string; cards: VisitorCard[]; sell?: boolean } | null
   /** source: who asked for the peek — Sorcerer/Monk peeks get their own picker */
   appraisePeek: { playerId: string; cards: ResourceCard[]; maxKeep: number; source?: 'magic' | 'momentum' } | null
   foragePeek: { playerId: string; cards: ResourceCard[]; source?: 'location' | 'patience' } | null

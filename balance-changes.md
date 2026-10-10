@@ -13,11 +13,11 @@ All numbers were checked in hard-bot simulations: 8,000 games per test across 2�
 
 | | Before (`main`) | After |
 |---|---|---|
-| Average final score | ~230 | ~124 |
+| Average final score | 230 | 124 |
 | Typical winning score | 229–302 | 122–161 |
-| Coins per player at game end | ~146 | ~79 |
-| Coins changing hands per 4-player game | ~590 | ~320 |
-| Coin pieces handled per 4-player game (with 1/5/10 pieces) | ~173 | ~146 |
+| Coins per player at game end | 146 | 79 |
+| Coins changing hands per 4-player game | 590 | 320 |
+| Coin pieces handled per 4-player game (with 1/5/10 pieces) | 173 | 146 |
 | Win index range across all 8 classes (hard bots) | 0.89 – 1.19 | 0.92 – 1.07 |
 | Gap between strongest and weakest class | 0.30 | 0.16 |
 
@@ -123,16 +123,16 @@ Part 1 raised the set bonus from 6 to 10 (it narrowed the gap between classes fr
 
 | Class | Change | Old | New |
 |---|---|---|---|
-| **Barbarian** | Fearsome Champion turn-start income | 1 coin per Broken window on the board (max 2) | 1 coin if at least one window on the board is Broken |
+| **Barbarian** | — | no change (a cut to 1 coin was tried, then undone after the location rework) | 1 coin per Broken window, max 2, as before |
 | **Paladin** | Forge of Ironpeak (Renown) passive | +3 coins when you complete a Work Order | +2 coins |
+| **Paladin** | Honourable Trade | +1 Rep for a Negotiate, a Work Order, or Report the Crime repairing 1+ windows | +1 Rep for a Work Order, or a **Fortify that repairs 2+ windows** |
 | **Ranger** | Master of the Wilderness free gather | half your d6, rounded **down** (min 1) | half your d6, rounded **up**, **minimum 2** |
 | **Rogue** | — | no change (a 5th starting Counterfeit was tried, then undone once Fence paid double) | 4 cards, as before |
 | **Shaman** | Call Lightning | you Draw 1 | you Draw 2 |
 | **Sorcerer** | Arcane Charge to shift a Surge ±1 | 2 Charge | 1 Charge (re-roll still 1) |
-| **Warlock** | Omen jar size | 3 Omens | 2 Omens |
 | **Warlock** | Hex / curse deck | see below | see below |
 | **Warlock** | Summon Imp | see below | see below |
-| **Monk** | — | no change | no change |
+| **Monk** | Momentum for completing a Visitor | 2 | 3 |
 
 ### Warlock — Hex (curse deck)
 
@@ -167,6 +167,34 @@ The Warlock can still Twist the Imp's roll.
 
 ---
 
+## 3b. Locations
+
+Every location keeps 3 spaces. Dead spaces were replaced with combinations of existing keywords, so there are no new mechanics to learn.
+
+| Location | Old space | New space |
+|---|---|---|
+| Guildhall | Consultation: pay coins for 1 Rep | **Consultation:** spend 1 resource from your hoard → 1 Rep of its type + 2 coins |
+| Guildhall | Negotiate | **Town Crier** (moved from Barracks): swap in a Visitor from the top 3, then sell up to 2 cards into it |
+| Tavern | Refresh Actives | **Rest:** Refresh all Active tokens, then Repair 1 window |
+| Wilderness | Pitch Camp | **Quest:** name a Rep type, roll 2d6 (2–4 lose a card · 5–6 draw 3 · 7–8 4 coins + draw 1 · 9–10 2 Rep + 2 coins · 11–12 3 Rep + 4 coins) |
+| Barracks | Report the Crime: repair all, or +1 Rep and a rival discards a Stolen card (reporter picked it) | **Report the Crime:** a rival discards a Stolen card of **their** choice; +1 Rep of your choice (repair moved to Fortify) |
+| Barracks | Hire Bodyguard | **Fortify:** Repair all your windows and take the Night Watcher |
+| Barracks | Town Crier | **Recover Goods:** take 1 Stolen card from a rival's hoard (it stays Stolen) |
+| Workshop | Sell to a Visitor | **Appraise 2:** look at the top 4 resources, keep up to 2 (what Workshop had before Sell to a Visitor) |
+
+Bot usage per 4-player game (hard bots, 12,000 games):
+
+| Space | Before | After |
+|---|---|---|
+| Report the Crime | 11.2 | 8.3 |
+| Consultation | 0.2 | 1.0 |
+| Town Crier | 0.0 | 4.2 |
+| Rest (was Refresh) | 0.1 | 0.5 |
+| Quest (was Pitch Camp) | 0.02 | 1.4 |
+| Fortify (was Bodyguard + repair) | 0.03 + 0.5 | 1.4 |
+| Recover Goods | — | 2.0 |
+| Appraise 2 (was Sell to a Visitor) | 5.2 | 2.5 |
+
 ## 4. Bots
 
 - Bot valuations were recalibrated for the halved economy. Every hand-set worth that isn't a real coin amount now goes through one `VALUE_SCALE` (0.5) in `src/bots/evaluate.ts`, and the bots expect an average auction payout of 2.
@@ -188,7 +216,8 @@ Win index by class (1.00 = fair share). 8,000 mixed games of 2–6 players each.
 | Halved economy, no class tuning | 1.23 | 1.07 | 0.82 | 1.03 | 0.80 | 1.03 | 0.86 | 1.16 | 0.43 |
 | **Final (hard bots)** | **0.97** | **1.05** | **0.92** | **0.99** | **1.07** | **1.03** | **1.00** | **0.97** | **0.16** |
 | Final (medium bots) | 0.95 | 1.12 | 0.93 | 1.07 | 1.01 | 1.12 | 0.94 | 0.86 | 0.27 |
-| **+ Fence pays double, Rogue back to 4 Counterfeits (hard)** | **0.90** | **1.06** | **0.98** | **1.02** | **1.07** | **1.02** | **1.01** | **0.93** | **0.17** |
+| + Fence pays double, Rogue back to 4 Counterfeits (hard) | 0.90 | 1.06 | 0.98 | 1.02 | 1.07 | 1.02 | 1.01 | 0.93 | 0.17 |
+| **+ Location rework, Monk 3 Momentum, Barbarian max 2, Warlock 3 Omens (hard, 12,000 games)** | **1.05** | **1.00** | **0.90** | **1.04** | **1.02** | **1.00** | **0.97** | **1.01** | **0.15** |
 
 Medium bots play the Warlock less well (0.86); that's expected for a class with this much decision-making.
 

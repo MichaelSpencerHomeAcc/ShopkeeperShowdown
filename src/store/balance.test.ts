@@ -34,8 +34,8 @@ describe('Barbarian — Fearsome Champion', () => {
     expect(barbarianIncome(1)).toBe(1)
   })
   it(`caps at ${FEARSOME_CHAMPION_MAX} coins`, () => {
-    expect(FEARSOME_CHAMPION_MAX).toBe(1)
-    expect(barbarianIncome(5)).toBe(1)
+    expect(FEARSOME_CHAMPION_MAX).toBe(2)
+    expect(barbarianIncome(5)).toBe(2)
   })
 })
 
@@ -68,9 +68,12 @@ describe('Paladin — Honourable Trade', () => {
     expect(playerOf('paladin').rep.ARM).toBe(0)
   })
 
-  it('gets 1 Reputation when a window is actually repaired', () => {
+  it('gets 1 Reputation only when 2+ windows are repaired', () => {
     const pal = paladinGame()
     breakWindows(pal, 1)
+    st().repairAllWindows(pal.id, 'CON')
+    expect(playerOf('paladin').rep.CON).toBe(0)
+    breakWindows(playerOf('paladin'), 2)
     st().repairAllWindows(pal.id, 'CON')
     expect(playerOf('paladin').rep.CON).toBe(1)
     expect(playerOf('paladin').windows.every(w => w.status !== 'broken')).toBe(true)
@@ -82,7 +85,7 @@ describe('Paladin — Honourable Trade', () => {
     const [stolen] = cardsOf('TRG')
     patchPlayer(rogue.id, { hoard: [stolen], stolenHoardCardIds: [stolen.id] })
 
-    st().reportCrimeB(pal.id, rogue.id, stolen.id, 'ARM')
+    st().reportCrime(pal.id, rogue.id, 'ARM')
 
     expect(playerOf('paladin').rep).toEqual({ ARM: 1, CON: 0, TRI: 0, TRG: 0 })
     expect(playerOf('rogue').hoard).toHaveLength(0)

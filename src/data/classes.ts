@@ -8,7 +8,7 @@ export const CLASSES: ClassCard[] = [
     tagline: 'Smash first, sell later',
     imageFile: '/cards/player-boards/Barbarian.png',
     status: 'BETA',
-    passive: 'Fearsome Champion — Add 2 to all Clash rolls. Other players may give you 2 resources from their Hoard to make you retreat from a Clash (you forfeit; they skip the roll). At the start of your turn, gain 1 coin if there is at least one Broken window on the board.',
+    passive: 'Fearsome Champion — Add 2 to all Clash rolls. Other players may give you 2 resources from their Hoard to make you retreat from a Clash (you forfeit; they skip the roll). At the start of your turn, gain 1 coin for each Broken window currently on the board (maximum 2).',
     actives: [
       'Reckless Swing — Break 1 of another player\'s windows. If that player has more Reputation tokens than you, Break 2 of their windows instead.',
       'Raiding Party — Place your Clan marker on any location; any other player who uses that location pays you 1 coin first. Then Appraise 1 (look at the top 4 resource cards; keep 1, the rest go to the bottom of the deck).',
@@ -22,7 +22,7 @@ export const CLASSES: ClassCard[] = [
     tagline: 'Flow like coin through fingers',
     imageFile: '/cards/player-boards/Monk.png',
     status: 'BETA',
-    passive: "Flow State — Gain 1 Momentum when you share a location with another player during your turn (max 2 per turn). Gain 2 Momentum when you complete a Visitor. Momentum: track up to 8; you have no Active tokens, and any effect that would Refresh an Active gives you 1 Momentum instead. Unspent Momentum is worth 1 coin each at the end.",
+    passive: "Flow State — Gain 1 Momentum when you share a location with another player during your turn (max 2 per turn). Gain 3 Momentum when you complete a Visitor. Momentum: track up to 8; you have no Active tokens, and any effect that would Refresh an Active gives you 1 Momentum instead. Unspent Momentum is worth 1 coin each at the end.",
     actives: [
       "Momentum Spend (free, each option once per turn) — 1: Draw 2 · 1: Trade 2 with the Flea Market · 3: Appraise 2 · 3: Break 1 or Steal 1 · 5: Copy any Professional currently in play and resolve it · 5: Gain 1 Rep per player you shared a location with this turn (max 3).",
     ],
@@ -35,7 +35,7 @@ export const CLASSES: ClassCard[] = [
     tagline: 'Honour in every transaction',
     imageFile: '/cards/player-boards/Paladin.png',
     status: 'BETA',
-    passive: 'Honourable Trade — Gain 1 additional Reputation token whenever you: Resolve a Negotiate at the Guildhall, complete a Work Order (gain the recipe\'s main type), or use Report the Crime at the Barracks to repair at least one Broken window. Starts with a hand of 4 Renown Cards (drawn from a 10-card personal deck).',
+    passive: 'Honourable Trade — Gain 1 additional Reputation token whenever you: complete a Work Order (gain the recipe\'s main type), or Fortify at the Barracks and repair at least two Broken windows. Starts with a hand of 4 Renown Cards (drawn from a 10-card personal deck).',
     actives: [
       'Righteous Duel — Name a player and declare a stake. Both roll d6; the Paladin adds their current Renown card count to their roll. Highest total wins both stakes. Tie: both returned.',
       'Tales of Old (off-turn) — Discard 1 Renown Card from your hand and immediately resolve its Spend effect. Renown is never replenished — once spent, it\'s gone.',
@@ -105,7 +105,7 @@ export const CLASSES: ClassCard[] = [
     tagline: "Fate is a currency. He collects.",
     imageFile: '/cards/player-boards/Warlock.png',
     status: 'BETA',
-    passive: "Twist of Fate — After any die is rolled, by anyone, spend an Omen to change it to the Omen's number. Twisting someone else's roll earns you 1 coin. Bottled Fate: whenever any player rolls a 1 or a 6, bottle it as an Omen (max 2). In Clashes and Duels you Twist automatically when it turns a loss into a win.",
+    passive: "Twist of Fate — After any die is rolled, by anyone, spend an Omen to change it to the Omen's number. Twisting someone else's roll earns you 1 coin. Bottled Fate: whenever any player rolls a 1 or a 6, bottle it as an Omen (max 3). In Clashes and Duels you Twist automatically when it turns a loss into a win.",
     actives: [
       "Hex — Draw 2 Curse cards and lay one face-up in front of a player. At the start of their next turn they resolve it (pay you coins, give up a card of their choice, shutter a window…) and hand it back. The Night Watcher protects against Hexes.",
       "Summon Imp — Your Imp lurks at a location until someone banishes it. Every other player who uses that location rolls: 1–2 the Imp eats a random card from their hoard, 3–4 it breaks one of their windows, 5–6 it's banished. You can Twist that roll, and spend a token to move the Imp.",

@@ -1,7 +1,7 @@
 import { useState, useEffect, useRef, type Dispatch, type SetStateAction } from 'react'
 import { useGameStore, CLAN_TOLL, describePrize } from '../store/gameStore'
 import type { Location, Player, GameState, DuelStake, ResourceCard } from '../types'
-import { LocationActionPanel, DrawnCardsToast } from './LocationActionPanel'
+import { LocationActionPanel, DrawnCardsToast, MarketSaleStep } from './LocationActionPanel'
 import { SellPhase } from './SellPhase'
 import { ResourceCardMini } from './ResourceCardMini'
 import { ResourceCardTile } from './ResourceCardTile'
@@ -236,6 +236,8 @@ export function SharedBoard({ canAct = true, localPlayerName }: SharedBoardProps
   // Town Crier picker (used by Barracks action AND rn07 Paladin card)
   const [crierPlaceId, setCrierPlaceId] = useState('')
   const [crierSlotIdx, setCrierSlotIdx] = useState(0)
+  // Guildhall Town Crier: sell into the Visitor just placed
+  const [crierSale, setCrierSale] = useState<{ playerId: string; slotIdx: number } | null>(null)
   // Empty-windows warning before ending turn
   const [showEmptyWindowsWarn, setShowEmptyWindowsWarn] = useState(false)
   // Dice roll modal: shown after Ranger passive gather at sell phase
@@ -1638,7 +1640,9 @@ export function SharedBoard({ canAct = true, localPlayerName }: SharedBoardProps
               <button
                 onClick={() => {
                   if (!crierPlaceId) return
+                  const sell = townCrierPeek.sell
                   completeTownCrier(crierPlayer.id, crierPlaceId, crierSlotIdx)
+                  if (sell) setCrierSale({ playerId: crierPlayer.id, slotIdx: crierSlotIdx })
                   setCrierPlaceId('')
                   setCrierSlotIdx(0)
                 }}
@@ -1647,6 +1651,19 @@ export function SharedBoard({ canAct = true, localPlayerName }: SharedBoardProps
               >
                 Place Visitor
               </button>
+            </div>
+          </div>
+        )
+      })()}
+
+      {crierSale && (() => {
+        const seller = players.find(p => p.id === crierSale.playerId)
+        if (!seller || !isMe(seller.id)) return null
+        return (
+          <div className="fixed inset-0 z-[320] flex items-center justify-center bg-black/60">
+            <div className="bg-ink-900 border-2 border-gold-500/60 rounded-xl p-5 shadow-2xl max-w-2xl w-full mx-4 space-y-3 max-h-[90vh] overflow-y-auto">
+              <div className="text-base font-display font-bold text-gold-300 text-center">📯 Sell to the new Visitor</div>
+              <MarketSaleStep player={seller} fixedVisitorIdx={crierSale.slotIdx} onAction={() => setCrierSale(null)} onBack={() => setCrierSale(null)} />
             </div>
           </div>
         )

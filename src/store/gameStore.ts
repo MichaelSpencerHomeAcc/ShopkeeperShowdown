@@ -18,7 +18,7 @@ import { RENOWN_CARDS } from '../data/renown'
 import { AMBUSH_CARDS } from '../data/ambushCards'
 
 /** Barbarian Fearsome Champion: coins per turn = broken windows on the board, up to this cap. */
-export const FEARSOME_CHAMPION_MAX = 1
+export const FEARSOME_CHAMPION_MAX = 2
 /** Coins a player pays a Barbarian to use a location holding their Clan marker. */
 export const CLAN_TOLL = 1
 /** Shaman Elemental dice that have been used recharge at the start of this round. */
@@ -389,14 +389,25 @@ export interface GameStore extends GameState {
   breakWindow: (byPlayerId: string, targetPlayerId: string, windowIdx: number) => void
   fence: (playerId: string, cardId: string) => void
   launder: (playerId: string) => void
-  consultation: (playerId: string, repType: RepType) => void
-  hireBodyguard: (playerId: string) => void
+  /** Spend 1 hoard resource for 1 Rep of its type and CONSULT_COINS coins */
+  consultation: (playerId: string, cardIds: string[]) => void
+  /** Repair all your windows and take the Night Watcher */
+  fortify: (playerId: string, repType?: RepType) => void
+  /** Take 1 Stolen card from another player's hoard into yours (it stays Stolen) */
+  recoverGoods: (byPlayerId: string, targetPlayerId: string, cardId: string) => void
+  /** Refresh all your Active tokens, then Repair 1 window */
+  rest: (playerId: string, windowIdx?: number) => void
+  /** Name a Rep type and roll 2d6 on the Quest table */
+  quest: (playerId: string, repType: RepType) => { dice: [number, number]; total: number; outcome: QuestOutcome } | null
+  /** Workshop Appraise 2: look at the top 4 resources, keep up to 2 */
+  peekWorkshopAppraise: (playerId: string) => void
   repairAllWindows: (playerId: string, repType?: import('../types').RepType) => void
-  reportCrimeB: (byPlayerId: string, targetPlayerId: string, stolenCardId: string, repType: RepType) => void
+  /** The reported player discards their least valuable Stolen card; the reporter gains 1 Rep of their choice */
+  reportCrime: (byPlayerId: string, targetPlayerId: string, repType: RepType) => void
   /** Complete public Work Order `orderIdx` by spending `cardIds` (hoard, windows, or Rogue counterfeits) */
   completeCraft: (playerId: string, orderIdx: number, cardIds: string[]) => void
-  pitchCamp: (playerId: string) => void
-  peekTownCrier: (playerId: string) => void
+  /** `sell`: the Guildhall Town Crier lets you sell into the Visitor you place */
+  peekTownCrier: (playerId: string, sell?: boolean) => void
   completeTownCrier: (playerId: string, placeCardId: string, replaceSlotIdx: number) => void
   takeFromFleaMarket: (playerId: string, slotIdx: number) => void
   takeManyFromFleaMarket: (playerId: string, slotIndices: number[]) => void
@@ -609,8 +620,26 @@ function negotiateRefundNote(s: GameState, deal: { actionCharged?: boolean; clan
 export const MAX_SALES_PER_VISITOR = 2
 /** Auctions pay half the roll, rounded up (1–3 coins). */
 export const auctionCoins = (roll: number) => Math.ceil(roll / 2)
-export const CONSULT_COST = 2
-export const BODYGUARD_COST = 1
+/** Consultation: spend 1 resource for 1 Rep of its type, plus this many coins. */
+export const CONSULT_CARDS = 1
+export const CONSULT_COINS = 2
+
+/** Quest (Wilderness): name a Rep type, roll 2d6 and look up the result. */
+export interface QuestOutcome {
+  min: number; max: number; name: string; text: string
+  discard?: number; draw?: number; coins?: number; rep?: number
+}
+export const QUEST_OUTCOMES: QuestOutcome[] = [
+  { min: 2, max: 4, name: 'Ambushed', text: 'Discard a random card from your hoard.', discard: 1 },
+  { min: 5, max: 6, name: 'Supplies', text: 'Draw 3 resources.', draw: 3 },
+  { min: 7, max: 8, name: 'Treasure', text: 'Gain 4 coins and draw 1 resource.', coins: 4, draw: 1 },
+  { min: 9, max: 10, name: 'Trophy', text: 'Gain 2 Rep of the type you named and 2 coins.', rep: 2, coins: 2 },
+  { min: 11, max: 12, name: 'Legend', text: 'Gain 3 Rep of the type you named and 4 coins.', rep: 3, coins: 4 },
+]
+/** Chance of rolling between min and max on 2d6. */
+export const twoD6Chance = (min: number, max: number) =>
+  [2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12].filter(t => t >= min && t <= max).reduce((n, t) => n + (6 - Math.abs(7 - t)), 0) / 36
+export const questOutcome = (total: number) => QUEST_OUTCOMES.find(o => total >= o.min && total <= o.max)!
 /** Fencing a stolen card pays this many times its value (no Rep). */
 export const FENCE_MULTIPLIER = 2
 
@@ -926,11 +955,11 @@ export const MOMENTUM_COSTS: Record<MomentumSpendId, number> = {
 }
 /** Flow State: Momentum from sharing a location, per turn */
 export const FLOW_STATE_MAX = 2
-export const VISITOR_MOMENTUM = 2
+export const VISITOR_MOMENTUM = 3
 export const SHARED_REP_MAX = 3
 
 /** Warlock: Omen dice in the jar */
-export const MAX_OMENS = 2
+export const MAX_OMENS = 3
 /** Sorcerer: Arcane Charge cap, and what bending a Surge costs */
 export const MAX_CHARGE = 3
 export const SURGE_REROLL_COST = 1
@@ -2776,46 +2805,101 @@ export const useGameStore = create<GameStore>((set, get) => ({
     }))
   },
 
-  consultation(playerId, repType) {
-    const { players } = get()
-    const player = players.find(p => p.id === playerId)
+  consultation(playerId, cardIds) {
+    const player = get().players.find(p => p.id === playerId)
     if (!player) return
-    if (player.coins < CONSULT_COST) {
-      console.error('consultation: not enough coins')
+    const cards = player.hoard.filter(c => cardIds.includes(c.id) && !isCounterfeitCard(c))
+    if (cards.length !== CONSULT_CARDS || cards.some(c => c.type !== cards[0].type)) {
+      console.error('consultation: needs resources of one type')
       return
     }
-
+    const t = cards[0].type
     set(s => ({
-      players: s.players.map(p =>
-        p.id === playerId
-          ? {
-              ...p,
-              coins: p.coins - CONSULT_COST,
-              rep: { ...p.rep, [repType]: p.rep[repType] + 1 },
-            }
-          : p
-      ),
-      actionLog: [logEntry(`${player.name} paid ${CONSULT_COST} coins for consultation — gained 1 ${repType} rep.`, playerId), ...s.actionLog.slice(0, 49)],
+      resourceDiscard: [...cards, ...s.resourceDiscard],
+      players: s.players.map(p => (p.id !== playerId ? p : {
+        ...p,
+        hoard: p.hoard.filter(c => !cardIds.includes(c.id)),
+        stolenHoardCardIds: p.stolenHoardCardIds.filter(id => !cardIds.includes(id)),
+        rep: { ...p.rep, [t]: p.rep[t] + 1 },
+        coins: p.coins + CONSULT_COINS,
+      })),
+      actionLog: [logEntry(`${player.name} consulted the Guild — spent ${cards.map(c => c.name).join(' and ')} for 1 ${t} Rep and ${CONSULT_COINS} coins.`, playerId), ...s.actionLog.slice(0, 49)],
     }))
   },
 
-  hireBodyguard(playerId) {
-    const { players } = get()
-    const player = players.find(p => p.id === playerId)
+  fortify(playerId, repType) {
+    const player = get().players.find(p => p.id === playerId)
     if (!player) return
-    if (player.coins < BODYGUARD_COST) {
-      console.error('hireBodyguard: not enough coins')
-      return
-    }
-
+    get().repairAllWindows(playerId, repType)
     set(s => ({
-      players: s.players.map(p =>
-        p.id === playerId
-          ? { ...p, coins: p.coins - BODYGUARD_COST, hasNightWatcher: true }
-          : { ...p, hasNightWatcher: false }
-      ),
-      actionLog: [logEntry(`${player.name} hired the Bodyguard — paid ${BODYGUARD_COST} coin${BODYGUARD_COST !== 1 ? 's' : ''}, now holds the Night Watcher.`, playerId), ...s.actionLog.slice(0, 49)],
+      players: s.players.map(p => ({ ...p, hasNightWatcher: p.id === playerId })),
+      actionLog: [logEntry(`${player.name} fortified the shop — windows repaired, and they take the Night Watcher.`, playerId), ...s.actionLog.slice(0, 49)],
     }))
+  },
+
+  recoverGoods(byPlayerId, targetPlayerId, cardId) {
+    const { players } = get()
+    const by = players.find(p => p.id === byPlayerId)
+    const target = players.find(p => p.id === targetPlayerId)
+    if (!by || !target || target.hasNightWatcher) return
+    const card = target.hoard.find(c => c.id === cardId)
+    if (!card || !target.stolenHoardCardIds.includes(cardId)) return
+    set(s => ({
+      players: s.players.map(p => {
+        if (p.id === targetPlayerId) return { ...p, hoard: p.hoard.filter(c => c.id !== cardId), stolenHoardCardIds: p.stolenHoardCardIds.filter(id => id !== cardId) }
+        if (p.id === byPlayerId) return { ...p, hoard: [...p.hoard, card], stolenHoardCardIds: [...p.stolenHoardCardIds, cardId] }
+        return p
+      }),
+      actionLog: [logEntry(`${by.name} recovered ${card.name} from ${target.name} — it's still marked Stolen.`, byPlayerId), ...s.actionLog.slice(0, 49)],
+    }))
+  },
+
+  rest(playerId, windowIdx) {
+    const player = get().players.find(p => p.id === playerId)
+    if (!player) return
+    get().refreshActiveTokens(playerId)
+    const repair = windowIdx !== undefined && player.windows[windowIdx]?.status === 'broken'
+    if (repair) get().repairWindow(playerId, windowIdx)
+    addLog(set, `${player.name} rested at the Tavern — Active tokens refreshed${repair ? ' and a window repaired' : ''}.`, playerId)
+  },
+
+  quest(playerId, repType) {
+    const player = get().players.find(p => p.id === playerId)
+    if (!player) return null
+    const dice: [number, number] = [d6(), d6()]
+    // Every die still feeds Bottled Fate and Wild Magic
+    for (const die of dice) { bottleOmen(get, set, die); sorcererDie(get, set, playerId, die) }
+    const total = dice[0] + dice[1]
+    const outcome = questOutcome(total)
+    const me = () => get().players.find(p => p.id === playerId)!
+    const bits: string[] = []
+    for (let i = 0; i < (outcome.discard ?? 0); i++) {
+      const lost = me().hoard[Math.floor(Math.random() * me().hoard.length)]
+      if (!lost) { bits.push('nothing to lose'); break }
+      set(s => ({
+        resourceDiscard: [lost, ...s.resourceDiscard],
+        players: s.players.map(p => (p.id === playerId ? { ...p, hoard: p.hoard.filter(c => c.id !== lost.id), stolenHoardCardIds: p.stolenHoardCardIds.filter(id => id !== lost.id) } : p)),
+      }))
+      bits.push(`lost ${lost.name}`)
+    }
+    for (let i = 0; i < (outcome.draw ?? 0); i++) get().drawResource(playerId, true)
+    if (outcome.draw) bits.push(`drew ${outcome.draw}`)
+    const coins = outcome.coins ?? 0, rep = outcome.rep ?? 0
+    if (coins || rep) {
+      set(s => ({ players: s.players.map(p => (p.id === playerId ? { ...p, coins: p.coins + coins, rep: { ...p.rep, [repType]: p.rep[repType] + rep } } : p)) }))
+      if (rep) bits.push(`+${rep} ${repType} Rep`)
+      if (coins) bits.push(`+${coins} coins`)
+    }
+    const detail = bits.length ? ` — ${bits.join(', ')}` : ''
+    set({ diceResult: total })
+    addLog(set, `${player.name} went on a Quest — rolled ${dice[0]} + ${dice[1]} = ${total}: ${outcome.name}${detail}.`, playerId)
+    return { dice, total, outcome }
+  },
+
+  peekWorkshopAppraise(playerId) {
+    const cards = get().resourceDeck.slice(0, 4)
+    if (cards.length === 0) return
+    set({ appraisePeek: { playerId, cards, maxKeep: 2 } })
   },
 
   repairAllWindows(playerId, repType) {
@@ -2833,8 +2917,8 @@ export const useGameStore = create<GameStore>((set, get) => ({
       players: s.players.map(p => {
         if (p.id !== playerId) return p
         const withWindows = { ...p, windows: p.windows.map(w => ({ ...w, status: 'normal' as WindowStatus })) }
-        // Honourable Trade: +1 rep of chosen type — Paladin only, and only if a window was actually repaired
-        const withRepType = (repType && p.classId === 'paladin' && brokenCount > 0) ? { ...withWindows, rep: { ...withWindows.rep, [repType]: withWindows.rep[repType] + 1 } } : withWindows
+        // Honourable Trade: +1 rep of chosen type — Paladin only, and only when 2+ windows were repaired
+        const withRepType = (repType && p.classId === 'paladin' && brokenCount > 1) ? { ...withWindows, rep: { ...withWindows.rep, [repType]: withWindows.rep[repType] + 1 } } : withWindows
         // rn03: additional ARM rep per window repaired
         const withRn03 = rn03 && brokenCount > 0 ? { ...withRepType, rep: { ...withRepType.rep, ARM: withRepType.rep.ARM + brokenCount } } : withRepType
         const withDraw = draw ? { ...withRn03, hoard: [...withRn03.hoard, ...draw.drawn] } : withRn03
@@ -2844,7 +2928,7 @@ export const useGameStore = create<GameStore>((set, get) => ({
       resourceDiscard: draw ? draw.discard : s.resourceDiscard,
       actionLog: [logEntry(
         `${player.name} repaired all windows.` +
-        (repType && brokenCount > 0 && player.classId === 'paladin' ? ` Gained 1 ${repType} rep.` : '') +
+        (repType && brokenCount > 1 && player.classId === 'paladin' ? ` Gained 1 ${repType} rep.` : '') +
         (rn03 && brokenCount > 0 ? ` Gates of Mirhollow — +${brokenCount} ARM Rep.` : '') +
         (draw && draw.drawn.length > 0 ? ` Mercy of Thornwall — drew ${draw.drawn.map(c => c.name).join(', ')}.` : ''),
         playerId
@@ -2852,40 +2936,24 @@ export const useGameStore = create<GameStore>((set, get) => ({
     }))
   },
 
-  reportCrimeB(byPlayerId, targetPlayerId, stolenCardId, repType) {
+  reportCrime(byPlayerId, targetPlayerId, repType) {
     const { players } = get()
     const reporter = players.find(p => p.id === byPlayerId)
     const target = players.find(p => p.id === targetPlayerId)
     if (!reporter || !target) return
-    if (!target.stolenHoardCardIds.includes(stolenCardId)) {
-      console.error('reportCrimeB: target does not have that stolen card')
-      return
-    }
-
-    const card = target.hoard.find(c => c.id === stolenCardId)
-
-    const totalRep = 1
-    const awardedRepType = repType
-
+    // The reported player gives up the Stolen card they value least
+    const card = target.hoard.filter(c => target.stolenHoardCardIds.includes(c.id) && !isCounterfeitCard(c))
+      .sort((x, y) => x.value - y.value || x.repTokens - y.repTokens)[0]
+    if (!card) return
+    const t = repType
     set(s => ({
       players: s.players.map(p => {
-        if (p.id === byPlayerId) {
-          return { ...p, rep: { ...p.rep, [awardedRepType]: p.rep[awardedRepType] + totalRep } }
-        }
-        if (p.id === targetPlayerId) {
-          return {
-            ...p,
-            hoard: p.hoard.filter(c => c.id !== stolenCardId),
-            stolenHoardCardIds: p.stolenHoardCardIds.filter(id => id !== stolenCardId),
-          }
-        }
+        if (p.id === byPlayerId) return { ...p, rep: { ...p.rep, [t]: p.rep[t] + 1 } }
+        if (p.id === targetPlayerId) return { ...p, hoard: p.hoard.filter(c => c.id !== card.id), stolenHoardCardIds: p.stolenHoardCardIds.filter(id => id !== card.id) }
         return p
       }),
-      resourceDiscard: card ? [card, ...s.resourceDiscard] : s.resourceDiscard,
-      actionLog: [logEntry(
-        `${reporter.name} reported crime — gained ${totalRep} ${awardedRepType} rep; ${target.name} discarded ${card?.name ?? 'stolen card'}.`,
-        byPlayerId
-      ), ...s.actionLog.slice(0, 49)],
+      resourceDiscard: [card, ...s.resourceDiscard],
+      actionLog: [logEntry(`${reporter.name} reported ${target.name} — they discard ${card.name}; ${reporter.name} gains 1 ${t} Rep.`, byPlayerId), ...s.actionLog.slice(0, 49)],
     }))
   },
 
@@ -2970,20 +3038,7 @@ export const useGameStore = create<GameStore>((set, get) => ({
     }
   },
 
-  pitchCamp(playerId) {
-    const { players } = get()
-    const player = players.find(p => p.id === playerId)
-    if (!player) return
-
-    set(s => ({
-      players: s.players.map(p =>
-        p.id === playerId ? { ...p, pitchCampPending: true } : p
-      ),
-      actionLog: [logEntry(`${player.name} pitched camp — will gain bonus at start of next round.`, playerId), ...s.actionLog.slice(0, 49)],
-    }))
-  },
-
-  peekTownCrier(playerId) {
+  peekTownCrier(playerId, sell = false) {
     const { visitorDeck, visitorDiscard } = get()
     let deck = visitorDeck
     if (deck.length < 3 && visitorDiscard.length > 0) {
@@ -2992,7 +3047,7 @@ export const useGameStore = create<GameStore>((set, get) => ({
     const peeked = deck.slice(0, 3) as VisitorCard[]
 
     set(s => ({
-      townCrierPeek: { playerId, cards: peeked },
+      townCrierPeek: { playerId, cards: peeked, sell },
       actionLog: [logEntry(`Town Crier: peeked top 3 visitors.`, playerId), ...s.actionLog.slice(0, 49)],
     }))
   },

@@ -8,14 +8,14 @@ Every physical component that needs redesigning, compared with `main` (PR #15). 
 |---|---|---|
 | Resource cards | 84 of 92 | New sell value (8 cards are already 1 and stay 1). Rep icons unchanged |
 | Work Order cards | 20 of 20 | New price |
-| Visitor cards | 34 of 34 | **New:** printed 1st / 2nd contribution prizes (proposed below) |
-| Location boards | 4 spaces | Tavern Auction, Guildhall Consultation, Barracks Hire Bodyguard, Thieves' Guild Fence |
+| Visitor cards | 34 of 34 | **New:** printed 1st / 2nd contribution prizes (listed below) |
+| Location boards | 10 of 18 spaces | New layout: see section 4 (Negotiate, Pitch Camp, Hire Bodyguard and Sell to a Visitor are gone) |
 | Renown card | 1 | Forge of Ironpeak |
-| Class boards | 5 | Barbarian, Ranger, Shaman, Sorcerer, Warlock |
-| Warlock components | 8 cards + dice + figure | New Curse deck, 2 Omen dice (was 3), Imp figure |
+| Class boards | 6 | Monk, Paladin, Ranger, Shaman, Sorcerer, Warlock |
+| Warlock components | 8 cards + figure | New Curse deck, Imp figure (Omen dice unchanged: 3) |
 | Player aid / scoring card | 1 | Rep table, set bonus 5, starting coins 2 |
 | Coins | — | Fewer needed; denominations suggested below |
-| **No change** | — | Professionals, Counterfeits, Ambush cards, Surge table, Renown cards other than Forge, Monk, Paladin and Rogue boards |
+| **No change** | — | Professionals, Counterfeits, Ambush cards, Surge table, Renown cards other than Forge, Barbarian and Rogue boards |
 
 ---
 
@@ -234,14 +234,26 @@ Each card's value is half its old printed value, rounded (minimum 1). Rep icons 
 
 ## 4. Location boards
 
-| Location | Space | Old text | **New text** |
-|---|---|---|---|
-| Tavern | Auction 1 | Roll d6 and gain that many coins | **Roll d6 and gain half that many coins, rounded up (1–3)** |
-| Guildhall | Consultation | Pay 3 coins: gain 1 Reputation token of your choice | **Pay 2 coins**: gain 1 Reputation token of your choice |
-| Barracks | Hire Bodyguard | Pay 2 coins: take the Night Watcher | **Pay 1 coin**: take the Night Watcher |
-| Thieves' Guild | Fence | Sell 1 Stolen resource for its coin value (no Rep) | Sell 1 Stolen resource for **double** its coin value (no Rep). Its type must differ from the last card fenced here |
+Every board keeps 3 spaces. **Bold** = new or changed.
 
-All other location spaces are unchanged.
+| Location | Space 1 | Space 2 | Space 3 |
+|---|---|---|---|
+| Guildhall | Hire a Professional | **Consultation:** spend 1 resource from your hoard → 1 Rep of its type + 2 coins (was: pay coins for 1 Rep) | **Town Crier** (moved from Barracks): swap in a Visitor from the top 3, then sell up to 2 cards into it (replaces Negotiate) |
+| Tavern | **Rest:** Refresh all your Active tokens, then Repair 1 window (was: Refresh Actives) | **Auction 1:** roll d6, gain half (rounded up, 1–3) | Trade 3 |
+| Wilderness | Gather | Forage 2 | **Quest** (replaces Pitch Camp): name a Rep type, roll 2d6 (table below) |
+| Barracks | **Report the Crime:** a rival discards a Stolen card of their choice; you gain 1 Rep of your choice (the repair option moved to Fortify) | **Fortify:** Repair all your windows and take the Night Watcher (replaces Hire Bodyguard) | **Recover Goods:** take 1 Stolen card from a rival's hoard; it stays Stolen. The Night Watcher holder can't be targeted (replaces Town Crier) |
+| Workshop | Take 2 | Craft | **Appraise 2:** look at the top 4 resources, keep up to 2 (replaces Sell to a Visitor) |
+| Thieves' Guild | Steal 1 / Break 1 | **Fence:** sell 1 Stolen resource for **double** its value (no Rep); its type must differ from the last card fenced here | Launder 3 |
+
+**Quest table (2d6)**
+
+| Roll | Odds | Result |
+|---|---|---|
+| 2–4 | 17% | **Ambushed:** discard a random card from your hoard |
+| 5–6 | 25% | **Supplies:** draw 3 resources |
+| 7–8 | 31% | **Treasure:** gain 4 coins and draw 1 resource |
+| 9–10 | 19% | **Trophy:** gain 2 Rep of the named type and 2 coins |
+| 11–12 | 8% | **Legend:** gain 3 Rep of the named type and 4 coins |
 
 ---
 
@@ -255,12 +267,18 @@ All other location spaces are unchanged.
 
 ## 6. Class boards (full new text)
 
-### Barbarian — Ronan Ellisbane
-**What changed:** Fearsome Champion pays 1 coin if at least one window on the board is Broken (was 1 per Broken window, max 2).
+### Monk — Jozin Kikim
+**What changed:** Completing a Visitor gives 3 Momentum (was 2).
 
-- **Passive:** Fearsome Champion — Add 2 to all Clash rolls. Other players may give you 2 resources from their Hoard to make you retreat from a Clash (you forfeit; they skip the roll). At the start of your turn, gain 1 coin if there is at least one Broken window on the board.
-- **Active:** Reckless Swing — Break 1 of another player's windows. If that player has more Reputation tokens than you, Break 2 of their windows instead.
-- **Active:** Raiding Party — Place your Clan marker on any location; any other player who uses that location pays you 1 coin first. Then Appraise 1 (look at the top 4 resource cards; keep 1, the rest go to the bottom of the deck).
+- **Passive:** Flow State — Gain 1 Momentum when you share a location with another player during your turn (max 2 per turn). Gain 3 Momentum when you complete a Visitor. Momentum: track up to 8; you have no Active tokens, and any effect that would Refresh an Active gives you 1 Momentum instead. Unspent Momentum is worth 1 coin each at the end.
+- **Active:** Momentum Spend (free, each option once per turn) — 1: Draw 2 · 1: Trade 2 with the Flea Market · 3: Appraise 2 · 3: Break 1 or Steal 1 · 5: Copy any Professional currently in play and resolve it · 5: Gain 1 Rep per player you shared a location with this turn (max 3).
+
+### Paladin — Jordain Tinkfast
+**What changed:** Honourable Trade no longer mentions Negotiate, and its repair trigger is now: Fortify and repair at least 2 windows (was: Report the Crime repairing at least 1).
+
+- **Passive:** Honourable Trade — Gain 1 additional Reputation token whenever you: complete a Work Order (gain the recipe's main type), or Fortify at the Barracks and repair at least two Broken windows. Starts with a hand of 4 Renown Cards (drawn from a 10-card personal deck).
+- **Active:** Righteous Duel — Name a player and declare a stake. Both roll d6; the Paladin adds their current Renown card count to their roll. Highest total wins both stakes. Tie: both returned.
+- **Active:** Tales of Old (off-turn) — Discard 1 Renown Card from your hand and immediately resolve its Spend effect. Renown is never replenished — once spent, it's gone.
 
 ### Ranger — Emberlyn Morishwood
 **What changed:** Master of the Wilderness gathers half the roll rounded up, minimum 2 (was rounded down, minimum 1).
@@ -284,13 +302,13 @@ All other location spaces are unchanged.
 - **Active:** Wild Surge — Roll on the Surge Table twice, one after the other (and gain 1 Charge to bend them).
 
 ### Warlock — Kaelan Mortisbane
-**What changed:** Omens max 2 (was 3); Hex now lays a face-up curse that resolves at the start of the victim's turn; the Imp stays until banished, hits every visitor, and eats cards instead of stealing them.
+**What changed:** Hex now lays a face-up curse that resolves at the start of the victim's turn; the Imp stays until banished, hits every visitor, and eats cards instead of stealing them. (Omens stay at 3.)
 
-- **Passive:** Twist of Fate — After any die is rolled, by anyone, spend an Omen to change it to the Omen's number. Twisting someone else's roll earns you 1 coin. Bottled Fate: whenever any player rolls a 1 or a 6, bottle it as an Omen (max 2). In Clashes and Duels you Twist automatically when it turns a loss into a win.
+- **Passive:** Twist of Fate — After any die is rolled, by anyone, spend an Omen to change it to the Omen's number. Twisting someone else's roll earns you 1 coin. Bottled Fate: whenever any player rolls a 1 or a 6, bottle it as an Omen (max 3). In Clashes and Duels you Twist automatically when it turns a loss into a win.
 - **Active:** Hex — Draw 2 Curse cards and lay one face-up in front of a player. At the start of their next turn they resolve it (pay you coins, give up a card of their choice, shutter a window…) and hand it back. The Night Watcher protects against Hexes.
 - **Active:** Summon Imp — Your Imp lurks at a location until someone banishes it. Every other player who uses that location rolls: 1–2 the Imp eats a random card from their hoard, 3–4 it breaks one of their windows, 5–6 it's banished. You can Twist that roll, and spend a token to move the Imp.
 
-**Unchanged boards:** Paladin (only its Forge of Ironpeak Renown card changed), Monk, and Rogue (still draws 4 Counterfeits; Guild Contacts follows the new Auction payout automatically).
+**Unchanged boards:** Barbarian (Fearsome Champion is back to 1 coin per Broken window, max 2) and Rogue (still draws 4 Counterfeits; Guild Contacts follows the new Auction payout automatically).
 
 ---
 
@@ -310,7 +328,7 @@ All other location spaces are unchanged.
 | 🐦 **Bad Omen** | No effect on you — the Warlock bottles a 1 straight away. | *A crow lands on the sign. Nobody says a word.* |
 
 ### Omen dice
-**2 dice** (was 3).
+**3 dice** (unchanged).
 
 ### Imp
 Figure or standee, placed on a location. Reference text for the board or a card:
@@ -349,4 +367,5 @@ A single player rarely holds more than ~110 coins.
 
 - **Professionals:** all 9 unchanged. Shady Saboteur still gains "half the coin value, rounded down", but on the new values that's 0–2 coins. Worth a look if it feels flat.
 - **Counterfeits:** values ($1–2) and return effects unchanged.
-- **Unchanged components:** Ambush cards, the Surge table, Renown cards other than Forge, and the Monk and Paladin boards.
+- **Unchanged components:** Ambush cards, the Surge table, Renown cards other than Forge, and the Barbarian and Rogue boards.
+- **Needs a redesign:** The Council of Seven (Renown) has the passive "Negotiate twice per Guildhall visit", but Negotiate is no longer a Guildhall action. Its Spend effect still works.

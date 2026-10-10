@@ -1,7 +1,7 @@
 import { useState, useEffect } from 'react'
 import type { Location, RepType, Player, ResourceCard, WorkOrderCard, DemandMap } from '../types'
 import { canPlayerCraft } from '../utils/crafting'
-import { useGameStore, fitsDemand, MAX_SALES_PER_VISITOR, CONSULT_COST, BODYGUARD_COST } from '../store/gameStore'
+import { useGameStore, fitsDemand, MAX_SALES_PER_VISITOR, CONSULT_COINS, QUEST_OUTCOMES, twoD6Chance, type QuestOutcome } from '../store/gameStore'
 import { VisitorPrizeInfo } from './VisitorPrizes'
 import { TargetPicker, type TargetChoice } from './TargetPicker'
 import { breakWindowRule, heistWindowRule, stealRule, windowTargetRule, type WindowRule } from '../utils/targets'
@@ -64,29 +64,29 @@ function getActionDisplay(action: ActionOption, _player?: Player): ActionOption 
 
 const LOCATION_ACTIONS: Record<Location, ActionOption[]> = {
   guildhall: [
-    { id: 'hire',      label: 'Hire a Professional', icon: '🏛️', description: 'Use a Guild professional for a special ability.' },
-    { id: 'consult',   label: 'Consultation',         icon: '💰', description: `Pay ${CONSULT_COST} coins for +1 Reputation token.` },
-    { id: 'negotiate', label: 'Negotiate',             icon: '🤝', description: 'Propose a card swap with another player.' },
+    { id: 'hire',       label: 'Hire a Professional', icon: '🏛️', description: 'Use a Guild professional for a special ability.' },
+    { id: 'consult',    label: 'Consultation',        icon: '📜', description: `Spend 1 resource from your hoard: gain 1 Rep of its type and ${CONSULT_COINS} coins.` },
+    { id: 'town-crier', label: 'Town Crier',          icon: '📯', description: `Swap in a Visitor from the top 3, then sell up to ${MAX_SALES_PER_VISITOR} cards into it.` },
   ],
   tavern: [
-    { id: 'refresh', label: 'Refresh Actives', icon: '🔄', description: 'Reset all your active tokens to ready.' },
-    { id: 'auction', label: 'Auction 1',        icon: '🔨', description: 'Roll d6 and gain half (rounded up) to sell a hoard or window card — into a Visitor, if it fits.' },
-    { id: 'trade',   label: 'Trade 3',          icon: '↔️',  description: 'Swap up to 3 cards with the Flea Market.' },
+    { id: 'rest',    label: 'Rest',      icon: '🛏️', description: 'Refresh all your Active tokens, then Repair 1 window.' },
+    { id: 'auction', label: 'Auction 1', icon: '🔨', description: 'Roll d6 and gain half (rounded up) to sell a hoard or window card — into a Visitor, if it fits.' },
+    { id: 'trade',   label: 'Trade 3',   icon: '↔️',  description: 'Swap up to 3 cards with the Flea Market.' },
   ],
   wilderness: [
-    { id: 'gather',     label: 'Gather',     icon: '🎲', description: 'Roll d6 and draw that many resource cards.' },
-    { id: 'forage',     label: 'Forage 2',   icon: '🌿', description: 'Pick 4 cards from the discard pile, keep up to 2. Requires 4+ in discard.' },
-    { id: 'pitch-camp', label: 'Pitch Camp', icon: '⛺', description: 'Gain a bonus resource at the start of next round.' },
+    { id: 'gather', label: 'Gather',   icon: '🎲', description: 'Roll d6 and draw that many resource cards.' },
+    { id: 'forage', label: 'Forage 2', icon: '🌿', description: 'Pick 4 cards from the discard pile, keep up to 2. Requires 4+ in discard.' },
+    { id: 'quest',  label: 'Quest',    icon: '🗺️', description: 'Name a Rep type and roll 2d6 — treasure, Rep, or an ambush.' },
   ],
   barracks: [
-    { id: 'report',     label: 'Report the Crime', icon: '⚖️', description: 'Repair windows or report theft for Reputation.' },
-    { id: 'bodyguard',  label: 'Hire Bodyguard',   icon: '🛡️', description: `Pay ${BODYGUARD_COST} coin for the Night Watcher token.` },
-    { id: 'town-crier', label: 'Town Crier',        icon: '📯', description: 'Peek at upcoming Visitors and replace any.' },
+    { id: 'report',  label: 'Report the Crime', icon: '⚖️', description: 'A rival discards one of their Stolen cards (their choice); you gain 1 Rep.' },
+    { id: 'fortify', label: 'Fortify',          icon: '🛡️', description: 'Repair all your windows and take the Night Watcher.' },
+    { id: 'recover', label: 'Recover Goods',    icon: '📦', description: "Take a Stolen card from a rival's hoard. It stays Stolen." },
   ],
   workshop: [
     { id: 'take-2',   label: 'Take 2',     icon: '🛒', description: 'Take up to 2 cards from the Flea Market.' },
     { id: 'craft',    label: 'Craft',      icon: '⚒️', description: 'Complete one of the public Work Orders on the board for its reward.' },
-    { id: 'sell-visitor', label: 'Sell to a Visitor', icon: '🏷️', description: 'Sell up to 2 hoard or window cards into one Visitor for their printed value.' },
+    { id: 'appraise', label: 'Appraise 2', icon: '🔍', description: 'Look at the top 4 resource cards and keep up to 2.' },
   ],
   'thieves-guild': [
     { id: 'steal-or-break', label: 'Steal 1 or Break 1', icon: '🗡️', description: "Target another player's window or resources." },
@@ -345,15 +345,10 @@ function SectionTitle({ children }: { children: React.ReactNode }) {
 // ---- Guildhall ----
 
 function GuildhallActions({ actionId, onAction, onBack }: { actionId: string; onAction: () => void; onBack: () => void }) {
-  const {
-    activePlayerId, players, professionalSlots, consultation,
-    proposeNegotiate, declineNegotiate, negotiatePending, negotiatesCompletedThisTurn,
-  } = useGameStore()
+  const { activePlayerId, players, professionalSlots, consultation, peekTownCrier, townCrierPeek } = useGameStore()
   const player = players.find(p => p.id === activePlayerId) ?? players[0]
-  const [consultRep, setConsultRep] = useState<RepType>('ARM')
+  const [consultCardId, setConsultCardId] = useState('')
   const [openProfId, setOpenProfId] = useState<string | null>(null)
-  const [negTarget, setNegTarget] = useState('')
-  const [negCardId, setNegCardId] = useState('')
 
   if (!player) return null
 
@@ -419,129 +414,48 @@ function GuildhallActions({ actionId, onAction, onBack }: { actionId: string; on
   }
 
   if (actionId === 'consult') {
+    const eligible = player.hoard.filter(c => !(c as { counterfeit?: boolean }).counterfeit)
+    const card = eligible.find(c => c.id === consultCardId)
     return (
       <div className="space-y-3">
         <BackButton onBack={onBack} />
-        <div className="flex items-center gap-2 flex-wrap">
-          {REP_TYPES.map(rt => (
-            <button
-              key={rt}
-              type="button"
-              onClick={() => setConsultRep(rt)}
-              className={repBtnCls(rt, consultRep === rt)}
-            >
-              {rt}
-            </button>
-          ))}
-        </div>
-        <div className="flex items-center gap-2">
-          <button
-            type="button"
-            onClick={() => { consultation(player.id, consultRep); onAction() }}
-            disabled={player.coins < CONSULT_COST}
-            className="btn-primary text-xs px-2 py-0.5 disabled:opacity-50 disabled:cursor-not-allowed"
-          >
-            Pay 3 → +1 {consultRep}
-          </button>
-          <span className="text-xs text-parchment-500">{player.coins} coins</span>
-        </div>
+        <p className="text-xs text-parchment-400">Spend 1 resource from your hoard: gain 1 Rep of its type and {CONSULT_COINS} coins.</p>
+        <CardPickerGrid
+          label="Resource to spend"
+          resourceCards={eligible}
+          selectedId={consultCardId}
+          onSelect={setConsultCardId}
+          size="lg"
+          emptyText="No resources in your hoard"
+        />
+        <button
+          type="button"
+          onClick={() => { if (!card) return; consultation(player.id, [card.id]); setConsultCardId(''); onAction() }}
+          disabled={!card}
+          className="btn-primary text-xs px-3 py-1 disabled:opacity-50 disabled:cursor-not-allowed"
+        >
+          {card ? `Spend ${card.name} → +1 ${card.type} Rep, +${CONSULT_COINS} coins` : 'Pick a resource'}
+        </button>
       </div>
     )
   }
 
-  if (actionId === 'negotiate') {
+  if (actionId === 'town-crier') {
+    const crierActive = townCrierPeek?.playerId === player.id
     return (
       <div className="space-y-2">
-        <BackButton onBack={onBack} />
-        <p className="text-xs text-parchment-400">
-          Offer a card swap with another player. Uses this action (and any Clan toll) — refunded if the trade is declined.
-          {player.classId === 'paladin' && <span className="text-blue-300"> Honourable Trade: gain Rep on success.</span>}
-        </p>
-
-        {/* My proposal pending — waiting for target */}
-        {negotiatePending?.proposerId === player.id ? (
-          <div className="bg-amber-900/20 border border-amber-700/30 rounded-lg px-2 py-1.5 flex items-center justify-between gap-2">
-            <span className="text-[10px] text-amber-300">
-              ⏳ Waiting for {players.find(p => p.id === negotiatePending.targetId)?.name} to respond…
-            </span>
-            <button
-              type="button"
-              onClick={declineNegotiate}
-              className="text-[9px] text-parchment-500 hover:text-red-300 transition-colors"
-            >
-              Cancel
+        {!crierActive && <BackButton onBack={onBack} />}
+        {!crierActive ? (
+          <>
+            <p className="text-xs text-parchment-400">
+              Look at the top 3 Visitors and put one into play in place of a current Visitor. Then you may sell up to {MAX_SALES_PER_VISITOR} cards into it.
+            </p>
+            <button type="button" onClick={() => { peekTownCrier(player.id, true); onAction() }} className="btn-secondary text-xs px-2 py-0.5">
+              Peek Top 3 Visitors
             </button>
-          </div>
-        ) : negotiatePending ? (
-          <div className="text-[10px] text-parchment-600 italic">Another trade is pending…</div>
+          </>
         ) : (
-          <div className="space-y-1.5">
-            <div className="flex items-center gap-2">
-              <span className="text-[10px] text-parchment-400 flex-shrink-0">Offer to:</span>
-              {players.filter(p => p.id !== player.id).length === 0 ? (
-                <span className="text-[10px] text-parchment-600 italic">No other players</span>
-              ) : (
-                <div className="flex flex-wrap gap-1">
-                  {players.filter(p => p.id !== player.id).map(p => (
-                    <button
-                      key={p.id}
-                      type="button"
-                      onClick={() => setNegTarget(p.id)}
-                      className={`text-xs px-2 py-0.5 rounded border transition-colors ${
-                        (negTarget || players.find(q => q.id !== player.id)?.id) === p.id
-                          ? 'bg-gold-500/30 border-gold-400 text-gold-200'
-                          : 'bg-ink-700 border-parchment-700/30 text-parchment-400 hover:border-parchment-400'
-                      }`}
-                    >
-                      {p.name}
-                    </button>
-                  ))}
-                </div>
-              )}
-            </div>
-
-            {player.hoard.length === 0 ? (
-              <div className="text-[10px] text-parchment-600 italic">Your hoard is empty — nothing to offer</div>
-            ) : (
-              <>
-                <CardPickerGrid
-                  label="Offer card"
-                  resourceCards={player.hoard}
-                  selectedId={negCardId || player.hoard[0]?.id || ''}
-                  onSelect={setNegCardId}
-                  size="lg"
-                />
-
-                {player.classId === 'paladin' && (() => {
-                  const offered = player.hoard.find(c => c.id === (negCardId || player.hoard[0]?.id))
-                  return offered ? (
-                    <div className="text-[10px] text-blue-300 font-semibold">
-                      Honourable Trade: gain {offered.type} Rep from {offered.name}.
-                    </div>
-                  ) : null
-                })()}
-
-                <button
-                  type="button"
-                  onClick={() => {
-                    proposeNegotiate(
-                      player.id,
-                      negTarget || players.find(p => p.id !== player.id)?.id || '',
-                      negCardId || player.hoard[0]?.id || '',
-                      player.classId === 'paladin'
-                        ? player.hoard.find(c => c.id === (negCardId || player.hoard[0]?.id))?.type
-                        : undefined,
-                    )
-                    onAction()
-                  }}
-                  disabled={negotiatesCompletedThisTurn >= 1 || players.filter(p => p.id !== player.id).length === 0}
-                  className="btn-primary text-xs px-2 py-0.5 w-full disabled:opacity-50"
-                >
-                  Propose Trade →
-                </button>
-              </>
-            )}
-          </div>
+          <div className="text-[10px] text-gold-400 italic">📯 Picker open — see the Town Crier modal.</div>
         )}
       </div>
     )
@@ -991,7 +905,7 @@ function VisitorChooser({ selectedIdx, onSelect, canTake, noneLabel }: {
 }
 
 function TavernActions({ actionId, onAction, onBack }: { actionId: string; onAction: () => void; onBack: () => void }) {
-  const { activePlayerId, players, fleaMarket, refreshActiveTokens, auction, tradeWithFleaMarket } = useGameStore()
+  const { activePlayerId, players, fleaMarket, rest, auction, tradeWithFleaMarket } = useGameStore()
   const player = players.find(p => p.id === activePlayerId) ?? players[0]
 
   const [auctionCardId, setAuctionCardId] = useState('')
@@ -1002,6 +916,7 @@ function TavernActions({ actionId, onAction, onBack }: { actionId: string; onAct
 
   const [selectedHoardIds, setSelectedHoardIds] = useState<string[]>([])
   const [selectedFleaIdxs, setSelectedFleaIdxs] = useState<number[]>([])
+  const [restWindowIdx, setRestWindowIdx] = useState<number | null>(null)
 
   if (!player) return null
 
@@ -1019,14 +934,35 @@ function TavernActions({ actionId, onAction, onBack }: { actionId: string; onAct
 
   const canTrade = selectedHoardIds.length > 0 && selectedHoardIds.length === selectedFleaIdxs.length
 
-  if (actionId === 'refresh') {
+  if (actionId === 'rest') {
+    const broken = player.windows.map((w, i) => ({ w, i })).filter(x => x.w.status === 'broken')
+    const chosen = restWindowIdx ?? broken[0]?.i
     return (
-      <ConfirmActionBlock
-        description="Reset all your active tokens to ready."
-        confirmLabel="Refresh All"
-        onConfirm={() => { refreshActiveTokens(player.id); onAction() }}
-        onBack={onBack}
-      />
+      <div className="space-y-3">
+        <BackButton onBack={onBack} />
+        <p className="text-sm text-parchment-300 leading-relaxed">
+          <Keyword name="Refresh">Refresh</Keyword> all your Active tokens, then <Keyword name="Repair">Repair</Keyword> 1 window.
+        </p>
+        {broken.length > 0 ? (
+          <div className="flex flex-wrap gap-1">
+            {broken.map(({ i }) => (
+              <button
+                key={i}
+                type="button"
+                onClick={() => setRestWindowIdx(i)}
+                className={`text-xs px-2 py-0.5 rounded border transition-colors ${chosen === i ? 'bg-gold-500/30 border-gold-400 text-gold-200' : 'bg-ink-700 border-parchment-700/30 text-parchment-400'}`}
+              >
+                Window {i + 1}
+              </button>
+            ))}
+          </div>
+        ) : (
+          <div className="text-xs text-parchment-500">No broken windows to repair.</div>
+        )}
+        <button type="button" onClick={() => { rest(player.id, chosen); onAction() }} className="btn-primary text-xs px-3 py-1">
+          Rest{chosen !== undefined ? ` — repair window ${chosen + 1}` : ''}
+        </button>
+      </div>
     )
   }
 
@@ -1212,7 +1148,7 @@ const CARD_REVEAL_STYLE = (
 )
 
 function WildernessActions({
-  actionId, onAction, onBack, onConsumeAction, onClose,
+  actionId, onBack, onConsumeAction, onClose,
 }: {
   actionId: string
   onAction: () => void
@@ -1220,9 +1156,8 @@ function WildernessActions({
   onConsumeAction: () => void
   onClose: () => void
 }) {
-  const { activePlayerId, players, pitchCamp, turnActionsUsed, bonusActionsThisTurn } = useGameStore()
+  const { activePlayerId, players } = useGameStore()
   const player = players.find(p => p.id === activePlayerId) ?? players[0]
-  const actionsLeft = Math.max(0, (3 + bonusActionsThisTurn) - turnActionsUsed)
 
   if (!player) return null
 
@@ -1234,27 +1169,67 @@ function WildernessActions({
     return <ForageActionUI player={player} onBack={onBack} onConsumeAction={onConsumeAction} onClose={onClose} />
   }
 
-  if (actionId === 'pitch-camp') {
-    const notLastAction = actionsLeft !== 1
-    return (
-      <ConfirmActionBlock
-        description="Gain 1 bonus resource draw at the start of your next round. Must be your final action — set up your shop windows first, then pitch camp to end your turn."
-        confirmLabel="Pitch Camp"
-        onConfirm={() => { pitchCamp(player.id); onAction() }}
-        onBack={onBack}
-        disabled={player.pitchCampPending || notLastAction}
-        extraInfo={
-          player.pitchCampPending ? (
-            <div className="text-xs text-gold-400">Camp already pending for next round</div>
-          ) : notLastAction ? (
-            <div className="text-xs text-amber-400">Use your other actions first — Pitch Camp must be your last action.</div>
-          ) : undefined
-        }
-      />
-    )
+  if (actionId === 'quest') {
+    return <QuestActionUI player={player} onBack={onBack} onConsumeAction={onConsumeAction} onClose={onClose} />
   }
 
   return null
+}
+
+/** Quest — name a Rep type, roll 2d6 on the Quest table, take the result */
+function QuestActionUI({ player, onBack, onConsumeAction, onClose }: {
+  player: Player
+  onBack: () => void
+  onConsumeAction: () => void
+  onClose: () => void
+}) {
+  const quest = useGameStore(s => s.quest)
+  const [repType, setRepType] = useState<RepType>('ARM')
+  const [result, setResult] = useState<{ dice: [number, number]; total: number; outcome: QuestOutcome } | null>(null)
+
+  if (result) {
+    return (
+      <div className="space-y-3 text-center">
+        <div className="text-2xl text-parchment-200">🎲 {result.dice[0]} + {result.dice[1]} = <span className="font-bold text-gold-300">{result.total}</span></div>
+        <div className="text-lg font-display font-bold text-parchment-100">{result.outcome.name}</div>
+        <div className="text-sm text-parchment-300">{result.outcome.text.replace('the type you named', repType)}</div>
+        <button type="button" onClick={onClose} className="btn-primary text-xs px-4 py-1.5">Done</button>
+      </div>
+    )
+  }
+
+  return (
+    <div className="space-y-3">
+      <BackButton onBack={onBack} />
+      <p className="text-sm text-parchment-300">Name a Rep type, then roll 2d6:</p>
+      <table className="w-full text-xs">
+        <tbody>
+          {QUEST_OUTCOMES.map(o => (
+            <tr key={o.name} className="border-b border-parchment-800/30">
+              <td className="py-1 pr-2 font-bold text-parchment-200 whitespace-nowrap">{o.min}–{o.max}</td>
+              <td className="py-1 pr-2 text-parchment-200 whitespace-nowrap">{o.name}</td>
+              <td className="py-1 text-parchment-400">{o.text}</td>
+              <td className="py-1 pl-2 text-right text-parchment-500">{Math.round(twoD6Chance(o.min, o.max) * 100)}%</td>
+            </tr>
+          ))}
+        </tbody>
+      </table>
+      <div className="flex items-center gap-2 flex-wrap">
+        <span className="text-xs text-parchment-400">Rep type:</span>
+        {REP_TYPES.map(rt => (
+          <button key={rt} type="button" onClick={() => setRepType(rt)} className={repBtnCls(rt, repType === rt)}>{rt}</button>
+        ))}
+      </div>
+      <IrreversibleWarning />
+      <button
+        type="button"
+        onClick={() => { const r = quest(player.id, repType); if (r) { onConsumeAction(); setResult(r) } }}
+        className="btn-primary text-xs px-4 py-1.5"
+      >
+        Set out on the Quest 🎲
+      </button>
+    </div>
+  )
 }
 
 /** Forage — confirm gate, then draws from discard, pick up to 2, close */
@@ -1465,158 +1440,117 @@ function GatherActionUI({ player, onBack, onConsumeAction, onClose }: {
 // ---- Barracks ----
 
 function BarracksActions({ actionId, onAction, onBack }: { actionId: string; onAction: () => void; onBack: () => void }) {
-  const {
-    activePlayerId, players, repairAllWindows, reportCrimeB,
-    hireBodyguard, peekTownCrier, townCrierPeek,
-  } = useGameStore()
+  const { activePlayerId, players, reportCrime, fortify, recoverGoods } = useGameStore()
   const player = players.find(p => p.id === activePlayerId) ?? players[0]
-
-  const [reportRep, setReportRep] = useState<RepType>('ARM')
-  const [repairRepType, setRepairRepType] = useState<RepType>('ARM')
-  const [reportTarget, setReportTarget] = useState(players.filter(p => p.id !== activePlayerId)[0]?.id ?? '')
-  const [reportCard, setReportCard] = useState('')
-
+  const [repType, setRepType] = useState<RepType>('ARM')
+  const [targetId, setTargetId] = useState('')
+  const [cardId, setCardId] = useState('')
   if (!player) return null
 
-  const targetPlayer = players.find(p => p.id === reportTarget)
-  const targetStolenCards = targetPlayer
-    ? targetPlayer.hoard.filter(c => targetPlayer.stolenHoardCardIds.includes(c.id))
-    : []
-
-  const crierActive = townCrierPeek && townCrierPeek.playerId === player.id
-  const brokenWindowCount = player.windows.filter(w => w.status === 'broken').length
+  const stolenOf = (p: Player) => p.hoard.filter(c => p.stolenHoardCardIds.includes(c.id) && !(c as { counterfeit?: boolean }).counterfeit)
+  const rivals = players.filter(p => p.id !== player.id)
+  const repPicker = (label: string) => (
+    <div className="flex items-center gap-2 flex-wrap">
+      <span className="text-[10px] text-parchment-500">{label}</span>
+      {REP_TYPES.map(rt => (
+        <button key={rt} type="button" onClick={() => setRepType(rt)} className={repBtnCls(rt, repType === rt)}>{rt}</button>
+      ))}
+    </div>
+  )
+  const targetButtons = (eligible: (p: Player) => boolean, why: (p: Player) => string) => (
+    <div className="flex flex-wrap gap-1">
+      {rivals.map(p => {
+        const ok = eligible(p)
+        return (
+          <button
+            key={p.id}
+            type="button"
+            disabled={!ok}
+            title={ok ? undefined : why(p)}
+            onClick={() => { setTargetId(p.id); setCardId('') }}
+            className={`text-xs px-2 py-0.5 rounded border transition-colors disabled:opacity-40 disabled:cursor-not-allowed ${
+              targetId === p.id ? 'bg-gold-500/30 border-gold-400 text-gold-200' : 'bg-ink-700 border-parchment-700/30 text-parchment-400'
+            }`}
+          >
+            {p.name} ({stolenOf(p).length} stolen)
+          </button>
+        )
+      })}
+    </div>
+  )
 
   if (actionId === 'report') {
+    const target = rivals.find(p => p.id === targetId && stolenOf(p).length > 0)
     return (
-      <div className="space-y-1">
+      <div className="space-y-2">
         <BackButton onBack={onBack} />
-
-        {/* Repair All Windows — Paladins also gain Rep if anything was broken; others just repair */}
-        <div className="space-y-1 pb-1">
-          {player.classId === 'paladin' ? (
-            <>
-              <div className="text-[10px] text-parchment-500">
-                Repair + Gain Rep (Paladin){brokenWindowCount === 0 ? ' — no broken windows, so no Rep' : ''}:
-              </div>
-              <div className="flex flex-wrap gap-1">
-                {REP_TYPES.map(rt => (
-                  <button key={rt} type="button" onClick={() => setRepairRepType(rt)}
-                    className={repBtnCls(rt, repairRepType === rt)}
-                  >{rt}</button>
-                ))}
-              </div>
-              <button
-                type="button"
-                onClick={() => { repairAllWindows(player.id, repairRepType); onAction() }}
-                className="btn-secondary text-xs px-2 py-0.5"
-              >
-                <Keyword name="Repair">Repair</Keyword> All Windows{brokenWindowCount > 0 ? ` → +1 ${repairRepType}` : ''}
-              </button>
-            </>
-          ) : (
-            <>
-              <div className="text-[10px] text-parchment-500">Repair:</div>
-              <button
-                type="button"
-                onClick={() => { repairAllWindows(player.id, undefined); onAction() }}
-                className="btn-secondary text-xs px-2 py-0.5"
-              >
-                <Keyword name="Repair">Repair</Keyword> All Windows
-              </button>
-            </>
-          )}
-        </div>
-
-        <div className="border-t border-parchment-800/30 pt-1 space-y-1">
-          <div className="text-[10px] text-parchment-500">Report theft + Gain Rep:</div>
-          <div className="flex flex-wrap gap-1">
-            {REP_TYPES.map(rt => (
-              <button
-                key={rt}
-                type="button"
-                onClick={() => setReportRep(rt)}
-                className={repBtnCls(rt, reportRep === rt)}
-              >
-                {rt}
-              </button>
-            ))}
-          </div>
-          <div className="flex flex-wrap gap-1">
-            {players.filter(p => p.id !== player.id).map(p => (
-              <button
-                key={p.id}
-                type="button"
-                onClick={() => { setReportTarget(p.id); setReportCard('') }}
-                className={`text-xs px-2 py-0.5 rounded border transition-colors ${
-                  reportTarget === p.id
-                    ? 'bg-gold-500/30 border-gold-400 text-gold-200'
-                    : 'bg-ink-700 border-parchment-700/30 text-parchment-400'
-                }`}
-              >
-                {p.name}
-              </button>
-            ))}
-          </div>
-          <CardPickerGrid
-            label="Stolen card to report"
-            resourceCards={targetStolenCards}
-            selectedId={reportCard}
-            onSelect={setReportCard}
-            size="lg"
-            emptyText="No stolen cards held by this player"
-          />
-          <button
-            type="button"
-            onClick={() => {
-              if (!reportCard) return
-              reportCrimeB(player.id, reportTarget, reportCard, reportRep)
-              setReportCard('')
-              onAction()
-            }}
-            disabled={!reportCard || !reportTarget}
-            className="btn-primary text-xs px-2 py-0.5 disabled:opacity-50"
-          >
-            Report — gain 1 {reportRep} rep
-          </button>
-        </div>
+        <p className="text-xs text-parchment-400">
+          Name a rival holding Stolen cards. They discard the Stolen card of their choice (their least valuable), and you gain 1 Rep.
+        </p>
+        {targetButtons(p => stolenOf(p).length > 0, () => 'No Stolen cards in their hoard')}
+        {repPicker('Gain Rep:')}
+        <button
+          type="button"
+          disabled={!target}
+          onClick={() => { if (!target) return; reportCrime(player.id, target.id, repType); onAction() }}
+          className="btn-primary text-xs px-3 py-1 disabled:opacity-50"
+        >
+          {target ? `Report ${target.name} → +1 ${repType}` : 'Choose a rival'}
+        </button>
       </div>
     )
   }
 
-  if (actionId === 'bodyguard') {
+  if (actionId === 'fortify') {
+    const broken = player.windows.filter(w => w.status === 'broken').length
+    const nothingToDo = broken === 0 && player.hasNightWatcher
     return (
-      <ConfirmActionBlock
-        description="Hire a bodyguard — no cards can be stolen from your hoard this round."
-        confirmLabel={`Pay ${BODYGUARD_COST} coin → Night Watcher`}
-        onConfirm={() => { hireBodyguard(player.id); onAction() }}
-        onBack={onBack}
-        disabled={player.coins < BODYGUARD_COST || player.hasNightWatcher}
-        extraInfo={
-          <div className="text-xs text-parchment-500">
-            {player.hasNightWatcher
-              ? 'Already holding Night Watcher'
-              : `You have ${player.coins} coins`}
-          </div>
-        }
-      />
+      <div className="space-y-3">
+        <BackButton onBack={onBack} />
+        <p className="text-sm text-parchment-300 leading-relaxed">
+          <Keyword name="Repair">Repair</Keyword> all your windows ({broken} broken) and take the <Keyword name="Night Watcher">Night Watcher</Keyword>.
+        </p>
+        {player.classId === 'paladin' && repPicker(broken >= 2 ? 'Honourable Trade (2+ repaired) — gain Rep:' : 'Honourable Trade needs 2+ broken windows')}
+        <button
+          type="button"
+          disabled={nothingToDo}
+          onClick={() => { fortify(player.id, player.classId === 'paladin' ? repType : undefined); onAction() }}
+          className="btn-primary text-xs px-3 py-1 disabled:opacity-50"
+        >
+          Fortify
+        </button>
+        {nothingToDo && <div className="text-xs text-parchment-500">Nothing to repair, and you already hold the Night Watcher.</div>}
+      </div>
     )
   }
 
-  if (actionId === 'town-crier') {
+  if (actionId === 'recover') {
+    const target = rivals.find(p => p.id === targetId && !p.hasNightWatcher && stolenOf(p).length > 0)
     return (
       <div className="space-y-2">
-        {!crierActive && <BackButton onBack={onBack} />}
-        {!crierActive ? (
-          <button
-            type="button"
-            onClick={() => { peekTownCrier(player.id); onAction() }}
-            className="btn-secondary text-xs px-2 py-0.5"
-          >
-            Peek Top 3 Visitors
-          </button>
-        ) : (
-          <div className="text-[10px] text-gold-400 italic">📯 Picker open — see the Town Crier modal.</div>
+        <BackButton onBack={onBack} />
+        <p className="text-xs text-parchment-400">
+          Take a Stolen card from a rival&apos;s hoard into yours. It stays Stolen, so it can be Fenced — or Reported.
+        </p>
+        {targetButtons(p => !p.hasNightWatcher && stolenOf(p).length > 0, p => (p.hasNightWatcher ? 'Protected by the Night Watcher' : 'No Stolen cards in their hoard'))}
+        {target && (
+          <CardPickerGrid
+            label="Stolen card to take"
+            resourceCards={stolenOf(target)}
+            selectedId={cardId}
+            onSelect={setCardId}
+            size="lg"
+            emptyText="No Stolen cards"
+          />
         )}
+        <button
+          type="button"
+          disabled={!target || !cardId}
+          onClick={() => { if (!target || !cardId) return; recoverGoods(player.id, target.id, cardId); onAction() }}
+          className="btn-primary text-xs px-3 py-1 disabled:opacity-50"
+        >
+          Recover
+        </button>
       </div>
     )
   }
@@ -1626,10 +1560,15 @@ function BarracksActions({ actionId, onAction, onBack }: { actionId: string; onA
 
 // ---- Workshop ----
 
-/** Sell to a Visitor — pick a Visitor, then up to 2 hoard/window cards it still needs */
-function MarketSaleStep({ player, onAction, onBack }: { player: Player; onAction: () => void; onBack: () => void }) {
+/** Sell up to 2 hoard/window cards into a Visitor. Town Crier opens it on the Visitor just placed. */
+export function MarketSaleStep({ player, onAction, onBack, fixedVisitorIdx }: {
+  player: Player
+  onAction: () => void
+  onBack: () => void
+  fixedVisitorIdx?: number
+}) {
   const { activeVisitors, visitorDemandRemaining, marketSale } = useGameStore()
-  const [visitorIdx, setVisitorIdx] = useState<number | null>(null)
+  const [visitorIdx, setVisitorIdx] = useState<number | null>(fixedVisitorIdx ?? null)
   const [picks, setPicks] = useState<{ cardId: string; zone: 'hoard' | 'window'; windowIdx?: number }[]>([])
 
   const options: { card: ResourceCard; zone: 'hoard' | 'window'; windowIdx?: number }[] = [
@@ -1668,7 +1607,7 @@ function MarketSaleStep({ player, onAction, onBack }: { player: Player; onAction
 
   return (
     <div className="space-y-2">
-      <BackButton onBack={() => { setVisitorIdx(null); setPicks([]) }} />
+      {fixedVisitorIdx === undefined && <BackButton onBack={() => { setVisitorIdx(null); setPicks([]) }} />}
       <div className="flex items-center gap-2">
         <img src={visitor.imageFile} alt={visitor.name} className="w-10 h-10 rounded object-cover object-left flex-shrink-0" />
         <div className="min-w-0">
@@ -1707,6 +1646,70 @@ function MarketSaleStep({ player, onAction, onBack }: { player: Player; onAction
       >
         Sell {picks.length > 0 ? `${picks.length} for $${coins}` : ''} → done
       </button>
+      {fixedVisitorIdx !== undefined && (
+        <button type="button" onClick={onBack} className="btn-secondary text-xs px-3 py-1 ml-2">Skip selling</button>
+      )}
+    </div>
+  )
+}
+
+/** Appraise 2 — confirm, then look at the top 4 resources and keep up to 2 */
+function AppraiseActionStep({ player, onAction, onBack }: { player: Player; onAction: () => void; onBack: () => void }) {
+  const { appraisePeek, peekWorkshopAppraise, completeAppraise } = useGameStore()
+  const [hasConfirmed, setHasConfirmed] = useState(false)
+  const [selected, setSelected] = useState<string[]>([])
+  const isActive = appraisePeek?.playerId === player.id
+  const maxKeep = appraisePeek?.maxKeep ?? 2
+
+  if (hasConfirmed && isActive) {
+    return (
+      <div className="space-y-2 text-[10px]">
+        {CARD_REVEAL_STYLE}
+        <div className="text-parchment-400">Select up to {maxKeep} to keep:</div>
+        <div className="flex flex-wrap gap-2">
+          {appraisePeek!.cards.map((c, i) => (
+            <div key={c.id} style={{ animation: `card-reveal 0.28s ease-out ${i * 75}ms both` }}>
+              <ResourceCardMini
+                card={c}
+                size="lg"
+                selected={selected.includes(c.id)}
+                onClick={() => setSelected(prev =>
+                  prev.includes(c.id) ? prev.filter(x => x !== c.id) : prev.length < maxKeep ? [...prev, c.id] : prev
+                )}
+              />
+            </div>
+          ))}
+        </div>
+        <button
+          type="button"
+          onClick={() => {
+            completeAppraise(player.id, selected)
+            useGameStore.getState().clearDrawnCards() // completeAppraise sets lastDrawnCards; suppress toast
+            setSelected([])
+            onAction()
+          }}
+          className="btn-primary text-xs px-2 py-0.5"
+        >
+          Keep {selected.length}/{maxKeep} → done
+        </button>
+      </div>
+    )
+  }
+
+  if (hasConfirmed) return <div className="text-xs text-parchment-400 animate-pulse py-3 text-center">Drawing cards…</div>
+
+  return (
+    <div className="space-y-3">
+      <p className="text-sm text-parchment-300 leading-relaxed">
+        Look at the top 4 cards of the resource deck and keep up to 2. The rest go to the bottom of the deck.
+      </p>
+      <IrreversibleWarning />
+      <div className="flex gap-2 pt-1">
+        <button type="button" onClick={onBack} className="btn-secondary text-xs px-3 py-1.5">← Back</button>
+        <button type="button" onClick={() => { peekWorkshopAppraise(player.id); setHasConfirmed(true) }} className="btn-primary text-xs px-4 py-1.5">
+          Peek Top 4 →
+        </button>
+      </div>
     </div>
   )
 }
@@ -1808,8 +1811,8 @@ function WorkshopActions({ actionId, onAction, onBack }: { actionId: string; onA
     )
   }
 
-  if (actionId === 'sell-visitor') {
-    return <MarketSaleStep player={player} onAction={onAction} onBack={onBack} />
+  if (actionId === 'appraise') {
+    return <AppraiseActionStep player={player} onAction={onAction} onBack={onBack} />
   }
 
   return null

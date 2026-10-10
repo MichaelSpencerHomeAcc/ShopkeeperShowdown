@@ -1,7 +1,7 @@
 import {
   useGameStore, CLAN_TOLL, FEARSOME_CHAMPION_MAX, MAX_SALES_PER_VISITOR, rankContributors, type GameStore,
   MOMENTUM_COSTS, SHARED_REP_MAX, FLOW_STATE_MAX, MAX_OMENS, SURGE_REROLL_COST, SURGE_SHIFT_COST, WILD_SURGE_COUNT,
-  CONSULT_COST, BODYGUARD_COST, FENCE_MULTIPLIER,
+  CONSULT_CARDS, CONSULT_COINS, QUEST_OUTCOMES, twoD6Chance, FENCE_MULTIPLIER,
 } from '../store/gameStore'
 import type {
   BotDifficulty, CurseId, DemandMap, DuelStake, Location, MomentumSpendId, Player, RepType, ResourceCard, ResourceType,
@@ -655,7 +655,7 @@ export function planSales(s: GameStore, me: Player, ctx: ValueContext): { visito
 }
 
 /** Workshop "Sell to a Visitor": the best Visitor and up to 2 hoard/window cards to sell into it. */
-function bestMarketSale(s: GameStore, me: Player, ctx: ValueContext) {
+function bestMarketSale(s: GameStore, me: Player, ctx: ValueContext, onlyIdx?: number) {
   const options: SaleOption[] = [
     ...me.hoard.map(card => ({ card, zone: 'hoard' as const })),
     ...me.windows.flatMap((w, i) => (w.card && w.status !== 'broken' ? [{ card: w.card, zone: 'window' as const, windowIdx: i }] : [])),
@@ -664,7 +664,7 @@ function bestMarketSale(s: GameStore, me: Player, ctx: ValueContext) {
   const gain = (o: SaleOption) => (saleValue(o.card, ctx) - cardWorth(o.card, ctx)) * (o.zone === 'window' ? 0.4 : 1)
   let best: { visitorIdx: number; picks: SaleOption[]; value: number } | null = null
   s.activeVisitors.forEach((v, visitorIdx) => {
-    if (!v) return
+    if (!v || (onlyIdx !== undefined && visitorIdx !== onlyIdx)) return
     const start = remainingOf(s, v)
     const sets: SaleOption[][] = []
     options.forEach((a, x) => {
@@ -875,9 +875,30 @@ function locationCandidates(s: GameStore, me: Player, ctx: ValueContext): Candid
   }
 
   // ── Guildhall ──
-  if (usable('guildhall', CONSULT_COST)) {
-    const t = bestRepType(me.rep, difficulty)
-    add('guildhall', `consult:${t}`, repValue(me.rep, t, difficulty) - CONSULT_COST, g => g.consultation(me.id, t), true)
+  if (usable('guildhall')) {
+    for (const t of RESOURCE_TYPES) {
+      // Spend the cheapest cards of that type
+      const pair = sortByWorth(me.hoard.filter(c => c.type === t && !isCounterfeit(c)), ctx).slice(-CONSULT_CARDS)
+      if (pair.length < CONSULT_CARDS) continue
+      const cost = pair.reduce((n, c) => n + cardWorth(c, ctx), 0)
+      add('guildhall', `consult:${t}`, repValue(me.rep, t, difficulty) + CONSULT_COINS - cost, g => g.consultation(me.id, pair.map(c => c.id)), true)
+    }
+    const deadSlots = s.activeVisitors.filter(v => v && visitorPotential(s, me, v) === 0).length
+    if (s.visitorDeck.length + s.visitorDiscard.length >= 3) {
+      const saleNow = bestMarketSale(s, me, ctx)
+      add('guildhall', 'town-crier', pts(deadSlots > 0 ? 2.2 : 0.6) + Math.max(0, saleNow?.value ?? 0) * 0.9, g => {
+        g.peekTownCrier(me.id)
+        const peek = st().townCrierPeek
+        if (!peek || peek.playerId !== me.id) return
+        const choice = chooseTownCrier(st(), st().players.find(p => p.id === me.id)!, peek.cards)
+        if (!choice) return
+        st().completeTownCrier(me.id, choice.cardId, choice.slotIdx)
+        // Then sell up to 2 cards into the Visitor just placed
+        const me2 = st().players.find(p => p.id === me.id)!
+        const sale = bestMarketSale(st(), me2, buildContext(st(), me2, difficulty), choice.slotIdx)
+        if (sale && sale.value > 0) st().marketSale(me.id, sale.visitorIdx, sale.picks.map(o => ({ cardId: o.card.id, zone: o.zone, windowIdx: o.windowIdx })))
+      }, true)
+    }
   }
   if (usable('guildhall')) {
     for (const prof of s.professionalSlots) {
@@ -889,8 +910,10 @@ function locationCandidates(s: GameStore, me: Player, ctx: ValueContext): Candid
 
   // ── Tavern ──
   if (usable('tavern')) {
-    if (me.activeTokens < 2 && tokenVal > 0) {
-      add('tavern', 'refresh', (2 - me.activeTokens) * tokenVal, g => g.refreshActiveTokens(me.id), true)
+    const brokenIdx = me.windows.findIndex(w => w.status === 'broken')
+    if ((me.activeTokens < 2 && tokenVal > 0) || brokenIdx >= 0) {
+      add('tavern', 'rest', (2 - me.activeTokens) * tokenVal + (brokenIdx >= 0 ? windowWorth : 0),
+        g => g.rest(me.id, brokenIdx >= 0 ? brokenIdx : undefined), true)
     }
     const auctionPick = bestAuction(s, me, ctx)
     if (auctionPick) {
@@ -918,48 +941,47 @@ function locationCandidates(s: GameStore, me: Player, ctx: ValueContext): Candid
         }
       }, true)
     }
-    if (left === 1 && !me.pitchCampPending && s.round < 6) {
-      const value = drawValue(2, avgDraw, me) * 0.85 + (me.activeTokens < 2 ? tokenVal * 0.8 : 0)
-      add('wilderness', 'pitch-camp', value, g => g.pitchCamp(me.id), true)
+    {
+      // Quest: expected value of the 2d6 table
+      const t = bestRepType(me.rep, difficulty)
+      const loss = me.hoard.length ? averageWorth(me.hoard, ctx, 0) : 0
+      const value = QUEST_OUTCOMES.reduce((n, o) => n + twoD6Chance(o.min, o.max) * (
+        -(o.discard ?? 0) * loss + (o.draw ? drawValue(o.draw, avgDraw, me) : 0) + (o.coins ?? 0) + (o.rep ? marginalRep(me.rep, t, o.rep) : 0)), 0)
+      add('wilderness', `quest:${t}`, value, g => g.quest(me.id, t), true)
     }
   }
 
   // ── Barracks ──
   if (usable('barracks')) {
+    // Fortify: repair everything and take the Night Watcher
     const broken = me.windows.filter(w => w.status === 'broken').length
-    if (broken > 0) {
+    const wantsWatcher = !me.hasNightWatcher && s.players.length > 2
+    if (broken > 0 || wantsWatcher) {
       const t = bestRepType(me.rep, difficulty)
-      // Honourable Trade: Paladins gain 1 Rep when a window actually gets repaired
-      const paladinRep = me.classId === 'paladin' ? repValue(me.rep, t, difficulty) : 0
-      add('barracks', 'repair', broken * windowWorth + paladinRep,
-        g => g.repairAllWindows(me.id, me.classId === 'paladin' ? t : undefined), true)
+      // Honourable Trade: Paladins gain 1 Rep when a Fortify repairs 2+ windows
+      const paladinRep = me.classId === 'paladin' && broken > 1 ? repValue(me.rep, t, difficulty) : 0
+      const hoardWorth = me.hoard.reduce((n, c) => n + cardWorth(c, ctx), 0)
+      const leading = rankOpponents(s, me.id).every(p => liveScore(p) <= liveScore(me))
+      const watcher = wantsWatcher ? hoardWorth * 0.1 + (leading ? pts(1.2) : 0) : 0
+      add('barracks', 'fortify', broken * windowWorth + paladinRep + watcher,
+        g => g.fortify(me.id, me.classId === 'paladin' ? t : undefined), true)
     }
-    if (difficulty !== 'easy') {
-      for (const target of s.players) {
-        if (target.id === me.id) continue
-        const stolen = target.hoard.filter(c => target.stolenHoardCardIds.includes(c.id))
-        if (stolen.length === 0) continue
-        const card = [...stolen].sort((a, b) => b.value - a.value)[0]
+    for (const target of s.players) {
+      if (target.id === me.id) continue
+      const stolen = target.hoard.filter(c => target.stolenHoardCardIds.includes(c.id) && !isCounterfeit(c))
+      if (stolen.length === 0) continue
+      const harm = harmWeight(s, me, target, difficulty) * (s.players.length - 1)
+      if (difficulty !== 'easy') {
+        // Report: they discard the Stolen card they value least; we gain 1 Rep of our choice
+        const card = [...stolen].sort((a, b) => a.value - b.value || a.repTokens - b.repTokens)[0]
         const t = bestRepType(me.rep, difficulty)
-        const repGain = repValue(me.rep, t, difficulty)
-        const value = repGain + card.value * 0.6 * harmWeight(s, me, target, difficulty) * (s.players.length - 1)
-        add('barracks', `report:${target.id}:${card.id}`, value, g => g.reportCrimeB(me.id, target.id, card.id, t))
+        add('barracks', `report:${target.id}`, repValue(me.rep, t, difficulty) + card.value * 0.6 * harm, g => g.reportCrime(me.id, target.id, t))
       }
-      if (me.coins >= BODYGUARD_COST && !me.hasNightWatcher && s.players.length > 2) {
-        const hoardWorth = me.hoard.reduce((n, c) => n + cardWorth(c, ctx), 0)
-        const leading = rankOpponents(s, me.id).every(p => liveScore(p) <= liveScore(me))
-        add('barracks', 'bodyguard', hoardWorth * 0.1 + (leading ? pts(1.2) : 0) - BODYGUARD_COST, g => g.hireBodyguard(me.id))
-      }
-      const deadSlots = s.activeVisitors.filter(v => v && visitorPotential(s, me, v) === 0).length
-      if (s.visitorDeck.length + s.visitorDiscard.length >= 3 && phases > 1) {
-        add('barracks', 'town-crier', pts(deadSlots > 0 ? 2.2 : 0.6), g => {
-          g.peekTownCrier(me.id)
-          const peek = st().townCrierPeek
-          if (peek && peek.playerId === me.id) {
-            const choice = chooseTownCrier(st(), st().players.find(p => p.id === me.id)!, peek.cards)
-            if (choice) st().completeTownCrier(me.id, choice.cardId, choice.slotIdx)
-          }
-        })
+      if (!target.hasNightWatcher) {
+        // Recover Goods: take their best Stolen card (it stays Stolen, so it can be reported or fenced)
+        const card = sortByWorth(stolen, ctx)[0]
+        add('barracks', `recover:${target.id}:${card.id}`, cardWorth(card, ctx, 1) - pts(1) + card.value * 0.5 * harm,
+          g => g.recoverGoods(me.id, target.id, card.id))
       }
     }
   }
@@ -991,10 +1013,15 @@ function locationCandidates(s: GameStore, me: Player, ctx: ValueContext): Candid
       add('workshop', `craft:${wo.id}:${plan.cardIds.join(',')}`, wo.price + bonus + denial + honour - plan.cost * 0.85,
         g => g.completeCraft(me.id, idx, plan.cardIds), true)
     })
-    const sale = bestMarketSale(s, me, ctx)
-    if (sale && sale.value > 0) {
-      add('workshop', `sell-visitor:${sale.visitorIdx}:${sale.picks.map(o => o.card.id).join(',')}`, sale.value,
-        g => g.marketSale(me.id, sale.visitorIdx, sale.picks.map(o => ({ cardId: o.card.id, zone: o.zone, windowIdx: o.windowIdx }))), true)
+    if (s.resourceDeck.length > 0) {
+      add('workshop', 'appraise', drawValue(2, avgDraw * 1.25, me), g => {
+        g.peekWorkshopAppraise(me.id)
+        const peek = st().appraisePeek
+        if (peek && peek.playerId === me.id) {
+          const c2 = buildContext(st(), st().players.find(p => p.id === me.id)!, difficulty)
+          st().completeAppraise(me.id, sortByWorth(peek.cards, c2).slice(0, peek.maxKeep).map(c => c.id))
+        }
+      }, true)
     }
   }
 

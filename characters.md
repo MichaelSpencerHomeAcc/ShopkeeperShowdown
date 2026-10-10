@@ -19,7 +19,7 @@ Recommended starter classes for first-time play: **Barbarian, Ranger, Monk, Sorc
 ### Passive — Fearsome Champion
 - Add 2 to all Clash rolls.
 - Other players may give you 2 resources from their Hoard to make you retreat from any Clash you are part of (you forfeit the Clash; they don't have to roll).
-- Always on: At the start of your turn, gain 1 coin if there is at least one Broken window on the board.
+- Always on: At the start of your turn, gain 1 coin for each Broken window currently on the board (maximum 2).
 
 ### Active — Reckless Swing
 Break 1 of another player's windows. If that player has more Reputation tokens than you, Break 2 of their windows instead.
@@ -136,7 +136,7 @@ Roll on the Surge Table **twice**, one after the other (casting it gives the usu
 
 ### Passive — Flow State
 - Gain 1 Momentum when sharing a location with another player during your turn (max 2 Momentum from this per turn).
-- Gain 2 Momentum when you complete a Visitor's order.
+- Gain 3 Momentum when you complete a Visitor's order.
 
 ### Active — Momentum Spend (no token cost; spend Momentum points instead)
 You may spend Momentum during your turn from this list. Spending is free (no action), and each option can be used once per turn:
@@ -205,9 +205,8 @@ Place 1 Counterfeit from your hand into any window (yours or another player's). 
 
 ### Passive — Honourable Trade
 Gain 1 additional Reputation token whenever you:
-- Resolve a Negotiate action at the Guildhall
 - Complete a Work Order (gain a token of the type the recipe needs most; ties go ARM, CON, TRI, TRG)
-- Use Report the Crime at the Barracks to repair at least one Broken window
+- Fortify at the Barracks and repair at least two Broken windows
 
 ### Active — Righteous Duel
 Name a player and declare a stake (a resource or coin amount). They name their stake. Both players roll d6. The Paladin adds the number of Renown Cards currently in their hand to their roll. Highest total wins both stakes. Tie: both stakes returned, no effect.
@@ -246,7 +245,7 @@ Discard 1 Renown Card from your hand. Immediately resolve its Spend effect.
 **Difficulty:** 4/5
 
 ### Class Feature — Bottled Fate
-Keep up to 2 **Omen** dice. Whenever **any** player rolls a 1 or a 6, bottle it as an Omen showing that number.
+Keep up to 3 **Omen** dice. Whenever **any** player rolls a 1 or a 6, bottle it as an Omen showing that number.
 
 ### Passive — Twist of Fate
 After any die is rolled (by anyone, at any time), spend an Omen to change that die to the Omen's number. A twisted die can't be re-rolled. Twisting another player's roll earns you 1 coin.
@@ -278,7 +277,7 @@ Place your Imp on a location, where everyone can see it. It **stays until someon
 
 You may Twist that roll. The Night Watcher holder is ignored by the Imp. Using Summon Imp again while it's out moves it to a new location.
 
-**Custom components:** 2 Omen dice, Curse deck (8 cards), Imp figure
+**Custom components:** 3 Omen dice, Curse deck (8 cards), Imp figure
 
 ---
 
