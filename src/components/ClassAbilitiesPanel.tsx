@@ -850,7 +850,6 @@ function repBtnCls(rt: RepType, selected: boolean) {
 function PaladinAbilities({ player, isActiveTurn }: { player: Player; isActiveTurn: boolean }) {
   const {
     players, fleaMarket, initiateRighteousDuel, talesOfOld, classAbilitiesUsedThisTurn,
-    proposeNegotiate, negotiatesCompletedThisTurn, negotiatePending,
   } = useGameStore()
 
   const [duelOpen, setDuelOpen] = useState(false)
@@ -873,20 +872,12 @@ function PaladinAbilities({ player, isActiveTurn }: { player: Player; isActiveTu
   // rn08: give 1 resource to a player
   const [rn08Target, setRn08Target] = useState('')
   const [rn08Card, setRn08Card] = useState('')
-  // Second negotiate (rn01 passive)
-  const [neg2Target, setNeg2Target] = useState('')
-  const [neg2CardId, setNeg2CardId] = useState('')
 
   const otherPlayers = players.filter(p => p.id !== player.id)
   const canAct = isActiveTurn && player.activeTokens >= 1
   const duelUsed = classAbilitiesUsedThisTurn.includes('righteousDuel')
   const totalClashBonus = player.renownCards.length
   const fleaOptions = fleaMarket.map((c, i) => ({ c, i })).filter(({ c }) => c !== null)
-
-  // rn01 passive: show second negotiate form when first is complete and no pending trade
-  const hasRn01 = player.renownCards.some(c => c.id === 'rn01')
-  const canSecondNegotiate = isActiveTurn && hasRn01 && negotiatesCompletedThisTurn === 1 && !negotiatePending
-  const neg2OfferCard = player.hoard.find(c => c.id === (neg2CardId || player.hoard[0]?.id))
 
   function clearTalesState() {
     setRn01HoardIds([]); setRn01FleaIdxs([])
@@ -976,64 +967,13 @@ function PaladinAbilities({ player, isActiveTurn }: { player: Player; isActiveTu
           <span className="text-sm font-bold text-parchment-300 uppercase tracking-wide">Passive · Honourable Trade</span>
         </div>
         <div className="px-3 py-2 text-sm text-parchment-400 leading-relaxed">
-          +1 Rep when you resolve a Negotiate at the Guildhall, complete a Work Order (the recipe's main type), or when Report the Crime repairs at least one broken window.
+          +1 Rep when you complete a Work Order (the recipe's main type), or when Fortify repairs at least one broken window.
           {totalClashBonus > 0 && (
             <> <span className="text-gold-400 font-semibold">+{totalClashBonus} to Righteous Duel rolls</span> (current Renown card count).</>
           )}
           <div className="mt-1">Renown Cards in hand: <span className="text-parchment-200 font-semibold">{player.renownCards.length}</span></div>
         </div>
       </div>
-
-      {/* rn01 passive: Second Negotiate (free, locks to this section only) */}
-      {canSecondNegotiate && (
-        <div className="bg-blue-950/40 border border-blue-700/40 rounded-lg p-2 space-y-1.5">
-          <div className="text-xs font-semibold text-blue-300 uppercase tracking-wide">
-            ◆ Council of Seven — Second Negotiate (Free)
-          </div>
-          <div className="text-xs text-parchment-500">
-            Your first Negotiate is done. Use this free second trade — no action cost.
-          </div>
-          <CardPickerGrid
-            label="Offer card from your hoard"
-            resourceCards={player.hoard}
-            selectedId={neg2CardId || player.hoard[0]?.id || ''}
-            onSelect={setNeg2CardId}
-            size="lg"
-            emptyText="Your hoard is empty"
-          />
-          <div className="text-xs text-parchment-400">Trade with:</div>
-          <div className="flex flex-wrap gap-1">
-            {otherPlayers.map(p => (
-              <button
-                key={p.id}
-                onClick={() => setNeg2Target(p.id)}
-                disabled={p.hoard.length === 0}
-                className={`text-xs px-2 py-0.5 rounded border transition-colors disabled:opacity-40 ${
-                  (neg2Target || otherPlayers[0]?.id) === p.id
-                    ? 'bg-gold-500/30 border-gold-400 text-gold-200'
-                    : 'bg-ink-700 border-parchment-700/30 text-parchment-400'
-                }`}
-              >
-                {p.name} ({p.hoard.length})
-              </button>
-            ))}
-          </div>
-          <div className="text-xs text-blue-200">
-            If accepted: both get +2 coins · You get +{player.renownCards.some(c => c.id === 'rn08') ? 2 : 1} {neg2OfferCard?.type ?? '?'} Rep · They also get +1 {neg2OfferCard?.type ?? '?'} Rep
-          </div>
-          <button
-            onClick={() => {
-              const tid = neg2Target || otherPlayers[0]?.id || ''
-              const cid = neg2CardId || player.hoard[0]?.id || ''
-              proposeNegotiate(player.id, tid, cid, neg2OfferCard?.type)
-            }}
-            disabled={player.hoard.length === 0 || otherPlayers.every(p => p.hoard.length === 0)}
-            className="btn-primary text-xs px-2 py-0.5 w-full disabled:opacity-50"
-          >
-            Propose Free Trade →
-          </button>
-        </div>
-      )}
 
       {/* Active: Righteous Duel */}
       <div>
@@ -1345,7 +1285,7 @@ function PaladinAbilities({ player, isActiveTurn }: { player: Player; isActiveTu
                       )}
                       {/* rn09, rn10, rn07: inline UI or simple description */}
                       {card.id === 'rn09' && <div className="text-xs text-parchment-400 italic">Takes 1 random card from each player's hoard.</div>}
-                      {card.id === 'rn07' && <div className="text-xs text-parchment-400 italic">Opens Town Crier peek immediately (no action or Barracks visit needed).</div>}
+                      {card.id === 'rn07' && <div className="text-xs text-parchment-400 italic">Opens Town Crier immediately (no action or Guildhall visit needed).</div>}
                       {/* rn10: inline duel setup — target + stake pickers */}
                       {card.id === 'rn10' && (
                         <div className="space-y-1.5">

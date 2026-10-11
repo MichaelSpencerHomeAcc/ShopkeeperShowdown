@@ -11,17 +11,16 @@ export interface ResourceCard {
 
 /** Warlock Curse cards (see data/curses.ts). */
 export type CurseId =
-  | 'jinx' | 'butterfingers' | 'tithe' | 'hexedGoods' | 'leakyPockets' | 'tollOfShadows' | 'unsettledShelves' | 'badOmen'
+  | 'tithe' | 'leakyPockets' | 'stickyFingers' | 'hexedShutters' | 'unsettledShelves' | 'weariness' | 'misfortune' | 'badOmen'
 
-/** A curse sitting on a player. armed = their turn has started, so it fizzles when that turn ends. */
+/** A Curse card laid in front of a player; it resolves at the start of their next turn. */
 export interface ActiveCurse {
   id: CurseId
   warlockId: string
-  armed: boolean
 }
 
 /** Rolls the Warlock can Twist and that the Sorcerer's dice abilities watch. */
-export type RollKind = 'gather' | 'auction' | 'mascot' | 'imp'
+export type RollKind = 'gather' | 'auction' | 'mascot' | 'imp' | 'misfortune'
 
 /** Choices some Wild Surge results need. */
 export interface SurgeChoice {
@@ -85,6 +84,8 @@ export interface VisitorCard {
   title: string
   demand: string
   size: 'Small' | 'Large'
+  /** Printed contribution prizes: [1st place, 2nd place] */
+  prizes: [VisitorPrizeKind, VisitorPrizeKind]
   imageFile: string
 }
 
@@ -282,7 +283,7 @@ export interface GameState {
   /** Type of the last card fenced at the Thieves' Guild (shown on board tile) */
   lastGuildFenceType: ResourceType | null
   diceResult: number | null
-  townCrierPeek: { playerId: string; cards: VisitorCard[] } | null
+  townCrierPeek: { playerId: string; cards: VisitorCard[]; sell?: boolean } | null
   /** source: who asked for the peek — Sorcerer/Monk peeks get their own picker */
   appraisePeek: { playerId: string; cards: ResourceCard[]; maxKeep: number; source?: 'magic' | 'momentum' } | null
   foragePeek: { playerId: string; cards: ResourceCard[]; source?: 'location' | 'patience' } | null
@@ -317,12 +318,21 @@ export interface GameState {
     auctionFromZone?: 'hoard' | 'window'
     auctionWindowIdx?: number
     auctionVisitorIdx?: number
-    impWarlockId?: string
+    /** The Warlock behind an Imp or Misfortune roll */
+    sourceWarlockId?: string
   } | null
   /** Hex: the two Curse cards drawn, waiting for the Warlock to pick one */
   hexPeek: { warlockId: string; targetId: string; cards: CurseId[] } | null
-  /** The Warlock's Imp, lurking at a location until their next turn */
+  /** The Warlock's Imp: it lurks at a location until someone banishes it */
   imp: { warlockId: string; location: Location } | null
+  /** A curse resolving at the start of its victim's turn that needs them to pick a card or window */
+  curseChoice: { playerId: string; curseId: CurseId } | null
+  /** A Quest roll waiting for the Warlock to Twist one die (or let it stand) */
+  questTwist: { playerId: string; repType: RepType; dice: [number, number]; warlockId: string } | null
+  /** The last Quest result, for the quester's result screen */
+  questResult: { playerId: string; repType: RepType; dice: [number, number]; total: number; outcome: string } | null
+  /** Audacious Auctioneer: auctions this player may still make, one after another */
+  auctionsLeft: { playerId: string; count: number } | null
 
   // ── Monk ──  // ── Monk ──
   /** Players the Monk has shared a location with this turn (Flow State + the 7-Momentum Rep spend) */
@@ -399,32 +409,8 @@ export interface GameState {
     winnerId: string | null   // null = tie
     declineTargetCard: ResourceCard | null   // card target discarded; null = paid 2 coins instead
   } | null
-  /** Guildhall Negotiate — set while waiting for target to accept/decline a trade proposal */
-  negotiatePending: {
-    proposerId: string
-    targetId: string
-    offeredCardId: string
-    /** Paladin only — which Rep type to gain on successful trade */
-    paladinRepType?: RepType
-    /** True when proposing spent the Guildhall action — refunded if the trade is denied */
-    actionCharged?: boolean
-    /** Barbarian who was paid a Clan toll for this Guildhall visit — repaid if the trade is denied */
-    clanTollPaidTo?: string
-  } | null
-  /** Set once the target has chosen a counter-card; shown to the proposer to accept or decline */
-  negotiateReview: {
-    proposerId: string
-    targetId: string
-    offeredCardId: string
-    counterCardId: string
-    paladinRepType?: RepType
-    actionCharged?: boolean
-    clanTollPaidTo?: string
-  } | null
   /** Shaman: set while waiting for target to choose 2 hoard cards to discard */
   shamanCallLightning: { shamanId: string; targetId: string } | null
-  /** Counts completed Negotiate trades this turn (rn01 Council of Seven allows 2) */
-  negotiatesCompletedThisTurn: number
   /** True once Polite Promoter flea-market reset is used this turn — prevents re-use on panel close/reopen */
   politePromoterResetUsed: boolean
   /** Extra location actions granted this turn (e.g. Shaman elemental die face 6) */

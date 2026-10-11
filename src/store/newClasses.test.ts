@@ -1,5 +1,5 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
-import { useGameStore, MOMENTUM_COSTS, SURGE_SHIFT_COST } from './gameStore'
+import { useGameStore, MOMENTUM_COSTS, SURGE_SHIFT_COST, SURGE_REROLL_COST } from './gameStore'
 import { cardsOf, patchPlayer, playerOf, seedRandom, st, startGame } from '../test/helpers'
 import type { ClassId } from '../types'
 
@@ -54,7 +54,7 @@ describe('Sorcerer', () => {
     rolls(5, 6)
     st().bendSurge('reroll')
     expect(st().surge?.total).toBe(11)
-    expect(me('sorcerer').charge).toBe(0)
+    expect(me('sorcerer').charge).toBe(3 - SURGE_SHIFT_COST - SURGE_REROLL_COST)
   })
 
   it('Wild Surge costs an Active token, gives 1 Charge and rolls the table twice', () => {
@@ -172,7 +172,7 @@ describe('Warlock', () => {
     expect(me('warlock').omens).toEqual([1])
   })
 
-  it('Twist of Fate: turns a rival’s Gather 5 into a 1 and earns a coin', () => {
+  it('Twist of Fate: turns a rival’s Gather 5 into a 1', () => {
     myTurn(['warlock', 'shaman'], 'shaman')
     const w = me('warlock')
     patchPlayer(w.id, { omens: [1] })
@@ -184,7 +184,7 @@ describe('Warlock', () => {
     st().resolveTwist(0)
     expect(me('shaman').hoard.length).toBe(before + 1)
     expect(me('warlock').omens).toEqual([])
-    expect(me('warlock').coins).toBe(coins + 1)
+    expect(me('warlock').coins).toBe(coins)
   })
 
   it('letting a roll stand keeps it', () => {
@@ -198,72 +198,80 @@ describe('Warlock', () => {
     expect(me('warlock').omens).toEqual([6])
   })
 
-  it('Hex: draw 2 Curses, lay one; Jinx lowers the next roll, then returns to the deck', () => {
+  it('Hex: draw 2 Curses, lay one; it resolves at the start of their next turn and returns to the deck', () => {
     const w = myTurn(['warlock', 'shaman', 'paladin'], 'warlock')
     const t = me('shaman')
-    patchPlayer(w.id, { curseDeck: ['jinx', 'tithe', 'badOmen'] })
+    patchPlayer(w.id, { curseDeck: ['tithe', 'weariness', 'badOmen'] })
     expect(st().hex(w.id, t.id)).toBe(true)
-    expect(st().hexPeek?.cards).toEqual(['jinx', 'tithe'])
-    st().chooseHex('jinx')
-    expect(me('shaman').curse?.id).toBe('jinx')
+    expect(st().hexPeek?.cards).toEqual(['tithe', 'weariness'])
+    st().chooseHex('tithe')
+    expect(me('shaman').curse?.id).toBe('tithe')
     expect(me('shaman').hasNightWatcher).toBe(true)
-    expect(me('warlock').curseDeck).toEqual(['badOmen', 'tithe'])
-
-    useGameStore.setState({ currentTurnPlayerId: t.id, activePlayerId: t.id })
-    const before = me('shaman').hoard.length
-    rolls(4)
-    st().gather(t.id)
-    expect(me('shaman').hoard.length).toBe(before + 3)
-    expect(me('shaman').curse).toBeNull()
-    expect(me('warlock').curseDeck).toEqual(['badOmen', 'tithe', 'jinx'])
-  })
-
-  it('an unused curse fizzles at the end of the victim’s next turn', () => {
-    const w = myTurn(['warlock', 'shaman'], 'warlock')
-    patchPlayer(me('shaman').id, { curse: { id: 'tithe', warlockId: w.id, armed: false } })
-    untilTurnOf(me('shaman').id)
-    expect(me('shaman').curse?.armed).toBe(true)
-    st()._advanceTurn()
-    expect(me('shaman').curse).toBeNull()
-  })
-
-  it('Leaky Pockets drops the cheapest hoard card when their turn starts', () => {
-    const w = myTurn(['warlock', 'shaman'], 'warlock')
-    const cheap = { ...cardsOf('ARM')[0], value: 1 }
-    const dear = { ...cardsOf('CON')[0], value: 7 }
-    patchPlayer(me('shaman').id, { hoard: [dear, cheap], curse: { id: 'leakyPockets', warlockId: w.id, armed: false } })
-    untilTurnOf(me('shaman').id)
-    const ids = me('shaman').hoard.map(c => c.id)
-    expect(ids).toContain(dear.id)
-    expect(ids).not.toContain(cheap.id)
-  })
-
-  it('Tithe takes 1 coin of the next Visitor sale', () => {
-    myTurn(['warlock', 'shaman'], 'shaman')
-    const w = me('warlock')
-    const v = st().activeVisitors[0]!
-    const [arm] = cardsOf('ARM')
-    useGameStore.setState(s => ({ visitorDemandRemaining: { ...s.visitorDemandRemaining, [v.id]: { ARM: 2, CON: 0, TRI: 0, TRG: 0, ANY: 0 } } }))
-    patchPlayer(me('shaman').id, { hoard: [arm], curse: { id: 'tithe', warlockId: w.id, armed: true } })
-    const coins = me('shaman').coins
+    expect(me('warlock').curseDeck).toEqual(['badOmen', 'weariness'])
+    patchPlayer(t.id, { coins: 5 })
     const wCoins = me('warlock').coins
-    st().marketSale(me('shaman').id, 0, [{ cardId: arm.id, zone: 'hoard' }])
-    expect(me('shaman').coins).toBe(coins + arm.value - 1)
-    expect(me('warlock').coins).toBe(wCoins + 1)
+    untilTurnOf(t.id)
+    expect(me('shaman').curse).toBeNull()
+    expect(me('shaman').coins).toBe(2)
+    expect(me('warlock').coins).toBeGreaterThanOrEqual(wCoins + 3)
+    expect(me('warlock').curseDeck).toEqual(['badOmen', 'weariness', 'tithe'])
+  })
+
+  it('a choice curse waits for the victim to pick (Sticky Fingers gives the Warlock that card)', () => {
+    const w = myTurn(['warlock', 'shaman'], 'warlock')
+    const [cheap, dear] = cardsOf('ARM', 'CON')
+    patchPlayer(me('shaman').id, { hoard: [cheap, dear], curse: { id: 'stickyFingers', warlockId: w.id } })
+    untilTurnOf(me('shaman').id)
+    expect(st().curseChoice).toEqual({ playerId: me('shaman').id, curseId: 'stickyFingers' })
+    st().resolveCurseChoice({ cardId: cheap.id })
+    expect(st().curseChoice).toBeNull()
+    expect(me('shaman').hoard.map(c => c.id)).not.toContain(cheap.id)
+    expect(me('warlock').hoard.map(c => c.id)).toContain(cheap.id)
     expect(me('shaman').curse).toBeNull()
   })
 
-  it('the Imp ambushes the next player at its location', () => {
+  it('Hexed Shutters closes the chosen window until their next turn', () => {
+    const w = myTurn(['warlock', 'shaman'], 'warlock')
+    patchPlayer(me('shaman').id, { curse: { id: 'hexedShutters', warlockId: w.id } })
+    untilTurnOf(me('shaman').id)
+    st().resolveCurseChoice({ windowIdx: 2 })
+    expect(me('shaman').windows[2].status).toBe('shuttered')
+    untilTurnOf(me('shaman').id)
+    expect(me('shaman').windows[2].status).toBe('normal')
+  })
+
+  it('Misfortune is a roll the Warlock can Twist', () => {
+    const w = myTurn(['warlock', 'shaman'], 'warlock')
+    patchPlayer(w.id, { omens: [1] })
+    patchPlayer(me('shaman').id, { coins: 6, curse: { id: 'misfortune', warlockId: w.id } })
+    const wCoins = me('warlock').coins
+    rolls(5)
+    untilTurnOf(me('shaman').id)
+    expect(st().twistPending).toMatchObject({ rollType: 'misfortune', roll: 5 })
+    st().resolveTwist(0)
+    expect(me('shaman').coins).toBe(3)
+    // +3 from the curse (Twisting earns nothing extra)
+    expect(me('warlock').coins).toBe(wCoins + 3)
+  })
+
+  it('the Imp eats a card, stays after it strikes, and only a 5–6 banishes it', () => {
     const w = myTurn(['warlock', 'shaman'], 'warlock')
     st().summonImp(w.id, 'wilderness')
     expect(st().imp).toEqual({ warlockId: w.id, location: 'wilderness' })
     const t = me('shaman')
     patchPlayer(t.id, { hoard: cardsOf('TRI', 'TRI') })
     useGameStore.setState({ currentTurnPlayerId: t.id, activePlayerId: t.id, turnActionsUsed: 0, locationsUsedThisTurn: [] })
+    const wHoard = me('warlock').hoard.length
     rolls(2)
     st().useTurnAction('wilderness')
-    expect(st().imp).toBeNull()
     expect(me('shaman').hoard).toHaveLength(1)
-    expect(me('warlock').hoard.length).toBeGreaterThanOrEqual(1)
+    // Eaten, not stolen
+    expect(me('warlock').hoard).toHaveLength(wHoard)
+    expect(st().imp).not.toBeNull()
+    useGameStore.setState({ locationsUsedThisTurn: [] })
+    patchPlayer(t.id, { hasNightWatcher: false })
+    rolls(6)
+    st().useTurnAction('wilderness')
+    expect(st().imp).toBeNull()
   })
 })

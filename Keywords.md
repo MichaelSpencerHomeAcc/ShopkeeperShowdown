@@ -8,13 +8,13 @@ Keywords are universal game terms that appear on cards and abilities throughout 
 
 Look at the top 4 resources of the resource deck. Keep X of them. Return the rest in any order on top of the deck.
 
-Used by: Spirited Summoner (Appraise 3), Barbarian Raiding Party (Appraise 1), Monk Momentum spend, Sorcerer abilities.
+Used by: Spirited Summoner (Appraise 3), Workshop (Appraise 2), Barbarian Raiding Party (Appraise 1), Monk Momentum spend, Sorcerer abilities.
 
 ---
 
 ## Auction
 
-Choose 1 resource from your windows or hoard. Roll d6 and gain the rolled coin value. If the resource has a Reputation icon, gain the matching Rep token. You may sell it into a Visitor that still needs it, which counts toward that Visitor's contribution prizes. Otherwise it goes to the discard pile.
+Choose 1 resource from your windows or hoard. Roll d6 and gain half the roll in coins, rounded up (1–3). If the resource has a Reputation icon, gain the matching Rep token. You may sell it into a Visitor that still needs it, which counts toward that Visitor's contribution prizes. Otherwise it goes to the discard pile.
 
 Used by: Tavern (Auction 1), Counterfeit "Orcish Bitter" return effect.
 
@@ -46,7 +46,7 @@ Used by: Many abilities and return effects.
 
 ## Fence
 
-Sell 1 Stolen resource from your Hoard to the discard pile. The resource type must be DIFFERENT from the resource currently on top of the Flea Market. Gain the coin value of the resource. Ignore any Reputation icon. The Stolen marker is removed on sale.
+Sell 1 Stolen resource from your Hoard to the discard pile. The resource type must be DIFFERENT from the last resource fenced at the Thieves' Guild (it stays face-up there). Gain **double** the coin value of the resource. Ignore any Reputation icon. The Stolen marker is removed on sale.
 
 Used by: Thieves' Guild action only.
 
@@ -64,7 +64,7 @@ Used by: Wilderness (Forage 2), Shaman (Patience of Stone alternative).
 
 Roll your d6. Draw that many resources from the top of the resource deck.
 
-Used by: Wilderness (main action), Ranger passive (half roll, round down), Marvellous Mascot Professional.
+Used by: Wilderness (main action), Ranger passive (half roll, round up, minimum 2), Marvellous Mascot Professional.
 
 ---
 

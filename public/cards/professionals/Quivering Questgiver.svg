@@ -1,0 +1,6 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 300 460" font-family="Georgia, serif">
+<rect width="300" height="460" rx="18" fill="#1d140c"/><rect x="10" y="10" width="280" height="440" rx="14" fill="#f3e5c6" stroke="#b8893f" stroke-width="4"/>
+<rect x="22" y="22" width="256" height="210" rx="10" fill="#2f5d3a"/>
+<text x="150" y="70" font-size="15" text-anchor="middle" fill="#f5e6c8" letter-spacing="3">PROFESSIONAL</text><text x="150" y="130" font-size="30" font-weight="bold" text-anchor="middle" fill="#f5e6c8">Quivering</text><text x="150" y="164" font-size="30" font-weight="bold" text-anchor="middle" fill="#f5e6c8">Questgiver</text>
+<text x="150" y="212" font-size="12" text-anchor="middle" fill="#f5e6c8" opacity="0.7">placeholder art</text>
+<text x="150" y="300" font-size="19" text-anchor="middle" fill="#2a1d10">Go on a Quest: roll 3 dice</text><text x="150" y="326" font-size="19" text-anchor="middle" fill="#2a1d10">and keep the best 2.</text><text x="150" y="400" font-size="14" font-style="italic" text-anchor="middle" fill="#5a4630">Adventure awaits! Probably. I</text><text x="150" y="420" font-size="14" font-style="italic" text-anchor="middle" fill="#5a4630">wouldn&apos;t go myself.</text></svg>

@@ -6,7 +6,7 @@ const KEYWORD_DEFS: Record<string, string> = {
   'Break': 'Mark one of a target player\'s shop windows as broken.',
   'Distribute': 'Spread resources among players or zones as specified by the card or action.',
   'Draw': 'Take the top card of the specified deck.',
-  'Fence': "Sell a stolen card for its coin value; the type must differ from the last card fenced at the Thieves' Guild.",
+  'Fence': "Sell a stolen card for double its coin value (no Rep); the type must differ from the last card fenced at the Thieves' Guild.",
   'Forage': 'Look at the top 4 cards of the resource discard pile and keep up to 2.',
   'Gather': 'Roll a d6 and draw that many resources from the deck to your hoard.',
   'Launder': 'Draw the stated number of resource cards from the deck into your hoard, marking them all as stolen.',

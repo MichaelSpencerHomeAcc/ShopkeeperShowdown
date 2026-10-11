@@ -1,7 +1,7 @@
 import { useState, useEffect, useRef, type Dispatch, type SetStateAction } from 'react'
 import { useGameStore, CLAN_TOLL, describePrize } from '../store/gameStore'
 import type { Location, Player, GameState, DuelStake, ResourceCard } from '../types'
-import { LocationActionPanel, DrawnCardsToast } from './LocationActionPanel'
+import { LocationActionPanel, DrawnCardsToast, MarketSaleStep } from './LocationActionPanel'
 import { SellPhase } from './SellPhase'
 import { ResourceCardMini } from './ResourceCardMini'
 import { ResourceCardTile } from './ResourceCardTile'
@@ -15,7 +15,7 @@ import { VisitorPrizeInfo, VisitorPrizeModal } from './VisitorPrizes'
 import { TargetPicker, WindowPicker, type TargetChoice } from './TargetPicker'
 import { IncidentSpotlight } from './IncidentSpotlight'
 import {
-  AppraiseKeepModal, HexChoiceModal, HotStreakModal, MirrorModal, SurgeModal, TwistModal,
+  AppraiseKeepModal, CurseChoiceModal, HexChoiceModal, HotStreakModal, MirrorModal, SurgeModal, TwistModal, QuestTwistModal,
 } from './NewClassModals'
 import { CURSE_BY_ID } from '../data/curses'
 import { useIncidentFeed, useIncidentStore } from '../store/incidentStore'
@@ -151,7 +151,6 @@ export function SharedBoard({ canAct = true, localPlayerName }: SharedBoardProps
     rogueCounterfeitEffectPending, clearRogueCounterfeitEffect,
     barbarianClashOptOut, submitBarbarianClashChoice,
     shamanCallLightning, resolveCallLightning,
-    negotiatePending, negotiateReview, counterNegotiate, resolveNegotiate, declineNegotiate,
     righteousDuelPending, resolveRighteousDuel,
     righteousDuelResult, dismissDuelResult,
     appraisePeek, completeAppraise, foragePeek, completeForage,
@@ -168,7 +167,7 @@ export function SharedBoard({ canAct = true, localPlayerName }: SharedBoardProps
     auction, tradeWithFleaMarket, breakWindow,
     resourceDeck, resourceDiscard,
     townCrierPeek, completeTownCrier, activeVisitors, visitorDemandRemaining, visitorPrizeQueue,
-    surge, mirrorPending, hotStreak, twistPending, hexPeek, imp,
+    surge, mirrorPending, hotStreak, twistPending, questTwist, hexPeek, imp, curseChoice,
     professionalSlots,
     actionLog, lastGuildFencedCard,
     steal, heist,
@@ -236,6 +235,8 @@ export function SharedBoard({ canAct = true, localPlayerName }: SharedBoardProps
   // Town Crier picker (used by Barracks action AND rn07 Paladin card)
   const [crierPlaceId, setCrierPlaceId] = useState('')
   const [crierSlotIdx, setCrierSlotIdx] = useState(0)
+  // Guildhall Town Crier: sell into the Visitor just placed
+  const [crierSale, setCrierSale] = useState<{ playerId: string; slotIdx: number } | null>(null)
   // Empty-windows warning before ending turn
   const [showEmptyWindowsWarn, setShowEmptyWindowsWarn] = useState(false)
   // Dice roll modal: shown after Ranger passive gather at sell phase
@@ -801,7 +802,7 @@ export function SharedBoard({ canAct = true, localPlayerName }: SharedBoardProps
               title={CURSE_BY_ID[currentPlayer.curse.id].text}
               className="text-[10px] bg-purple-900/50 border border-purple-500/50 text-purple-200 px-2 py-0.5 rounded font-semibold"
             >
-              {CURSE_BY_ID[currentPlayer.curse.id].icon} Cursed: {CURSE_BY_ID[currentPlayer.curse.id].name} — {CURSE_BY_ID[currentPlayer.curse.id].text}
+              {CURSE_BY_ID[currentPlayer.curse.id].icon} Cursed: {CURSE_BY_ID[currentPlayer.curse.id].name} (resolves next turn) — {CURSE_BY_ID[currentPlayer.curse.id].text}
             </span>
           )}
         </div>
@@ -952,7 +953,7 @@ export function SharedBoard({ canAct = true, localPlayerName }: SharedBoardProps
 
                   {/* Warlock's Imp */}
                   {imp?.location === loc.id && (
-                    <div className="absolute bottom-1.5 left-1.5 z-10" title={`${players.find(p => p.id === imp.warlockId)?.name}'s Imp — the next player here rolls: 1–2 it steals a card, 3–4 it breaks a window, 5–6 banished`}>
+                    <div className="absolute bottom-1.5 left-1.5 z-10" title={`${players.find(p => p.id === imp.warlockId)?.name}'s Imp — every other player who uses this location rolls: 1–2 it eats a card, 3–4 it breaks a window, 5–6 it's banished`}>
                       <div className="relative flex items-center gap-1 bg-purple-950/90 border-2 border-purple-400 rounded-full px-2 py-0.5 shadow-lg shadow-purple-900/60 animate-pulse">
                         <span className="text-base leading-none">👹</span>
                         <span className="text-[10px] font-bold text-purple-200 whitespace-nowrap">Imp</span>
@@ -1182,30 +1183,6 @@ export function SharedBoard({ canAct = true, localPlayerName }: SharedBoardProps
               onResolve={(discardIds) => resolveCallLightning(shamanCallLightning.shamanId, discardIds)}
             />
           : <WaitingOverlay name={players.find(p => p.id === shamanCallLightning.targetId)?.name} action="responding to Call Lightning" classId={players.find(p => p.id === shamanCallLightning.targetId)?.classId} />
-      )}
-
-      {/* Guildhall Negotiate — step 1: target chooses counter-card */}
-      {negotiatePending && (
-        isMe(negotiatePending.targetId)
-          ? <NegotiateModal
-              pending={negotiatePending}
-              players={players}
-              onCounter={counterNegotiate}
-              onDecline={declineNegotiate}
-            />
-          : <WaitingOverlay name={players.find(p => p.id === negotiatePending.targetId)?.name} action="choosing their counter-offer" classId={players.find(p => p.id === negotiatePending.targetId)?.classId} />
-      )}
-
-      {/* Guildhall Negotiate — step 2: proposer reviews and accepts/declines */}
-      {negotiateReview && (
-        isMe(negotiateReview.proposerId)
-          ? <NegotiateReviewModal
-              review={negotiateReview}
-              players={players}
-              onAccept={() => resolveNegotiate(true)}
-              onDecline={() => resolveNegotiate(false)}
-            />
-          : <WaitingOverlay name={players.find(p => p.id === negotiateReview.proposerId)?.name} action="reviewing the counter-offer" classId={players.find(p => p.id === negotiateReview.proposerId)?.classId} />
       )}
 
       {/* Last Stand at Greyveil (rn04) — reroll offer, only shown to the affected player */}
@@ -1488,10 +1465,16 @@ export function SharedBoard({ canAct = true, localPlayerName }: SharedBoardProps
       {twistPending && (isMe(twistPending.warlockId)
         ? <TwistModal />
         : <WaitingOverlay name={players.find(p => p.id === twistPending.warlockId)?.name} action="deciding whether to Twist Fate" classId="warlock" />)}
+      {curseChoice && (isMe(curseChoice.playerId)
+        ? <CurseChoiceModal />
+        : <WaitingOverlay name={players.find(p => p.id === curseChoice.playerId)?.name} action="resolving a curse" classId={players.find(p => p.id === curseChoice.playerId)?.classId} />)}
       {hexPeek && (isMe(hexPeek.warlockId)
         ? <HexChoiceModal />
         : <WaitingOverlay name={players.find(p => p.id === hexPeek.warlockId)?.name} action="choosing a curse" classId="warlock" />)}
-      {surge && !twistPending && (isMe(surge.playerId)
+      {questTwist && (isMe(questTwist.warlockId)
+        ? <QuestTwistModal />
+        : <WaitingOverlay name={players.find(p => p.id === questTwist.warlockId)?.name} action="deciding whether to Twist a Quest die" classId="warlock" />)}
+      {surge && !twistPending && !questTwist && (isMe(surge.playerId)
         ? <SurgeModal />
         : <WaitingOverlay name={players.find(p => p.id === surge.playerId)?.name} action="unleashing a Wild Surge" classId="sorcerer" />)}
       {mirrorPending && !surge && (isMe(mirrorPending.playerId)
@@ -1635,7 +1618,9 @@ export function SharedBoard({ canAct = true, localPlayerName }: SharedBoardProps
               <button
                 onClick={() => {
                   if (!crierPlaceId) return
+                  const sell = townCrierPeek.sell
                   completeTownCrier(crierPlayer.id, crierPlaceId, crierSlotIdx)
+                  if (sell) setCrierSale({ playerId: crierPlayer.id, slotIdx: crierSlotIdx })
                   setCrierPlaceId('')
                   setCrierSlotIdx(0)
                 }}
@@ -1644,6 +1629,19 @@ export function SharedBoard({ canAct = true, localPlayerName }: SharedBoardProps
               >
                 Place Visitor
               </button>
+            </div>
+          </div>
+        )
+      })()}
+
+      {crierSale && (() => {
+        const seller = players.find(p => p.id === crierSale.playerId)
+        if (!seller || !isMe(seller.id)) return null
+        return (
+          <div className="fixed inset-0 z-[320] flex items-center justify-center bg-black/60">
+            <div className="bg-ink-900 border-2 border-gold-500/60 rounded-xl p-5 shadow-2xl max-w-2xl w-full mx-4 space-y-3 max-h-[90vh] overflow-y-auto">
+              <div className="text-base font-display font-bold text-gold-300 text-center">📯 Sell to the new Visitor</div>
+              <MarketSaleStep player={seller} fixedVisitorIdx={crierSale.slotIdx} onAction={() => setCrierSale(null)} onBack={() => setCrierSale(null)} />
             </div>
           </div>
         )
@@ -2840,181 +2838,6 @@ function HoardOverflowModal({
               )
             })}
           </div>
-        </div>
-      </div>
-    </div>
-  )
-}
-
-// ---- Negotiate Modal (step 1 — target picks counter-card) ----
-
-type NegotiatePendingType = NonNullable<GameState['negotiatePending']>
-
-function cardTypeBadge(type: string) {
-  const cls = type === 'ARM' ? 'bg-orange-600 text-orange-100'
-    : type === 'CON' ? 'bg-blue-600 text-blue-100'
-    : type === 'TRI' ? 'bg-green-600 text-green-100'
-    : 'bg-pink-600 text-pink-100'
-  return <span className={`text-[9px] font-bold rounded px-1.5 py-0.5 uppercase flex-shrink-0 ${cls}`}>{type}</span>
-}
-
-function NegotiateCardDisplay({ card, label }: { card: { name: string; type: string; value: number; imageFile: string }; label: string }) {
-  return (
-    <div className="flex flex-col items-center gap-1.5">
-      <div className="text-[10px] text-parchment-500 uppercase tracking-wide">{label}</div>
-      <div className="w-24 rounded-lg overflow-hidden border-2 border-parchment-700/40 shadow-lg">
-        <img src={card.imageFile} alt={card.name} className="w-full object-cover" />
-      </div>
-      <div className="flex items-center gap-1 flex-wrap justify-center">
-        {cardTypeBadge(card.type)}
-        <span className="text-xs text-parchment-200 font-semibold">{card.name}</span>
-      </div>
-      <div className="text-xs text-parchment-500">${card.value}</div>
-    </div>
-  )
-}
-
-function NegotiateModal({
-  pending,
-  players,
-  onCounter,
-  onDecline,
-}: {
-  pending: NegotiatePendingType
-  players: Player[]
-  onCounter: (counterCardId: string) => void
-  onDecline: () => void
-}) {
-  const [counterCardId, setCounterCardId] = useState('')
-
-  const proposer = players.find(p => p.id === pending.proposerId)
-  const target = players.find(p => p.id === pending.targetId)
-  const offeredCard = proposer?.hoard.find(c => c.id === pending.offeredCardId)
-
-  if (!proposer || !target || !offeredCard) return null
-
-  const selectedCounterCard = target.hoard.find(c => c.id === counterCardId) ?? target.hoard[0] ?? null
-  const resolvedCounterId = selectedCounterCard?.id ?? ''
-
-  return (
-    <div className="fixed inset-0 z-[315] flex items-center justify-center bg-black/60">
-      <div className="bg-ink-900 border-2 border-green-500/50 rounded-xl p-5 shadow-2xl max-w-md w-full mx-4">
-        <div className="text-center mb-4">
-          <div className="text-xl font-display font-bold text-green-300">🤝 Trade Proposal</div>
-          <div className="text-sm text-parchment-400 mt-1">
-            <span className="text-parchment-200 font-semibold">{proposer.name}</span> wants to trade.
-            Pick what to offer back, {target.name}.
-          </div>
-        </div>
-
-        {/* Offered card */}
-        <div className="flex justify-center mb-4">
-          <NegotiateCardDisplay card={offeredCard} label={`${proposer.name} offers`} />
-        </div>
-
-        <div className="text-xs text-green-400 text-center mb-3">✦ Both players gain +2 coins if accepted</div>
-        {pending.paladinRepType && (
-          <div className="text-xs text-blue-300 text-center mb-3">
-            ◆ Honourable Trade: both also gain {pending.paladinRepType} Rep on accept
-          </div>
-        )}
-
-        {/* Counter-card picker */}
-        {target.hoard.length === 0 ? (
-          <div className="text-sm text-parchment-600 italic text-center mb-4">You have nothing to offer — you can only decline.</div>
-        ) : (
-          <div className="mb-4">
-            <div className="text-sm text-parchment-400 mb-2 text-center">Choose your counter-offer:</div>
-            <div className="flex flex-wrap gap-2 justify-center max-h-40 overflow-y-auto">
-              {target.hoard.map(c => (
-                <button
-                  key={c.id}
-                  onClick={() => setCounterCardId(c.id)}
-                  className={`relative w-20 rounded-lg overflow-hidden border-2 transition-all ${
-                    (counterCardId ? counterCardId === c.id : c.id === target.hoard[0]?.id)
-                      ? 'border-green-400 ring-2 ring-green-400/50'
-                      : 'border-parchment-700/40 opacity-70 hover:opacity-100'
-                  }`}
-                >
-                  <img src={c.imageFile} alt={c.name} className="w-full object-cover" />
-                </button>
-              ))}
-            </div>
-            {selectedCounterCard && (
-              <div className="text-center mt-2 text-xs text-parchment-300">
-                {selectedCounterCard.name} ({selectedCounterCard.type}, ${selectedCounterCard.value})
-              </div>
-            )}
-          </div>
-        )}
-
-        <div className="flex gap-2">
-          <button onClick={onDecline} className="btn-secondary flex-1 text-sm py-2">✗ Decline</button>
-          <button
-            onClick={() => resolvedCounterId && onCounter(resolvedCounterId)}
-            disabled={!resolvedCounterId}
-            className="btn-primary flex-1 text-sm py-2 font-semibold disabled:opacity-40"
-          >
-            Send Counter-Offer →
-          </button>
-        </div>
-      </div>
-    </div>
-  )
-}
-
-// ---- Negotiate Review Modal (step 2 — proposer reviews and accepts/declines) ----
-
-type NegotiateReviewType = NonNullable<GameState['negotiateReview']>
-
-function NegotiateReviewModal({
-  review,
-  players,
-  onAccept,
-  onDecline,
-}: {
-  review: NegotiateReviewType
-  players: Player[]
-  onAccept: () => void
-  onDecline: () => void
-}) {
-  const proposer = players.find(p => p.id === review.proposerId)
-  const target = players.find(p => p.id === review.targetId)
-  const offeredCard = proposer?.hoard.find(c => c.id === review.offeredCardId)
-  // Counter card may have already moved; fall back to a stale lookup in the target's hoard
-  const counterCard = target?.hoard.find(c => c.id === review.counterCardId)
-
-  if (!proposer || !target || !offeredCard || !counterCard) return null
-
-  return (
-    <div className="fixed inset-0 z-[315] flex items-center justify-center bg-black/60">
-      <div className="bg-ink-900 border-2 border-green-500/50 rounded-xl p-5 shadow-2xl max-w-md w-full mx-4">
-        <div className="text-center mb-4">
-          <div className="text-xl font-display font-bold text-green-300">🤝 Review Counter-Offer</div>
-          <div className="text-sm text-parchment-400 mt-1">
-            <span className="text-parchment-200 font-semibold">{target.name}</span> is offering this in exchange, {proposer.name}. Accept?
-          </div>
-        </div>
-
-        {/* Side-by-side cards */}
-        <div className="flex items-start justify-center gap-6 mb-4">
-          <NegotiateCardDisplay card={offeredCard} label="You give" />
-          <div className="flex flex-col items-center justify-center pt-8 text-parchment-500">
-            <span className="text-2xl">⇄</span>
-          </div>
-          <NegotiateCardDisplay card={counterCard} label={`${target.name} gives`} />
-        </div>
-
-        <div className="text-xs text-green-400 text-center mb-2">✦ Both players gain +2 coins</div>
-        {review.paladinRepType && (
-          <div className="text-xs text-blue-300 text-center mb-3">
-            ◆ Honourable Trade: both also gain {review.paladinRepType} Rep
-          </div>
-        )}
-
-        <div className="flex gap-2">
-          <button onClick={onDecline} className="btn-secondary flex-1 text-sm py-2">✗ Decline</button>
-          <button onClick={onAccept} className="btn-primary flex-1 text-sm py-2 font-semibold">✓ Accept Trade</button>
         </div>
       </div>
     </div>

@@ -2,7 +2,7 @@ import { afterEach, describe, expect, it, vi } from 'vitest'
 import { useGameStore } from '../store/gameStore'
 import { nextBotStep, type BotMemory } from './brain'
 import { botName } from './botConfig'
-import { cardsForRecipe, cardsOf, patchPlayer, playBotGame, seedRandom, st, startGame } from '../test/helpers'
+import { cardsForRecipe, patchPlayer, playBotGame, seedRandom, st, startGame } from '../test/helpers'
 import type { BotDifficulty, ClassId } from '../types'
 
 afterEach(() => { vi.restoreAllMocks() })
@@ -52,22 +52,6 @@ describe('bot decisions', () => {
       if (st() === before) memory.failed.add(step.key)
     }
   }
-
-  it('answers a human trade proposal (never leaves it hanging)', () => {
-    seedRandom(5)
-    st().resetGame()
-    st().startGame([{ name: 'Human', classId: 'rogue' }, { name: 'Bot', classId: 'shaman', bot: 'hard' }])
-    while (st().startingDraft) { const d = st().startingDraft!; st().completeStartingDraftPick(d.pickOrder[d.pickIndex], d.cards[0].id) }
-    const human = st().players.find(p => !p.bot)!
-    const bot = st().players.find(p => p.bot)!
-    patchPlayer(human.id, { hoard: cardsOf('ARM') })
-    patchPlayer(bot.id, { hoard: cardsOf('CON') })
-
-    st().proposeNegotiate(human.id, bot.id, st().players.find(p => p.id === human.id)!.hoard[0].id)
-    stepUntil(() => !st().negotiatePending)
-
-    expect(st().negotiatePending).toBeNull()
-  })
 
   it('crafts a public Work Order it can already fill on its turn', () => {
     seedRandom(9)

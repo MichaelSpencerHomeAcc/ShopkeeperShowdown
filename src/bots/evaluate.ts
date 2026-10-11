@@ -9,6 +9,16 @@ import { repPoints, repSets, scorePlayer, SET_BONUS } from '../utils/scoring'
  */
 
 export const RESOURCE_TYPES: ResourceType[] = ['ARM', 'CON', 'TRI', 'TRG']
+
+/**
+ * The hand-set worths in the bots were first tuned when cards sold for 1–8 coins. The economy
+ * is now halved, so every hand-set non-coin worth goes through pts(). Real coin amounts
+ * (tolls, prices, coin prizes, Momentum) stay as they are.
+ */
+export const VALUE_SCALE = 0.5
+export const pts = (n: number) => n * VALUE_SCALE
+/** Average auction payout: half a d6, rounded up. */
+export const AUCTION_AVG = 2
 export const MIDDLE_WINDOWS = [1, 2, 3]
 
 export function isCounterfeit(card: ResourceCard | null | undefined): boolean {
@@ -28,7 +38,7 @@ export function marginalRep(rep: RepTokens, t: RepType, n = 1): number {
 
 /**
  * Value of one more Reputation token of type `t`, including a little credit for
- * progressing toward a full set (medium/hard bots plan for the +6 set bonus).
+ * progressing toward a full set (medium/hard bots plan for the +10 set bonus).
  */
 export function repValue(rep: RepTokens, t: RepType, difficulty: BotDifficulty): number {
   const exact = marginalRep(rep, t)
@@ -122,9 +132,9 @@ export function targetWorkOrder(s: GameState, me: Player, difficulty: BotDifficu
     if (!wo) continue
     const missing = missingForOrder(me, wo)
     if (missing > 3) continue
-    let score = wo.price - missing * (difficulty === 'easy' ? 2 : 6)
+    let score = wo.price - missing * pts(difficulty === 'easy' ? 2 : 6)
     // Hard bots avoid racing for an order a rival is closer to finishing
-    if (difficulty === 'hard' && s.players.some(p => p.id !== me.id && missingForOrder(p, wo) < missing)) score -= 8
+    if (difficulty === 'hard' && s.players.some(p => p.id !== me.id && missingForOrder(p, wo) < missing)) score -= pts(8)
     if (score > bestScore) { best = wo; bestScore = score }
   }
   return best
@@ -165,8 +175,8 @@ export function cardWorth(card: ResourceCard, ctx: ValueContext, extraStock = 0)
   let w = saleValue(card, ctx) * demandFactor * capacityFactor
   if (ctx.orderNeeds && ctx.orderNeeds[card.type] > 0) w += ctx.orderUnitValue * 0.45
   if (isCounterfeit(card) && ctx.me.classId !== 'rogue') w *= 0.8
-  // Floor: a card can always be auctioned (~3.5 coins) or crafted if an action is spare
-  const liquidation = (3.5 + card.repTokens * repValue(ctx.me.rep, card.type, ctx.difficulty)) * 0.4
+  // Floor: a card can always be auctioned or crafted if an action is spare
+  const liquidation = (AUCTION_AVG + card.repTokens * repValue(ctx.me.rep, card.type, ctx.difficulty)) * 0.4
   return Math.max(w, liquidation)
 }
 
@@ -206,7 +216,7 @@ export function harmWeight(s: GameState, me: Player, target: Player, difficulty:
   const leader = rankOpponents(s, me.id)[0]
   const lead = liveScore(target) - liveScore(me)
   let w = base * (target.id === leader?.id ? 1.6 : 0.9)
-  if (difficulty === 'hard') w *= clamp(1 + lead / 25, 0.6, 1.8)
+  if (difficulty === 'hard') w *= clamp(1 + lead / pts(25), 0.6, 1.8)
   return w
 }
 
