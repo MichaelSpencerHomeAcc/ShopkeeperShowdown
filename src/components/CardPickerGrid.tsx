@@ -10,6 +10,8 @@ import { VisitorCardMini } from './VisitorCardMini'
 interface BaseProps {
   selectedId: string
   onSelect: (id: string) => void
+  /** Multi-select: highlights every id listed (overrides selectedId for resource cards). */
+  selectedIds?: string[]
   label?: string
   emptyText?: string
   /** Size for resource cards. Default 'lg'. */
@@ -30,7 +32,7 @@ interface VisitorProps extends BaseProps {
 
 type Props = ResourceProps | VisitorProps
 
-export function CardPickerGrid({ selectedId, onSelect, label, emptyText, size = 'lg', cardBadges, ...rest }: Props) {
+export function CardPickerGrid({ selectedId, selectedIds, onSelect, label, emptyText, size = 'lg', cardBadges, ...rest }: Props) {
   const cards = 'resourceCards' in rest && rest.resourceCards ? rest.resourceCards : []
   const visitors = 'visitorCards' in rest && rest.visitorCards ? rest.visitorCards : []
   const isEmpty = cards.length === 0 && visitors.length === 0
@@ -49,7 +51,7 @@ export function CardPickerGrid({ selectedId, onSelect, label, emptyText, size = 
               <ResourceCardMini
                 card={card}
                 size={size}
-                selected={selectedId === card.id}
+                selected={selectedIds ? selectedIds.includes(card.id) : selectedId === card.id}
                 onClick={() => onSelect(card.id)}
               />
               {cardBadges?.[card.id] && (

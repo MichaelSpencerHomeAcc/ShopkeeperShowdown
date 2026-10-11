@@ -262,9 +262,6 @@ function buildInitialGameState(players: Player[]): GameState {
     classAbilitiesUsedThisTurn: [],
     righteousDuelPending: null,
     righteousDuelResult: null,
-    negotiatePending: null,
-    negotiateReview: null,
-    negotiatesCompletedThisTurn: 0,
     politePromoterResetUsed: false,
     shamanCallLightning: null,
     bonusActionsThisTurn: 0,
@@ -392,7 +389,7 @@ export interface GameStore extends GameState {
   breakWindow: (byPlayerId: string, targetPlayerId: string, windowIdx: number) => void
   fence: (playerId: string, cardId: string) => void
   launder: (playerId: string) => void
-  /** Spend 1 hoard resource for 1 Rep of its type and CONSULT_COINS coins */
+  /** Spend 1 hoard resource (2 with Council of Seven) — each gives 1 Rep of its type and CONSULT_COINS coins */
   consultation: (playerId: string, cardIds: string[]) => void
   /** Repair all your windows and take the Night Watcher */
   fortify: (playerId: string, repType?: RepType) => void
@@ -460,14 +457,6 @@ export interface GameStore extends GameState {
   patienceOfStone: (playerId: string, effects: ShamanPatienceEffects) => void
 
   // Paladin class abilities
-  /** Propose a card swap with another player; no action consumed until they accept */
-  proposeNegotiate: (proposerId: string, targetId: string, offeredCardId: string, paladinRepType?: RepType) => void
-  /** Target submits their counter-card, moving to review stage */
-  counterNegotiate: (counterCardId: string) => void
-  /** Proposer accepts or declines after reviewing target's counter-card */
-  resolveNegotiate: (accept: boolean) => void
-  /** Target declines (or proposer cancels) before a counter-card is chosen */
-  declineNegotiate: () => void
   /** Paladin chooses their own stake and issues the challenge */
   initiateRighteousDuel: (challengerId: string, targetId: string, challengerStake: import('../types').DuelStake) => void
   /** Target accepts (passing their own stake) or declines (passing card ID to discard, or undefined = pay 2 coins) */
@@ -582,9 +571,6 @@ const INITIAL: GameState = {
   classAbilitiesUsedThisTurn: [],
   righteousDuelPending: null,
   righteousDuelResult: null,
-  negotiatePending: null,
-  negotiateReview: null,
-  negotiatesCompletedThisTurn: 0,
   shamanCallLightning: null,
   bonusActionsThisTurn: 0,
   politePromoterResetUsed: false,
@@ -600,35 +586,6 @@ const INITIAL: GameState = {
   rn04ForcedRoll: null,
 }
 
-/**
- * Undoes the Guildhall visit for a Negotiate proposal that was turned down: the action comes
- * back and, if a Barbarian's Clan toll was paid to get in, so do those coins.
- */
-function refundNegotiateAction(
-  s: GameState,
-  deal: { proposerId: string; actionCharged?: boolean; clanTollPaidTo?: string },
-): Partial<GameState> {
-  if (!deal.actionCharged) return {}
-  const tollTo = deal.clanTollPaidTo
-  return {
-    turnActionsUsed: Math.max(0, s.turnActionsUsed - 1),
-    locationsUsedThisTurn: s.locationsUsedThisTurn.filter(l => l !== 'guildhall'),
-    ...(tollTo ? {
-      players: s.players.map(p =>
-        p.id === deal.proposerId ? { ...p, coins: p.coins + CLAN_TOLL }
-        : p.id === tollTo ? { ...p, coins: Math.max(0, p.coins - CLAN_TOLL) }
-        : p
-      ),
-    } : {}),
-  }
-}
-
-function negotiateRefundNote(s: GameState, deal: { actionCharged?: boolean; clanTollPaidTo?: string }) {
-  if (!deal.actionCharged) return ''
-  const barb = deal.clanTollPaidTo ? s.players.find(p => p.id === deal.clanTollPaidTo) : null
-  return barb ? ` Guildhall action and ${barb.name}'s Clan toll refunded.` : ' Guildhall action refunded.'
-}
-
 // ── Visitor sales, contributions and prizes ─────────────────────────────────
 
 /** Most cards one player may sell into a single Visitor in one sell phase or Market sale. */
@@ -638,6 +595,8 @@ export const auctionCoins = (roll: number) => Math.ceil(roll / 2)
 /** Consultation: spend 1 resource for 1 Rep of its type, plus this many coins. */
 export const CONSULT_CARDS = 1
 export const CONSULT_COINS = 2
+/** Council of Seven (rn01): Consultation may spend this many resources */
+export const COUNCIL_CONSULT_CARDS = 2
 
 /** Quest (Wilderness): name a Rep type, roll 2d6 and look up the result. */
 export interface QuestOutcome {
@@ -2857,21 +2816,25 @@ export const useGameStore = create<GameStore>((set, get) => ({
     const player = get().players.find(p => p.id === playerId)
     if (!player) return
     const cards = player.hoard.filter(c => cardIds.includes(c.id) && !isCounterfeitCard(c))
-    if (cards.length !== CONSULT_CARDS || cards.some(c => c.type !== cards[0].type)) {
-      console.error('consultation: needs resources of one type')
+    const max = player.classId === 'paladin' && player.renownCards.some(c => c.id === 'rn01') ? COUNCIL_CONSULT_CARDS : CONSULT_CARDS
+    if (cards.length < 1 || cards.length > max) {
+      console.error(`consultation: needs 1 to ${max} resources`)
       return
     }
-    const t = cards[0].type
+    const rep = { ...player.rep }
+    for (const c of cards) rep[c.type] += 1
+    const coins = CONSULT_COINS * cards.length
+    const repText = (Object.keys(rep) as RepType[]).filter(t => rep[t] > player.rep[t]).map(t => `${rep[t] - player.rep[t]} ${t}`).join(' and ')
     set(s => ({
       resourceDiscard: [...cards, ...s.resourceDiscard],
       players: s.players.map(p => (p.id !== playerId ? p : {
         ...p,
         hoard: p.hoard.filter(c => !cardIds.includes(c.id)),
         stolenHoardCardIds: p.stolenHoardCardIds.filter(id => !cardIds.includes(id)),
-        rep: { ...p.rep, [t]: p.rep[t] + 1 },
-        coins: p.coins + CONSULT_COINS,
+        rep,
+        coins: p.coins + coins,
       })),
-      actionLog: [logEntry(`${player.name} consulted the Guild — spent ${cards.map(c => c.name).join(' and ')} for 1 ${t} Rep and ${CONSULT_COINS} coins.`, playerId), ...s.actionLog.slice(0, 49)],
+      actionLog: [logEntry(`${player.name} consulted the Guild — spent ${cards.map(c => c.name).join(' and ')} for ${repText} Rep and ${coins} coins${cards.length > 1 ? ' (Council of Seven)' : ''}.`, playerId), ...s.actionLog.slice(0, 49)],
     }))
   },
 
@@ -4105,104 +4068,6 @@ export const useGameStore = create<GameStore>((set, get) => ({
 
   // ---- Paladin class abilities ----
 
-  proposeNegotiate(proposerId, targetId, offeredCardId, paladinRepType) {
-    // The first proposal of a turn is paid for with the Guildhall action (the location panel
-    // consumes it); a Council of Seven second Negotiate is free. Remember which, for refunds.
-    const { negotiatesCompletedThisTurn, players } = get()
-    const actionCharged = negotiatesCompletedThisTurn === 0
-    // Entering a Barbarian's Clan location costs CLAN_TOLL coins, charged with that action
-    const clanTollPaidTo = actionCharged
-      ? players.find(p => p.classId === 'barbarian' && p.clanLocation === 'guildhall' && p.id !== proposerId)?.id
-      : undefined
-    set({ negotiatePending: { proposerId, targetId, offeredCardId, paladinRepType, actionCharged, clanTollPaidTo } })
-  },
-
-  counterNegotiate(counterCardId) {
-    const { negotiatePending } = get()
-    if (!negotiatePending) return
-    set({
-      negotiatePending: null,
-      negotiateReview: {
-        proposerId: negotiatePending.proposerId,
-        targetId: negotiatePending.targetId,
-        offeredCardId: negotiatePending.offeredCardId,
-        counterCardId,
-        paladinRepType: negotiatePending.paladinRepType,
-        actionCharged: negotiatePending.actionCharged,
-        clanTollPaidTo: negotiatePending.clanTollPaidTo,
-      },
-    })
-  },
-
-  declineNegotiate() {
-    const { negotiatePending, players } = get()
-    if (!negotiatePending) return
-    const target = players.find(p => p.id === negotiatePending.targetId)
-    set(s => ({
-      negotiatePending: null,
-      ...refundNegotiateAction(s, negotiatePending),
-      actionLog: [logEntry(`${target?.name ?? 'The target'} declined the trade proposal.${negotiateRefundNote(s, negotiatePending)}`, negotiatePending.targetId), ...s.actionLog.slice(0, 49)],
-    }))
-  },
-
-  resolveNegotiate(accept) {
-    const { negotiateReview, players } = get()
-    if (!negotiateReview) return
-
-    // A trade that doesn't happen hands the proposer's Guildhall action back
-    const deny = (message: string) => set(s => ({
-      negotiateReview: null,
-      ...refundNegotiateAction(s, negotiateReview),
-      actionLog: [logEntry(message + negotiateRefundNote(s, negotiateReview), negotiateReview.proposerId), ...s.actionLog.slice(0, 49)],
-    }))
-
-    const proposer = players.find(p => p.id === negotiateReview.proposerId)
-    const target = players.find(p => p.id === negotiateReview.targetId)
-    if (!accept) { deny(`${proposer?.name ?? 'The proposer'} declined the counter-offer.`); return }
-    if (!proposer || !target) { deny('The trade fell through.'); return }
-
-    const offeredCard = proposer.hoard.find(c => c.id === negotiateReview.offeredCardId)
-    const counterCard = target.hoard.find(c => c.id === negotiateReview.counterCardId)
-    if (!offeredCard || !counterCard) { deny('The trade fell through — a card is no longer available.'); return }
-
-    // Paladin Honourable Trade: rep bonus on successful negotiate
-    // rn08 Merchant of Saltholm doubles the Paladin's own rep gain only — target always gets +1
-    const isPaladin = proposer.classId === 'paladin'
-    const prt = isPaladin
-      ? (negotiateReview.paladinRepType ?? offeredCard.type)
-      : negotiateReview.paladinRepType
-    const proposerRepGain = isPaladin && prt
-      ? (proposer.renownCards.some(c => c.id === 'rn08') ? 2 : 1)
-      : 0
-    const targetRepGain = isPaladin && prt ? 1 : 0
-
-    const logMsg =
-      `${proposer.name} and ${target.name} negotiated — swapped ${offeredCard.name} for ${counterCard.name}. Both gain 2 coins.` +
-      (proposerRepGain > 0 && prt
-        ? ` Honourable Trade — ${proposer.name} +${proposerRepGain} ${prt} Rep, ${target.name} +${targetRepGain} ${prt} Rep.`
-        : '')
-
-    set(s => ({
-      players: s.players.map(p => {
-        if (p.id === proposer.id) {
-          const hoard = [...p.hoard.filter(c => c.id !== offeredCard.id), counterCard]
-          const rep = proposerRepGain > 0 && prt ? { ...p.rep, [prt]: p.rep[prt] + proposerRepGain } : p.rep
-          return { ...p, hoard, rep, coins: p.coins + 2 }
-        }
-        if (p.id === target.id) {
-          const hoard = [...p.hoard.filter(c => c.id !== counterCard.id), offeredCard]
-          const rep = targetRepGain > 0 && prt ? { ...p.rep, [prt]: p.rep[prt] + targetRepGain } : p.rep
-          return { ...p, hoard, rep, coins: p.coins + 2 }
-        }
-        return p
-      }),
-      negotiateReview: null,
-      // The Guildhall action was already spent when the trade was proposed
-      negotiatesCompletedThisTurn: s.negotiatesCompletedThisTurn + 1,
-      actionLog: [logEntry(logMsg, proposer.id), ...s.actionLog.slice(0, 49)],
-    }))
-  },
-
   initiateRighteousDuel(challengerId, targetId, challengerStake) {
     const { players } = get()
     const challenger = players.find(p => p.id === challengerId)
@@ -4602,7 +4467,7 @@ export const useGameStore = create<GameStore>((set, get) => ({
     })
     // rn07: trigger Town Crier peek after state is committed
     if (cardId === 'rn07') {
-      get().peekTownCrier(playerId)
+      get().peekTownCrier(playerId, true)
     }
     if (counterfeitReturns.length > 0) {
       get().returnCounterfeitsToRogue(counterfeitReturns, playerId, 'traded to the Flea Market')
@@ -4746,9 +4611,6 @@ export const useGameStore = create<GameStore>((set, get) => ({
         classAbilitiesUsedThisTurn: [],
         righteousDuelPending: null,
         righteousDuelResult: null,
-        negotiatePending: null,
-        negotiateReview: null,
-        negotiatesCompletedThisTurn: 0,
         politePromoterResetUsed: false,
         bonusActionsThisTurn: 0,
         foragePeek: null,
@@ -4771,9 +4633,6 @@ export const useGameStore = create<GameStore>((set, get) => ({
         classAbilitiesUsedThisTurn: [],
         righteousDuelPending: null,
         righteousDuelResult: null,
-        negotiatePending: null,
-        negotiateReview: null,
-        negotiatesCompletedThisTurn: 0,
         politePromoterResetUsed: false,
         bonusActionsThisTurn: 0,
         foragePeek: null,

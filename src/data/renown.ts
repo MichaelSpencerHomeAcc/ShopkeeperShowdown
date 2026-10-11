@@ -5,7 +5,7 @@ export const RENOWN_CARDS: RenownCard[] = [
     id: 'rn01',
     name: 'Council of Seven',
     imageFile: '/cards/renown/Council of Seven.png',
-    passive: 'Negotiate may be used twice per Guildhall visit.',
+    passive: 'When you use Consultation, you may spend 2 resources instead of 1.',
     spend: 'Trade up to 3 resources with the Flea Market.',
     clashBonus: 0,
   },
@@ -54,7 +54,7 @@ export const RENOWN_CARDS: RenownCard[] = [
     name: "The King's Errand",
     imageFile: "/cards/renown/The King's Errand.png",
     passive: 'Gain 1 extra coin whenever you complete a public Visitor.',
-    spend: 'Use Town Crier without spending an action or visiting the Barracks.',
+    spend: 'Use Town Crier without spending an action or visiting the Guildhall.',
     clashBonus: 0,
   },
   {

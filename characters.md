@@ -228,9 +228,9 @@ Discard 1 Renown Card from your hand. Immediately resolve its Spend effect.
 | The Merchant of Saltholm | Honourable Trade gains 2 Rep instead of 1 | Give 1 resource, gain 3 coins and 2 Rep |
 | The Reckoning at Duskreach | Gain 1 coin whenever any player uses the Thieves' Guild | Name a player; they give you 2 Hoard resources |
 | The Gates of Mirhollow | Gain 1 Rep whenever you Repair a window | Close 2 windows; gain 1 Rep per window closed |
-| The King's Errand | +1 coin per public Visitor completion | Use Town Crier without visiting Barracks (free action) |
+| The King's Errand | +1 coin per public Visitor completion | Use Town Crier without spending an action or visiting the Guildhall |
 | The Forge of Ironpeak | Work Orders gain +2 bonus coins on completion | Your next Craft needs 1 fewer resource |
-| The Council of Seven | Negotiate twice per Guildhall visit | Resolve a Negotiate with any willing player regardless of location |
+| The Council of Seven | When you use Consultation, you may spend 2 resources instead of 1 | Trade up to 3 resources with the Flea Market |
 | The Shadow of Vel'sha | Gain 2 coins whenever you are Stolen from | Take 1 resource at random from each player's Hoard |
 | The Mercy of Thornwall | Report the Crime repairs 2 windows instead of all | Repair all windows free, gain 1 Rep |
 | The Last Stand at Greyveil | Re-roll any single die once per round, keep better result | Until your next turn, any Steal or Break targeting you redirects back onto the attacker (off-turn) |

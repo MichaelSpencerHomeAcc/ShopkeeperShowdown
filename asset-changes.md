@@ -10,13 +10,13 @@ Every physical component that needs redesigning, compared with `main` (PR #15). 
 | Work Order cards | 20 of 20 | New price |
 | Visitor cards | 34 of 34 | **New:** printed 1st / 2nd contribution prizes (listed below) |
 | Location boards | 10 of 18 spaces | New layout: see section 4 (Negotiate, Pitch Camp, Hire Bodyguard and Sell to a Visitor are gone) |
-| Renown card | 1 | Forge of Ironpeak |
+| Renown cards | 3 | Forge of Ironpeak, Council of Seven, The King's Errand |
 | Class boards | 5 | Monk, Paladin, Ranger, Shaman, Warlock |
 | Warlock components | 8 cards + dice + figure | New Curse deck, 2 Omen dice (was 3), Imp figure |
 | Player aid / scoring card | 1 | Rep table, set bonus 5, starting coins 2 |
 | Coins | — | Fewer needed; denominations suggested below |
 | Professional cards | 4 changed + 3 new | Alchemist, Clerk, Promoter, Saboteur; new: Quivering Questgiver, Pretentious Pawnbroker, Audacious Auctioneer (section 4b) |
-| **No change** | — | Counterfeits, Ambush cards, Surge table, Renown cards other than Forge, Barbarian, Sorcerer and Rogue boards |
+| **No change** | — | Counterfeits, Ambush cards, Surge table, Renown cards other than Forge, Council of Seven and King's Errand, Barbarian, Sorcerer and Rogue boards |
 
 ---
 
@@ -281,11 +281,13 @@ The professional deck goes from 9 to 12 cards; 3 are still dealt face-up each ga
 
 ---
 
-## 5. Renown card
+## 5. Renown cards
 
 | Card | Old passive | **New passive** | Spend (unchanged) |
 |---|---|---|---|
 | Forge of Ironpeak | Gain 3 bonus coins whenever you complete a Work Order | **Gain 2 bonus coins whenever you complete a Work Order** | Your next Craft needs 1 fewer resource |
+| Council of Seven | Negotiate may be used twice per Guildhall visit | **When you use Consultation, you may spend 2 resources instead of 1** | Trade up to 3 resources with the Flea Market |
+| The King's Errand | Gain 1 extra coin whenever you complete a public Visitor | (unchanged) | **Use Town Crier without spending an action or visiting the Guildhall** (was: the Barracks) |
 
 ---
 
@@ -383,5 +385,4 @@ A single player rarely holds more than ~110 coins.
 ## 10. Not changing
 
 - **Counterfeits:** values ($1–2) and return effects unchanged.
-- **Unchanged components:** Ambush cards, the Surge table, Renown cards other than Forge, and the Barbarian and Rogue boards.
-- **Needs a redesign:** The Council of Seven (Renown) has the passive "Negotiate twice per Guildhall visit", but Negotiate is no longer a Guildhall action. Its Spend effect still works.
+- **Unchanged components:** Ambush cards, the Surge table, Renown cards other than those in section 5, and the Barbarian and Rogue boards.

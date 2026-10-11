@@ -1,7 +1,7 @@
 import { useState, useEffect } from 'react'
 import type { Location, RepType, Player, ResourceCard, WorkOrderCard, DemandMap } from '../types'
 import { canPlayerCraft } from '../utils/crafting'
-import { useGameStore, fitsDemand, MAX_SALES_PER_VISITOR, CONSULT_COINS, QUEST_OUTCOMES, twoD6Chance } from '../store/gameStore'
+import { useGameStore, fitsDemand, MAX_SALES_PER_VISITOR, CONSULT_COINS, COUNCIL_CONSULT_CARDS, QUEST_OUTCOMES, twoD6Chance } from '../store/gameStore'
 import { VisitorPrizeInfo } from './VisitorPrizes'
 import { TargetPicker, type TargetChoice } from './TargetPicker'
 import { breakWindowRule, heistWindowRule, stealRule, windowTargetRule, type WindowRule } from '../utils/targets'
@@ -347,7 +347,7 @@ function SectionTitle({ children }: { children: React.ReactNode }) {
 function GuildhallActions({ actionId, onAction, onBack }: { actionId: string; onAction: () => void; onBack: () => void }) {
   const { activePlayerId, players, professionalSlots, consultation, peekTownCrier, townCrierPeek } = useGameStore()
   const player = players.find(p => p.id === activePlayerId) ?? players[0]
-  const [consultCardId, setConsultCardId] = useState('')
+  const [consultCardIds, setConsultCardIds] = useState<string[]>([])
   const [openProfId, setOpenProfId] = useState<string | null>(null)
 
   if (!player) return null
@@ -415,26 +415,36 @@ function GuildhallActions({ actionId, onAction, onBack }: { actionId: string; on
 
   if (actionId === 'consult') {
     const eligible = player.hoard.filter(c => !(c as { counterfeit?: boolean }).counterfeit)
-    const card = eligible.find(c => c.id === consultCardId)
+    const council = player.classId === 'paladin' && player.renownCards.some(c => c.id === 'rn01')
+    const max = council ? COUNCIL_CONSULT_CARDS : 1
+    const picked = eligible.filter(c => consultCardIds.includes(c.id))
+    const toggle = (id: string) => setConsultCardIds(prev =>
+      prev.includes(id) ? prev.filter(x => x !== id) : max === 1 ? [id] : prev.length < max ? [...prev, id] : prev)
     return (
       <div className="space-y-3">
         <BackButton onBack={onBack} />
-        <p className="text-xs text-parchment-400">Spend 1 resource from your hoard: gain 1 Rep of its type and {CONSULT_COINS} coins.</p>
+        <p className="text-xs text-parchment-400">
+          Spend {council ? `up to ${max} resources` : '1 resource'} from your hoard: {council ? 'each gives' : 'gain'} 1 Rep of its type and {CONSULT_COINS} coins.
+          {council && <span className="text-gold-400"> (Council of Seven)</span>}
+        </p>
         <CardPickerGrid
-          label="Resource to spend"
+          label={council ? `Resources to spend (${picked.length}/${max})` : 'Resource to spend'}
           resourceCards={eligible}
-          selectedId={consultCardId}
-          onSelect={setConsultCardId}
+          selectedId=""
+          selectedIds={consultCardIds}
+          onSelect={toggle}
           size="lg"
           emptyText="No resources in your hoard"
         />
         <button
           type="button"
-          onClick={() => { if (!card) return; consultation(player.id, [card.id]); setConsultCardId(''); onAction() }}
-          disabled={!card}
+          onClick={() => { if (picked.length === 0) return; consultation(player.id, picked.map(c => c.id)); setConsultCardIds([]); onAction() }}
+          disabled={picked.length === 0}
           className="btn-primary text-xs px-3 py-1 disabled:opacity-50 disabled:cursor-not-allowed"
         >
-          {card ? `Spend ${card.name} → +1 ${card.type} Rep, +${CONSULT_COINS} coins` : 'Pick a resource'}
+          {picked.length > 0
+            ? `Spend ${picked.map(c => c.name).join(' + ')} → ${picked.map(c => `+1 ${c.type}`).join(', ')} Rep, +${CONSULT_COINS * picked.length} coins`
+            : 'Pick a resource'}
         </button>
       </div>
     )

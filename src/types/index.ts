@@ -409,32 +409,8 @@ export interface GameState {
     winnerId: string | null   // null = tie
     declineTargetCard: ResourceCard | null   // card target discarded; null = paid 2 coins instead
   } | null
-  /** Guildhall Negotiate — set while waiting for target to accept/decline a trade proposal */
-  negotiatePending: {
-    proposerId: string
-    targetId: string
-    offeredCardId: string
-    /** Paladin only — which Rep type to gain on successful trade */
-    paladinRepType?: RepType
-    /** True when proposing spent the Guildhall action — refunded if the trade is denied */
-    actionCharged?: boolean
-    /** Barbarian who was paid a Clan toll for this Guildhall visit — repaid if the trade is denied */
-    clanTollPaidTo?: string
-  } | null
-  /** Set once the target has chosen a counter-card; shown to the proposer to accept or decline */
-  negotiateReview: {
-    proposerId: string
-    targetId: string
-    offeredCardId: string
-    counterCardId: string
-    paladinRepType?: RepType
-    actionCharged?: boolean
-    clanTollPaidTo?: string
-  } | null
   /** Shaman: set while waiting for target to choose 2 hoard cards to discard */
   shamanCallLightning: { shamanId: string; targetId: string } | null
-  /** Counts completed Negotiate trades this turn (rn01 Council of Seven allows 2) */
-  negotiatesCompletedThisTurn: number
   /** True once Polite Promoter flea-market reset is used this turn — prevents re-use on panel close/reopen */
   politePromoterResetUsed: boolean
   /** Extra location actions granted this turn (e.g. Shaman elemental die face 6) */

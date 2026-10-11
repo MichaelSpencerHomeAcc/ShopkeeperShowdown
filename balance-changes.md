@@ -125,6 +125,8 @@ Part 1 raised the set bonus from 6 to 10 (it narrowed the gap between classes fr
 |---|---|---|---|
 | **Barbarian** | — | no change (a cut to 1 coin was tried, then undone after the location rework) | 1 coin per Broken window, max 2, as before |
 | **Paladin** | Forge of Ironpeak (Renown) passive | +3 coins when you complete a Work Order | +2 coins |
+| **Paladin** | Council of Seven (Renown) passive | Negotiate twice per Guildhall visit (dead once Negotiate was removed) | **Consultation may spend 2 resources instead of 1** — each gives 1 Rep of its type and 2 coins. Paladin win index 1.00 without it → 1.06 with it (12,000 hard games) |
+| **Paladin** | The King's Errand (Renown) Spend | Town Crier without visiting the Barracks | …without visiting the **Guildhall** (Town Crier moved), and it now includes the Town Crier sale |
 | **Paladin** | Honourable Trade | +1 Rep for a Negotiate, a Work Order, or Report the Crime repairing 1+ windows | +1 Rep for a Work Order, or a **Fortify that repairs at least 1 window** |
 | **Ranger** | Master of the Wilderness free gather | half your d6, rounded **down** (min 1) | half your d6, rounded **up**, **minimum 2** |
 | **Rogue** | — | no change (a 5th starting Counterfeit was tried, then undone once Fence paid double) | 4 cards, as before |
@@ -267,7 +269,7 @@ Options tried and rejected along the way:
   - Rep scoring table and set bonus 5.
   - Auction = half the roll, rounded up.
   - Consultation 2 coins, Bodyguard 1 coin, starting coins 2.
-- Class boards: the Barbarian, Ranger, Shaman, Sorcerer and Warlock text above, plus the Forge of Ironpeak Renown card.
+- Class boards: the Barbarian, Ranger, Shaman, Sorcerer and Warlock text above, plus the Forge of Ironpeak, Council of Seven and King's Errand Renown cards.
 
 ---
 

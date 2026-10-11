@@ -1,7 +1,7 @@
 import {
   useGameStore, CLAN_TOLL, FEARSOME_CHAMPION_MAX, MAX_SALES_PER_VISITOR, rankContributors, type GameStore,
   MOMENTUM_COSTS, SHARED_REP_MAX, FLOW_STATE_MAX, MAX_OMENS, SURGE_REROLL_COST, SURGE_SHIFT_COST, WILD_SURGE_COUNT,
-  CONSULT_CARDS, CONSULT_COINS, QUEST_OUTCOMES, questOutcome, FENCE_MULTIPLIER,
+  CONSULT_CARDS, CONSULT_COINS, COUNCIL_CONSULT_CARDS, QUEST_OUTCOMES, questOutcome, FENCE_MULTIPLIER,
 } from '../store/gameStore'
 import type {
   BotDifficulty, CurseId, DemandMap, DuelStake, Location, MomentumSpendId, Player, RepType, ResourceCard, ResourceType,
@@ -95,8 +95,8 @@ export function nextBotStep(s: GameStore, memory: BotMemory): BotStep | null {
 export function anythingPending(s: GameStore): boolean {
   return !!(
     s.rogueShadowsPending || s.rogueCounterfeitEffectPending || s.rogueCounterfeitEffectQueue.length > 0 ||
-    s.clashResult || s.barbarianClashOptOut || s.righteousDuelPending || s.negotiatePending ||
-    s.negotiateReview || s.shamanCallLightning || s.ambushPending || s.ambushResult ||
+    s.clashResult || s.barbarianClashOptOut || s.righteousDuelPending ||
+    s.shamanCallLightning || s.ambushPending || s.ambushResult ||
     s.trickShotPending || s.trickShotBonusPending || s.rangerVisitorTradePending ||
     s.rn04RerollPending || s.nightWatcherChoicePending || s.townCrierPeek || s.appraisePeek ||
     s.foragePeek || s.visitorPrizeQueue.length > 0 || s.twistPending || s.questTwist || s.auctionsLeft || s.hexPeek || s.curseChoice || s.surge || s.mirrorPending || s.hotStreak || s.players.some(p => p.hoard.length > 8)
@@ -203,36 +203,6 @@ function promptStep(s: GameStore): BotStep | null {
     const ctx = buildContext(s, clBot, clBot.bot!)
     const discard = sortByWorth(clBot.hoard, ctx).reverse().slice(0, 2).map(c => c.id)
     return step('lightning', clBot, 'think', () => st().resolveCallLightning(cl.shamanId, discard))
-  }
-
-  // Guildhall Negotiate — a human offered the bot a swap
-  const neg = s.negotiatePending
-  const negBot = botOf(s, neg?.targetId)
-  if (neg && negBot) {
-    const proposer = s.players.find(p => p.id === neg.proposerId)
-    const offered = proposer?.hoard.find(c => c.id === neg.offeredCardId)
-    const ctx = buildContext(s, negBot, negBot.bot!)
-    const counter = sortByWorth(negBot.hoard, ctx).reverse()[0]
-    let accept = !!(offered && counter)
-    if (accept && negBot.bot !== 'easy') {
-      const gain = cardWorth(offered!, ctx) - cardWorth(counter!, ctx) + 2 +
-        (neg.paladinRepType ? repValue(negBot.rep, neg.paladinRepType, negBot.bot!) : 0)
-      // The proposer also gains 2 coins — hard bots won't feed the leader for free
-      const feedsLeader = negBot.bot === 'hard' && proposer && rankOpponents(s, negBot.id)[0]?.id === proposer.id
-      accept = gain > (feedsLeader ? 2.5 : pts(0.5))
-    } else if (accept) {
-      accept = chance(0.7)
-    }
-    return step('negotiate', negBot, 'think', () => {
-      if (accept) st().counterNegotiate(counter!.id)
-      else st().declineNegotiate()
-    })
-  }
-
-  const review = s.negotiateReview
-  const reviewBot = botOf(s, review?.proposerId)
-  if (review && reviewBot) {
-    return step('negotiate-review', reviewBot, 'think', () => st().resolveNegotiate(true))
   }
 
   // Paladin Righteous Duel challenge against a bot
@@ -900,6 +870,19 @@ function locationCandidates(s: GameStore, me: Player, ctx: ValueContext): Candid
       if (pair.length < CONSULT_CARDS) continue
       const cost = pair.reduce((n, c) => n + cardWorth(c, ctx), 0)
       add('guildhall', `consult:${t}`, repValue(me.rep, t, difficulty) + CONSULT_COINS - cost, g => g.consultation(me.id, pair.map(c => c.id)), true)
+    }
+    // Council of Seven: spend the 2 most profitable cards (each pays Rep of its own type)
+    if (me.classId === 'paladin' && me.renownCards.some(c => c.id === 'rn01')) {
+      const gains = me.hoard.filter(c => !isCounterfeit(c))
+        .map(c => ({ c, gain: repValue(me.rep, c.type, difficulty) + CONSULT_COINS - cardWorth(c, ctx) }))
+        .sort((a, b) => b.gain - a.gain)
+        .slice(0, COUNCIL_CONSULT_CARDS)
+      if (gains.length === COUNCIL_CONSULT_CARDS) {
+        const sameType = gains[0].c.type === gains[1].c.type
+        // A second Rep of the same type is worth a little less; close enough to count it twice minus a nudge
+        const value = gains[0].gain + gains[1].gain - (sameType ? 0.5 : 0)
+        add('guildhall', 'consult:council', value, g => g.consultation(me.id, gains.map(x => x.c.id)), true)
+      }
     }
     const deadSlots = s.activeVisitors.filter(v => v && visitorPotential(s, me, v) === 0).length
     if (s.visitorDeck.length + s.visitorDiscard.length >= 3) {

@@ -1,6 +1,7 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { CONSULT_COINS, QUEST_OUTCOMES, questOutcome, twoD6Chance } from './gameStore'
 import { cardsOf, patchPlayer, playerOf, seedRandom, st, startGame } from '../test/helpers'
+import { RENOWN_CARDS } from '../data/renown'
 
 beforeEach(() => { seedRandom(5) })
 afterEach(() => { vi.restoreAllMocks() })
@@ -21,6 +22,28 @@ describe('Guildhall — Consultation', () => {
     expect(playerOf('shaman').hoard).toHaveLength(0)
     expect(playerOf('shaman').rep.TRI).toBe(1)
     expect(playerOf('shaman').coins).toBe(CONSULT_COINS)
+  })
+
+  it('Council of Seven lets a Paladin spend 2 resources, each paying Rep of its own type', () => {
+    startGame(['paladin', 'shaman'])
+    const p = playerOf('paladin')
+    const council = RENOWN_CARDS.find(c => c.id === 'rn01')!
+    const [tri, arm] = cardsOf('TRI', 'ARM')
+    patchPlayer(p.id, { hoard: [tri, arm], coins: 0, renownCards: [council], rep: { ARM: 0, CON: 0, TRI: 0, TRG: 0 } })
+    st().consultation(p.id, [tri.id, arm.id])
+    expect(playerOf('paladin').hoard).toHaveLength(0)
+    expect(playerOf('paladin').rep).toEqual({ ARM: 1, CON: 0, TRI: 1, TRG: 0 })
+    expect(playerOf('paladin').coins).toBe(CONSULT_COINS * 2)
+  })
+
+  it('without Council of Seven, 2 resources is refused', () => {
+    startGame(['paladin', 'shaman'])
+    const p = playerOf('paladin')
+    const [a, b] = cardsOf('TRI', 'TRI')
+    patchPlayer(p.id, { hoard: [a, b], coins: 0, renownCards: [] })
+    st().consultation(p.id, [a.id, b.id])
+    expect(playerOf('paladin').hoard).toHaveLength(2)
+    expect(playerOf('paladin').coins).toBe(0)
   })
 })
 
